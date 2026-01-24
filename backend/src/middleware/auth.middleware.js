@@ -7,8 +7,9 @@ const PUBLIC_PATHS = [
 ];
 
 const authMiddleware = (req, res, next) => {
-  // If the incoming request matches a public path, skip auth
+  // If request is public route, skip authentication
   const reqPath = req.path || req.originalUrl || "";
+
   if (PUBLIC_PATHS.includes(reqPath)) {
     return next();
   }

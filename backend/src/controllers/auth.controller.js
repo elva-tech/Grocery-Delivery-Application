@@ -16,29 +16,36 @@ exports.sendOtp = async (req, res) => {
 
     const phone = String(phoneNumber).trim();
 
-    // Validation: must be exactly 10 digits (numbers only)
+    // Validation: must be exactly 10 digits
     const phoneRegex = /^\d{10}$/;
     if (!phoneRegex.test(phone)) {
-      return res.status(400).json({ success: false, message: "Phone number must be exactly 10 digits (numbers only)" });
+      return res.status(400).json({
+        success: false,
+        message: "Phone number must be exactly 10 digits (numbers only)"
+      });
     }
 
-    const tenantId = "BUSINESS_001"; // current app assumption for tenant scoping
+    const tenantId = "BUSINESS_001";
 
     // Check if user exists
     const user = await User.findOne({ tenantId, phoneNumber: phone });
     const isNewUser = !user;
 
-  // Log OTP for development/testing only
-  console.log(`OTP for ${phone} is ${STATIC_OTP}`);
+    // Log OTP (dev only)
+    console.log(`OTP for ${phone} is ${STATIC_OTP}`);
 
     return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
       isNewUser,
     });
+
   } catch (err) {
     console.error("sendOtp error:", err);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
 
@@ -47,7 +54,10 @@ exports.verifyOtp = async (req, res) => {
   const { phoneNumber, otp } = req.body;
 
   if (phoneNumber === undefined || phoneNumber === null || otp === undefined || otp === null) {
-    return res.status(400).json({ success: false, message: "Phone number and OTP are required" });
+    return res.status(400).json({
+      success: false,
+      message: "Phone number and OTP are required"
+    });
   }
 
   const phone = String(phoneNumber).trim();
@@ -57,15 +67,24 @@ exports.verifyOtp = async (req, res) => {
   const otpRegex = /^\d{6}$/;
 
   if (!phoneRegex.test(phone)) {
-    return res.status(400).json({ success: false, message: "Phone number must be exactly 10 digits (numbers only)" });
+    return res.status(400).json({
+      success: false,
+      message: "Phone number must be exactly 10 digits (numbers only)"
+    });
   }
 
   if (!otpRegex.test(code)) {
-    return res.status(400).json({ success: false, message: "OTP must be exactly 6 digits" });
+    return res.status(400).json({
+      success: false,
+      message: "OTP must be exactly 6 digits"
+    });
   }
 
   if (code !== STATIC_OTP) {
-    return res.status(401).json({ success: false, message: "Invalid OTP" });
+    return res.status(401).json({
+      success: false,
+      message: "Invalid OTP"
+    });
   }
 
   const tenantId = "BUSINESS_001";
@@ -75,13 +94,15 @@ exports.verifyOtp = async (req, res) => {
   if (!user) {
     user = await User.create({
       tenantId,
-      phoneNumber,
+      phoneNumber: phone,
       role: "CUSTOMER",
     });
   }
 
   if (!user.isActive) {
-    return res.status(403).json({ message: "User is blocked" });
+    return res.status(403).json({
+      message: "User is blocked"
+    });
   }
 
   const token = jwt.sign(
