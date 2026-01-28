@@ -14,7 +14,9 @@ const authMiddleware = (req, res, next) => {
 
     req.user = {
       userId: decoded.userId,
+      id: decoded.userId,
       role: decoded.role,
+      tenantId: decoded.tenantId,
     };
 
     next();
