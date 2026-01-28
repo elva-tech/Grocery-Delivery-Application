@@ -85,7 +85,7 @@ const verifyOtp = async (req, res) => {
     });
   }
 
-  const tenantId = "BUSINESS_001";
+  const tenantId = "demo-tenant";
 
   let user = await User.findOne({ tenantId, phoneNumber: phone });
 
