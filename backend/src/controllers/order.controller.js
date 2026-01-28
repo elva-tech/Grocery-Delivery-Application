@@ -9,14 +9,28 @@ exports.placeOrder = async (req, res) => {
     const userId = req.user.id;
     const tenantId = req.user.tenantId;
 
-    console.log("===== PLACE ORDER DEBUG =====");
-    console.log("Full req.user:", req.user);
-    console.log("userId:", userId);
-    console.log("tenantId:", tenantId);
-    console.log("items:", items);
-
-    if (!items || items.length === 0) {
+    // ✅ Items validation
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items are required" });
+    }
+
+    // ✅ Payment mode validation
+    if (!["COD", "ONLINE"].includes(paymentMode)) {
+      return res.status(400).json({
+        message: "Invalid paymentMode. Only COD or ONLINE allowed",
+      });
+    }
+
+    // ✅ Delivery address validation
+    if (
+      !deliveryAddress ||
+      !deliveryAddress.line1 ||
+      typeof deliveryAddress.lat !== "number" ||
+      typeof deliveryAddress.lng !== "number"
+    ) {
+      return res.status(400).json({
+        message: "Valid deliveryAddress (line1, lat, lng) is required",
+      });
     }
 
     let orderItems = [];
@@ -24,20 +38,18 @@ exports.placeOrder = async (req, res) => {
 
     // 1. Validate inventory & build order items
     for (let item of items) {
-      console.log("Searching inventory for productId:", item.productId, "tenantId:", tenantId);
-      
-      // Convert productId string to ObjectId
+      if (!item.productId || !item.qty || item.qty <= 0) {
+        return res.status(400).json({ message: "Invalid item format" });
+      }
+
       const productObjectId = new mongoose.Types.ObjectId(item.productId);
-      
+
       const inventory = await Inventory.findOne({
         productId: productObjectId,
-        tenantId: tenantId,
+        tenantId,
       }).populate("productId");
 
       if (!inventory) {
-        console.log("Inventory not found. Checking what exists...");
-        const allInventory = await Inventory.find({ tenantId }).populate("productId");
-        console.log("Available inventory:", allInventory);
         return res.status(404).json({ message: "Product not found in inventory" });
       }
 
@@ -85,38 +97,28 @@ exports.placeOrder = async (req, res) => {
       order,
     });
   } catch (error) {
-    console.error("Place order error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Get all products with inventory levels
 exports.getProducts = async (req, res) => {
   try {
     const tenantId = req.user.tenantId;
 
-    const inventory = await Inventory.find({ tenantId })
-      .populate("productId")
-      .select("productId availableQty thresholdQty");
+    const inventories = await Inventory.find({ tenantId }).populate("productId");
 
-    const products = inventory.map(inv => ({
-      productId: inv.productId._id,
-      name: inv.productId.name,
-      category: inv.productId.category,
-      price: inv.productId.price,
-      unit: inv.productId.unit,
-      availableQty: inv.availableQty,
-      thresholdQty: inv.thresholdQty,
-      isAvailable: inv.productId.isAvailable,
-    }));
+    const products = inventories
+      .filter((inv) => inv.productId && inv.availableQty > 0)
+      .map((inv) => ({
+        ...inv.productId.toObject(),
+        availableQty: inv.availableQty,
+      }));
 
-    res.json({
+    res.status(200).json({
       message: "Products fetched successfully",
       products,
     });
   } catch (error) {
-    console.error("Get products error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
-
