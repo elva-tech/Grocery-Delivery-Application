@@ -1,22 +1,22 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User.model");
 
-// TEMP OTP (for MVP)
 const STATIC_OTP = "123456";
 
-// 1️⃣ Send OTP
-exports.sendOtp = async (req, res) => {
+// Send OTP
+const sendOtp = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
 
-    // Accept numeric input or string, but normalize to string
     if (phoneNumber === undefined || phoneNumber === null) {
-      return res.status(400).json({ success: false, message: "Phone number is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required"
+      });
     }
 
     const phone = String(phoneNumber).trim();
 
-    // Validation: must be exactly 10 digits
     const phoneRegex = /^\d{10}$/;
     if (!phoneRegex.test(phone)) {
       return res.status(400).json({
@@ -27,11 +27,9 @@ exports.sendOtp = async (req, res) => {
 
     const tenantId = "BUSINESS_001";
 
-    // Check if user exists
     const user = await User.findOne({ tenantId, phoneNumber: phone });
     const isNewUser = !user;
 
-    // Log OTP (dev only)
     console.log(`OTP for ${phone} is ${STATIC_OTP}`);
 
     return res.status(200).json({
@@ -49,8 +47,8 @@ exports.sendOtp = async (req, res) => {
   }
 };
 
-// 2️⃣ Verify OTP
-exports.verifyOtp = async (req, res) => {
+// Verify OTP
+const verifyOtp = async (req, res) => {
   const { phoneNumber, otp } = req.body;
 
   if (phoneNumber === undefined || phoneNumber === null || otp === undefined || otp === null) {
@@ -96,6 +94,7 @@ exports.verifyOtp = async (req, res) => {
       tenantId,
       phoneNumber: phone,
       role: "CUSTOMER",
+      isActive: true
     });
   }
 
@@ -106,7 +105,11 @@ exports.verifyOtp = async (req, res) => {
   }
 
   const token = jwt.sign(
-    { userId: user._id, role: user.role },
+    {
+      userId: user._id,
+      role: user.role,
+      tenantId: user.tenantId,
+    },
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
@@ -117,6 +120,12 @@ exports.verifyOtp = async (req, res) => {
       id: user._id,
       phoneNumber: user.phoneNumber,
       role: user.role,
+      tenantId: user.tenantId,
     },
   });
+};
+
+module.exports = {
+  sendOtp,
+  verifyOtp,
 };

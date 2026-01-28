@@ -33,6 +33,7 @@ async function seed() {
     { tenantId, name: 'Bread', category: 'Bakery', price: 2.0, unit: 'loaf', isAvailable: false },
   ]);
 
+
   // Inventory (one per product)
   const inventory = await Inventory.insertMany(products.map((product, i) => ({
     tenantId,
@@ -40,6 +41,13 @@ async function seed() {
     availableQty: 100 - i * 10,
     thresholdQty: 10 + i * 2,
   })));
+  // Ensure Bob is ADMIN
+await User.updateOne(
+  { phoneNumber: "2222222222", tenantId },
+  { $set: { role: "ADMIN" } }
+);
+
+
 
   console.log('Dummy data seeded successfully!');
   mongoose.connection.close();
