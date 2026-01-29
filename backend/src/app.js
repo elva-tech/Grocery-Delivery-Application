@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
-const authMiddleware = require("./middleware/auth.middleware");
+
+// Import auth middleware
+const { authMiddleware } = require("./middleware/auth.middleware");
 
 const app = express();
 
@@ -12,20 +14,24 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check
+// Health check (PUBLIC)
 app.get("/", (req, res) => {
   res.send("Grocery Delivery Backend is running 🚀");
 });
 
+// Routes
 const authRoutes = require("./routes/auth.routes");
-const orderRoutes = require("./routes/order.routes"); // ✅ ADD THIS
+const productRoutes = require("./routes/product.routes");
+const orderRoutes = require("./routes/order.routes");
 
+// Public routes
 app.use("/api/auth", authRoutes);
 
-// protect all routes below this line
+// Protected routes
 app.use(authMiddleware);
 
-// register order routes
-app.use("/api", orderRoutes); // ✅ ADD THIS
+// Register protected routes
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
 
 module.exports = app;
