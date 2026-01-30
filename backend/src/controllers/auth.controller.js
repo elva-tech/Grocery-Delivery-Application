@@ -90,13 +90,22 @@ const verifyOtp = async (req, res) => {
   let user = await User.findOne({ tenantId, phoneNumber: phone });
 
   if (!user) {
-    user = await User.create({
-      tenantId,
-      phoneNumber: phone,
-      role: "CUSTOMER",
-      isActive: true
-    });
-  }
+  user = await User.create({
+    tenantId,
+    phoneNumber: phone,
+    role: "CUSTOMER",
+    isActive: true,});
+}
+
+// Check if user is active
+if (!user.isActive) {
+  return res.status(403).json({
+    message: "User is blocked",
+  });
+}
+
+// Refresh user from DB
+user = await User.findById(user._id);
 
   if (!user.isActive) {
     return res.status(403).json({

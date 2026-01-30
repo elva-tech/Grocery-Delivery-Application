@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/User.model");
 
 // Public routes that should bypass authentication
 const PUBLIC_PATHS = [
@@ -6,10 +7,10 @@ const PUBLIC_PATHS = [
   "/api/auth/verify-otp",
 ];
 
-const authMiddleware = (req, res, next) => {
-  // If request is public route, skip authentication
+const authMiddleware = async (req, res, next) => {
   const reqPath = req.path || req.originalUrl || "";
 
+  // Skip auth for public routes
   if (PUBLIC_PATHS.includes(reqPath)) {
     return next();
   }
@@ -22,13 +23,20 @@ const authMiddleware = (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    const user = await User.findById(decoded.userId);
+
+    if (!user || !user.isActive) {
+      return res.status(403).json({ message: "User blocked or not found" });
+    }
+
     req.user = {
-      userId: decoded.userId,
-      id: decoded.userId,
-      role: decoded.role,
-      tenantId: decoded.tenantId,
+      userId: user._id,
+      id: user._id,
+      role: user.role,
+      tenantId: user.tenantId,
     };
 
     next();
@@ -37,11 +45,19 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-const adminOnly = (req, res, next) => {
-  if (req.user.role !== "ADMIN") {
-    return res.status(403).json({ message: "Admin access only" });
+const adminOnly = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.userId);
+
+    if (!user || !user.isActive || user.role !== "ADMIN") {
+      return res.status(403).json({ message: "Admin access only" });
+    }
+
+    next();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Server error" });
   }
-  next();
 };
 
 module.exports = { authMiddleware, adminOnly };
