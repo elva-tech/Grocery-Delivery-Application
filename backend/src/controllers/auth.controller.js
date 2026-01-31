@@ -6,36 +6,71 @@ const STATIC_OTP = "123456";
 
 // 1️⃣ Send OTP
 exports.sendOtp = async (req, res) => {
-  const { phoneNumber } = req.body;
+  try {
+    const { phoneNumber } = req.body;
 
-  if (!phoneNumber) {
-    return res.status(400).json({ message: "Phone number is required" });
+    // Accept numeric input or string, but normalize to string
+    if (phoneNumber === undefined || phoneNumber === null) {
+      return res.status(400).json({ success: false, message: "Phone number is required" });
+    }
+
+    const phone = String(phoneNumber).trim();
+
+    // Validation: must be exactly 10 digits (numbers only)
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({ success: false, message: "Phone number must be exactly 10 digits (numbers only)" });
+    }
+
+    const tenantId = "BUSINESS_001"; // current app assumption for tenant scoping
+
+    // Check if user exists
+    const user = await User.findOne({ tenantId, phoneNumber: phone });
+    const isNewUser = !user;
+
+  // Log OTP for development/testing only
+  console.log(`OTP for ${phone} is ${STATIC_OTP}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+      isNewUser,
+    });
+  } catch (err) {
+    console.error("sendOtp error:", err);
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
-
-  // Later: integrate SMS / Firebase here
-  console.log(`OTP for ${phoneNumber} is ${STATIC_OTP}`);
-
-  res.json({
-    success: true,
-    message: "OTP sent successfully",
-  });
 };
 
 // 2️⃣ Verify OTP
 exports.verifyOtp = async (req, res) => {
   const { phoneNumber, otp } = req.body;
 
-  if (!phoneNumber || !otp) {
-    return res.status(400).json({ message: "Phone number and OTP are required" });
+  if (phoneNumber === undefined || phoneNumber === null || otp === undefined || otp === null) {
+    return res.status(400).json({ success: false, message: "Phone number and OTP are required" });
   }
 
-  if (otp !== STATIC_OTP) {
-    return res.status(401).json({ message: "Invalid OTP" });
+  const phone = String(phoneNumber).trim();
+  const code = String(otp).trim();
+
+  const phoneRegex = /^\d{10}$/;
+  const otpRegex = /^\d{6}$/;
+
+  if (!phoneRegex.test(phone)) {
+    return res.status(400).json({ success: false, message: "Phone number must be exactly 10 digits (numbers only)" });
+  }
+
+  if (!otpRegex.test(code)) {
+    return res.status(400).json({ success: false, message: "OTP must be exactly 6 digits" });
+  }
+
+  if (code !== STATIC_OTP) {
+    return res.status(401).json({ success: false, message: "Invalid OTP" });
   }
 
   const tenantId = "BUSINESS_001";
 
-  let user = await User.findOne({ tenantId, phoneNumber });
+  let user = await User.findOne({ tenantId, phoneNumber: phone });
 
   if (!user) {
     user = await User.create({
