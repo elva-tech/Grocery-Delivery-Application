@@ -1,0 +1,14 @@
+{
+  "name": "grocery-delivery-application",
+  "version": "1.0.0",
+  "description": "A grocery delivery application with admin web, backend, and mobile app",
+  "private": true,
+  "scripts": {
+    "dev": "cd backend && npm run dev",
+    "start": "cd backend && npm start",
+    "install-all": "npm install && cd backend && npm install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
