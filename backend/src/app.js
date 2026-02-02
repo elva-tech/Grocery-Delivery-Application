@@ -1,9 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 
-// Import auth middleware
-const { authMiddleware } = require("./middleware/auth.middleware");
-
 const app = express();
 
 // Middlewares
@@ -27,11 +24,8 @@ const orderRoutes = require("./routes/order.routes");
 // Public routes
 app.use("/api/auth", authRoutes);
 
-// Protected routes
-app.use(authMiddleware);
-
-// Register protected routes
-app.use("/api/products", productRoutes);
-app.use("/api/orders", orderRoutes);
+// Protected routes (middleware applied INSIDE route files)
+app.use("/api", productRoutes);
+app.use("/api", orderRoutes);
 
 module.exports = app;
