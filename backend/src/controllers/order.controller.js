@@ -17,7 +17,7 @@ exports.placeOrder = async (req, res) => {
     }
 
     if (!["COD", "ONLINE"].includes(paymentMode)) {
-      return res.status(400).json({ message: "Invalid paymentMode" });
+      return res.status(400).json({ message: "Invalid payment mode" });
     }
 
     if (
@@ -25,7 +25,7 @@ exports.placeOrder = async (req, res) => {
       typeof deliveryAddress.lat !== "number" ||
       typeof deliveryAddress.lng !== "number"
     ) {
-      return res.status(400).json({ message: "Valid deliveryAddress required" });
+      return res.status(400).json({ message: "Valid delivery address required" });
     }
 
     let orderItems = [];
@@ -55,6 +55,7 @@ exports.placeOrder = async (req, res) => {
       totalAmount += inventory.productId.price * item.qty;
     }
 
+    // Deduct stock
     for (const item of items) {
       await Inventory.findOneAndUpdate(
         { productId: item.productId, tenantId },
@@ -68,9 +69,9 @@ exports.placeOrder = async (req, res) => {
       items: orderItems,
       totalAmount,
       paymentMode,
-      orderStatus: "PLACED",
-      paymentStatus: "PENDING",
       deliveryAddress,
+      // orderStatus = PLACED (default)
+      // paymentStatus = PENDING (default)
     });
 
     res.status(201).json({
@@ -81,7 +82,8 @@ exports.placeOrder = async (req, res) => {
       paymentStatus: order.paymentStatus,
       createdAt: order.createdAt,
     });
-  } catch (err) {
+  } catch (error) {
+    console.error("Place order error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -113,20 +115,28 @@ exports.markOrderDelivered = async (req, res) => {
       orderStatus: order.orderStatus,
       paymentStatus: order.paymentStatus,
     });
-  } catch (err) {
+  } catch (error) {
+    console.error("Mark delivered error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /**
- * GET MY ORDERS (ORDER HISTORY)
+ * GET MY ORDERS (CUSTOMER HISTORY)
  * GET /api/orders/my
+ * Shows ONLY delivered & paid orders
  */
 exports.getMyOrders = async (req, res) => {
   try {
     const userId = req.user.id;
+    const tenantId = req.user.tenantId;
 
-    const orders = await Order.find({ userId })
+    const orders = await Order.find({
+      userId,
+      tenantId,
+      orderStatus: "DELIVERED",
+      paymentStatus: "PAID",
+    })
       .sort({ createdAt: -1 })
       .select("totalAmount orderStatus paymentStatus createdAt");
 
@@ -140,7 +150,8 @@ exports.getMyOrders = async (req, res) => {
         createdAt: order.createdAt,
       })),
     });
-  } catch (err) {
+  } catch (error) {
+    console.error("Get my orders error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
