@@ -1,56 +1,38 @@
 const Order = require("../models/Order.model");
-const Product = require("../models/Product.model");
 const Inventory = require("../models/Inventory.model");
 const mongoose = require("mongoose");
 
-exports.placeOrder = async (req, res) => {
+exports.placeCustomerOrder = async (req, res) => {
   try {
     const { items, paymentMode, deliveryAddress } = req.body;
-    const userId = req.user.id;
-    const tenantId = req.user.tenantId;
+    const { userId, tenantId } = req.user;
 
-    // ✅ Items validation
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "Items are required" });
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Order items are required" });
     }
 
-    // ✅ Payment mode validation
     if (!["COD", "ONLINE"].includes(paymentMode)) {
-      return res.status(400).json({
-        message: "Invalid paymentMode. Only COD or ONLINE allowed",
-      });
-    }
-
-    // ✅ Delivery address validation
-    if (
-      !deliveryAddress ||
-      !deliveryAddress.line1 ||
-      typeof deliveryAddress.lat !== "number" ||
-      typeof deliveryAddress.lng !== "number"
-    ) {
-      return res.status(400).json({
-        message: "Valid deliveryAddress (line1, lat, lng) is required",
-      });
+      return res.status(400).json({ message: "Invalid payment mode" });
     }
 
     let orderItems = [];
     let totalAmount = 0;
 
-    // 1. Validate inventory & build order items
-    for (let item of items) {
-      if (!item.productId || !item.qty || item.qty <= 0) {
-        return res.status(400).json({ message: "Invalid item format" });
+    for (const item of items) {
+      if (
+        !mongoose.Types.ObjectId.isValid(item.productId) ||
+        item.qty <= 0
+      ) {
+        return res.status(400).json({ message: "Invalid order item" });
       }
 
-      const productObjectId = new mongoose.Types.ObjectId(item.productId);
-
       const inventory = await Inventory.findOne({
-        productId: productObjectId,
+        productId: item.productId,
         tenantId,
       }).populate("productId");
 
       if (!inventory) {
-        return res.status(404).json({ message: "Product not found in inventory" });
+        return res.status(404).json({ message: "Product not found" });
       }
 
       if (inventory.availableQty < item.qty) {
@@ -59,28 +41,23 @@ exports.placeOrder = async (req, res) => {
         });
       }
 
-      const product = inventory.productId;
-
       orderItems.push({
-        productId: product._id,
-        name: product.name,
+        productId: inventory.productId._id,
+        name: inventory.productId.name,
         qty: item.qty,
-        price: product.price,
+        price: inventory.productId.price,
       });
 
-      totalAmount += product.price * item.qty;
+      totalAmount += inventory.productId.price * item.qty;
     }
 
-    // 2. Deduct stock
-    for (let item of items) {
-      const productObjectId = new mongoose.Types.ObjectId(item.productId);
+    for (const item of items) {
       await Inventory.findOneAndUpdate(
-        { productId: productObjectId, tenantId },
+        { productId: item.productId, tenantId },
         { $inc: { availableQty: -item.qty } }
       );
     }
 
-    // 3. Create order
     const order = await Order.create({
       tenantId,
       userId,
@@ -88,35 +65,90 @@ exports.placeOrder = async (req, res) => {
       totalAmount,
       paymentMode,
       deliveryAddress,
-      paymentStatus: "PENDING",
       orderStatus: "PLACED",
+      paymentStatus: "PENDING",
     });
 
     res.status(201).json({
       message: "Order placed successfully",
-      order,
+      orderId: order._id,
+      totalAmount: order.totalAmount,
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      createdAt: order.createdAt,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getAvailableProducts = async (req, res) => {
+  try {
+    const { tenantId } = req.user;
+
+    const inventoryList = await Inventory.find({
+      tenantId,
+      availableQty: { $gt: 0 },
+    }).populate("productId");
+
+    res.status(200).json({
+      message: "Products fetched successfully",
+      products: inventoryList.map(i => ({
+        ...i.productId.toObject(),
+        availableQty: i.availableQty,
+      })),
     });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-exports.getProducts = async (req, res) => {
+exports.getCustomerOrderHistory = async (req, res) => {
   try {
-    const tenantId = req.user.tenantId;
+    const { userId } = req.user;
 
-    const inventories = await Inventory.find({ tenantId }).populate("productId");
-
-    const products = inventories
-      .filter((inv) => inv.productId && inv.availableQty > 0)
-      .map((inv) => ({
-        ...inv.productId.toObject(),
-        availableQty: inv.availableQty,
-      }));
+    const orders = await Order.find({
+      userId,
+      orderStatus: "DELIVERED",
+      paymentStatus: "PAID",
+    })
+      .sort({ createdAt: -1 })
+      .select("totalAmount orderStatus paymentStatus createdAt");
 
     res.status(200).json({
-      message: "Products fetched successfully",
-      products,
+      message: "Orders fetched successfully",
+      orders: orders.map(o => ({
+        orderId: o._id,
+        totalAmount: o.totalAmount,
+        orderStatus: o.orderStatus,
+        paymentStatus: o.paymentStatus,
+        createdAt: o.createdAt,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.markOrderDelivered = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    order.orderStatus = "DELIVERED";
+    order.paymentStatus = "PAID";
+    await order.save();
+
+    res.status(200).json({
+      message: "Order marked as delivered",
+      orderId: order._id,
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
     });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
