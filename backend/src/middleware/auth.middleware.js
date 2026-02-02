@@ -7,13 +7,18 @@ const PUBLIC_PATHS = [
 ];
 
 const authMiddleware = (req, res, next) => {
-  // If the incoming request matches a public path, skip auth
-  const reqPath = req.path || req.originalUrl || "";
-  if (PUBLIC_PATHS.includes(reqPath)) {
-    return next();
-  }
-
   try {
+    console.log("[AUTH MIDDLEWARE] Request to:", req.originalUrl);
+    // If the incoming request matches a public path, skip auth
+    const fullPath = req.originalUrl.split("?")[0]; // Remove query string
+    console.log("[AUTH MIDDLEWARE] Path check:", fullPath, "=>", PUBLIC_PATHS.includes(fullPath));
+    
+    if (PUBLIC_PATHS.includes(fullPath)) {
+      console.log("[AUTH MIDDLEWARE] Public route - skipping auth");
+      return next();
+    }
+
+    console.log("[AUTH MIDDLEWARE] Protected route - checking token");
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -31,6 +36,7 @@ const authMiddleware = (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error("[AUTH MIDDLEWARE ERROR]", error.message);
     return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
