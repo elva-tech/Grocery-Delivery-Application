@@ -104,7 +104,7 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (status === "CANCELLED") {
+    if (status === "CANCELLED" && order.orderStatus !== "CANCELLED") {
       for (let item of order.items) {
         await Inventory.findOneAndUpdate(
           { productId: item.productId, tenantId },
@@ -112,6 +112,7 @@ exports.updateOrderStatus = async (req, res) => {
         );
       }
     }
+
 
     order.orderStatus = status;
     await order.save();
