@@ -6,13 +6,47 @@ const addProduct = async (req, res) => {
     const { name, category, price, unit } = req.body;
     const tenantId = req.user.tenantId; // 🔑 from JWT
 
-    // Validation
-    if (!name || !category || !price || !unit) {
+// Validation: Check each required field
+const missingFields = [];
+if (!name) missingFields.push("name");
+if (!category) missingFields.push("category");
+if (price === undefined) missingFields.push("price");
+if (!unit) missingFields.push("unit");
+
+if (missingFields.length > 0) {
+  return res.status(400).json({
+    message: "name, category, price and unit are required",
+  });
+}
+
       return res.status(400).json({
         message: "name, category, price and unit are required",
       });
-    }
+    } 
+    // Price validation
+if (typeof price !== "number") {
+  return res.status(400).json({
+    message: "Price must be a number",
+  });
+}
 
+if (price <= 0) {
+  return res.status(400).json({
+    message: "Price must be greater than zero",
+  });
+}
+
+
+<<<<<<< HEAD
+=======
+    // Duplicate check: same name & tenant
+    const existingProduct = await Product.findOne({ tenantId, name });
+    if (existingProduct) {
+      return res.status(409).json({ message: "Product with this name already exists" });
+    }
+    
+
+>>>>>>> 8063f30 (Fix price validation edge cases and cleanup controllers)
     const product = new Product({
       tenantId,
       name,
@@ -73,15 +107,21 @@ const addProduct = async (req, res) => {
       });
     }
 
-    if (
-      updateData.price !== undefined &&
-      typeof updateData.price !== "number"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Price must be a number"
-      });
-    }
+    if (updateData.price !== undefined) {
+  if (typeof updateData.price !== "number") {
+    return res.status(400).json({
+      success: false,
+      message: "Price must be a number"
+    });
+  }
+
+  if (updateData.price <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Price must be greater than zero"
+    });
+  }
+}
 
     const product = await Product.findById(id);
 
