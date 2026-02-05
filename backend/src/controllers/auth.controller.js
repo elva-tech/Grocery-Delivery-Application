@@ -34,6 +34,10 @@ const verifyOtp = async (req, res) => {
 
     if (!user.isActive) return res.status(403).json({ message: "User is blocked" });
 
+    // ✅ REFRESH USER FROM DB (IMPORTANT)
+    user = await User.findById(user._id);
+
+
     const token = jwt.sign(
       { userId: user._id, role: user.role, tenantId: user.tenantId },
       process.env.JWT_SECRET,

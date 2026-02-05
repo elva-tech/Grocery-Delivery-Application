@@ -20,6 +20,7 @@ app.get("/", (req, res) => {
 });
 
 // Routes
+const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const productRoutes = require("./routes/product.routes");
 const orderRoutes = require("./routes/order.routes");
@@ -33,5 +34,8 @@ app.use(authMiddleware);
 // Register protected routes
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
+
+app.use("/api/admin", adminRoutes);
+
 
 module.exports = app;
