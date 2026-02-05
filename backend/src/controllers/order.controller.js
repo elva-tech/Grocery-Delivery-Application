@@ -1,86 +1,74 @@
 const Order = require("../models/Order.model");
-const Product = require("../models/Product.model");
 const Inventory = require("../models/Inventory.model");
 const mongoose = require("mongoose");
 
-exports.placeOrder = async (req, res) => {
+const PAYMENT_MODES = ["COD", "ONLINE"];
+
+/**
+ * PLACE ORDER
+ */
+exports.placeCustomerOrder = async (req, res) => {
   try {
     const { items, paymentMode, deliveryAddress } = req.body;
-    const userId = req.user.id;
+
+    const userId = req.user.userId;
     const tenantId = req.user.tenantId;
 
-    // ✅ Items validation
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "Items are required" });
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Please add items to place order" });
     }
 
-    // ✅ Payment mode validation
-    if (!["COD", "ONLINE"].includes(paymentMode)) {
-      return res.status(400).json({
-        message: "Invalid paymentMode. Only COD or ONLINE allowed",
-      });
+    if (!PAYMENT_MODES.includes(paymentMode)) {
+      return res.status(400).json({ message: "Invalid payment mode" });
     }
 
-    // ✅ Delivery address validation
+    // Delivery validation (restored)
     if (
-      !deliveryAddress ||
-      !deliveryAddress.line1 ||
+      !deliveryAddress?.line1 ||
       typeof deliveryAddress.lat !== "number" ||
       typeof deliveryAddress.lng !== "number"
     ) {
-      return res.status(400).json({
-        message: "Valid deliveryAddress (line1, lat, lng) is required",
-      });
+      return res.status(400).json({ message: "Valid delivery address required" });
     }
 
     let orderItems = [];
     let totalAmount = 0;
 
-    // 1. Validate inventory & build order items
-    for (let item of items) {
-      if (!item.productId || !item.qty || item.qty <= 0) {
-        return res.status(400).json({ message: "Invalid item format" });
+    for (const item of items) {
+      if (!mongoose.Types.ObjectId.isValid(item.productId) || item.qty <= 0) {
+        return res.status(400).json({ message: "Invalid product details" });
       }
 
-      const productObjectId = new mongoose.Types.ObjectId(item.productId);
-
       const inventory = await Inventory.findOne({
-        productId: productObjectId,
+        productId: item.productId,
         tenantId,
       }).populate("productId");
 
-      if (!inventory) {
-        return res.status(404).json({ message: "Product not found in inventory" });
+      if (!inventory || inventory.availableQty < item.qty) {
+        return res.status(400).json({ message: "No stock available" });
       }
-
-      if (inventory.availableQty < item.qty) {
-        return res.status(400).json({
-          message: `Insufficient stock for ${inventory.productId.name}`,
-        });
-      }
-
-      const product = inventory.productId;
 
       orderItems.push({
-        productId: product._id,
-        name: product.name,
+        productId: inventory.productId._id,
+        name: inventory.productId.name,
         qty: item.qty,
-        price: product.price,
+        price: inventory.productId.price,
       });
 
-      totalAmount += product.price * item.qty;
+      totalAmount += inventory.productId.price * item.qty;
     }
 
-    // 2. Deduct stock
-    for (let item of items) {
-      const productObjectId = new mongoose.Types.ObjectId(item.productId);
+    // Deduct stock
+    for (const item of items) {
       await Inventory.findOneAndUpdate(
-        { productId: productObjectId, tenantId },
+        { productId: item.productId, tenantId },
         { $inc: { availableQty: -item.qty } }
       );
     }
 
-    // 3. Create order
+    const paymentStatus =
+      paymentMode === "COD" ? "PENDING" : "PAID";
+
     const order = await Order.create({
       tenantId,
       userId,
@@ -88,37 +76,93 @@ exports.placeOrder = async (req, res) => {
       totalAmount,
       paymentMode,
       deliveryAddress,
-      paymentStatus: "PENDING",
       orderStatus: "PLACED",
+      paymentStatus,
     });
 
     res.status(201).json({
       message: "Order placed successfully",
-      order,
+      orderId: order._id,
+      totalAmount: order.totalAmount,
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      createdAt: order.createdAt,
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
   }
 };
 
-exports.getProducts = async (req, res) => {
+/**
+ * CUSTOMER ORDER HISTORY (ONLY DELIVERED)
+ */
+exports.getCustomerOrderHistory = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const tenantId = req.user.tenantId;
 
-    const inventories = await Inventory.find({ tenantId }).populate("productId");
-
-    const products = inventories
-      .filter((inv) => inv.productId && inv.availableQty > 0)
-      .map((inv) => ({
-        ...inv.productId.toObject(),
-        availableQty: inv.availableQty,
-      }));
+    const orders = await Order.find({
+      userId,
+      tenantId,
+      orderStatus: "DELIVERED",
+    })
+      .sort({ createdAt: -1 })
+      .select("totalAmount orderStatus paymentStatus createdAt");
 
     res.status(200).json({
-      message: "Products fetched successfully",
-      products,
+      message: "Delivered orders fetched successfully",
+      orders: orders.map(order => ({
+        orderId: order._id,
+        totalAmount: order.totalAmount,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+        createdAt: order.createdAt,
+      })),
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
+  }
+};
+
+/**
+ * MARK ORDER DELIVERED
+ */
+exports.markOrderDelivered = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const tenantId = req.user.tenantId;
+
+    const order = await Order.findOne({ _id: orderId, tenantId });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (order.orderStatus === "DELIVERED") {
+      return res.status(400).json({ message: "Order already delivered" });
+    }
+
+    order.orderStatus = "DELIVERED";
+    order.paymentStatus = "PAID";
+
+    await order.save();
+
+    res.status(200).json({
+      message: "Order delivered successfully",
+      orderId: order._id,
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
   }
 };
