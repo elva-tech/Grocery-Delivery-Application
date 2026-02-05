@@ -22,6 +22,7 @@ exports.placeCustomerOrder = async (req, res) => {
       return res.status(400).json({ message: "Invalid payment mode" });
     }
 
+    // Delivery validation (restored)
     if (
       !deliveryAddress?.line1 ||
       typeof deliveryAddress.lat !== "number" ||
@@ -43,12 +44,8 @@ exports.placeCustomerOrder = async (req, res) => {
         tenantId,
       }).populate("productId");
 
-      if (!inventory) {
-        return res.status(404).json({ message: "Product not found" });
-      }
-
-      if (inventory.availableQty < item.qty) {
-        return res.status(400).json({ message: "Insufficient stock" });
+      if (!inventory || inventory.availableQty < item.qty) {
+        return res.status(400).json({ message: "No stock available" });
       }
 
       orderItems.push({
@@ -92,8 +89,10 @@ exports.placeCustomerOrder = async (req, res) => {
       createdAt: order.createdAt,
     });
   } catch (error) {
-    console.error("Place Order Error:", error);
-    res.status(500).json({ message: "Unable to place order. Try again" });
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
   }
 };
 
@@ -124,13 +123,15 @@ exports.getCustomerOrderHistory = async (req, res) => {
       })),
     });
   } catch (error) {
-    console.error("History Error:", error);
-    res.status(500).json({ message: "Unable to fetch orders" });
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
   }
 };
 
 /**
- * MARK ORDER DELIVERED (same behavior as before — no admin block)
+ * MARK ORDER DELIVERED
  */
 exports.markOrderDelivered = async (req, res) => {
   try {
@@ -143,7 +144,6 @@ exports.markOrderDelivered = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Prevent duplicate delivery
     if (order.orderStatus === "DELIVERED") {
       return res.status(400).json({ message: "Order already delivered" });
     }
@@ -160,7 +160,9 @@ exports.markOrderDelivered = async (req, res) => {
       paymentStatus: order.paymentStatus,
     });
   } catch (error) {
-    console.error("Deliver Error:", error);
-    res.status(500).json({ message: "Unable to update order" });
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
   }
 };
