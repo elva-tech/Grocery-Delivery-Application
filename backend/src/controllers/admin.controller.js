@@ -1,12 +1,25 @@
 const Order = require("../models/Order.model");
 
+const Product = require("../models/Product.model");
+
+
 const allowedStatuses = [
   "PLACED",
   "CONFIRMED",
-  "SHIPPED",
+  "OUT_FOR_DELIVERY",
   "DELIVERED",
   "CANCELLED"
 ];
+
+const allowedTransitions = {
+  PLACED: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["OUT_FOR_DELIVERY", "CANCELLED"],
+  OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
+  DELIVERED: ["CANCELLED"],
+  CANCELLED: []
+};
+
+
 
 exports.getAllOrdersForAdmin = async (req, res) => {
   try {
@@ -51,3 +64,66 @@ exports.getAllOrdersForAdmin = async (req, res) => {
     });
   }
 };
+
+
+// UPDATE ORDER STATUS
+
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: "Status is required"
+      });
+    }
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status value"
+      });
+    }
+
+    // ✅ tenant-safe query
+    const Product = require("../models/Product.model");
+
+    const order = await Order.findOne({
+      _id: id,
+      tenantId: req.user?.tenantId || req.tenantId
+    });
+
+    const currentStatus = order.orderStatus;
+
+  
+
+    if (status === "CANCELLED" && currentStatus !== "CANCELLED") {
+      for (const item of order.items) {
+        await Product.findByIdAndUpdate(
+          item.productId,
+          { $inc: { quantity: item.qty } }
+        );
+      }
+    }
+
+
+    order.orderStatus = status;
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Order status updated successfully",
+      order
+    });
+
+  } catch (error) {
+    console.error("Error updating order status:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update order status"
+    });
+  }
+};
+
