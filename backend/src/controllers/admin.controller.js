@@ -1,7 +1,5 @@
 const Order = require("../models/Order.model");
-
-const Product = require("../models/Product.model");
-
+const Inventory = require("../models/Inventory.model");
 
 const allowedStatuses = [
   "PLACED",
@@ -18,7 +16,6 @@ const allowedTransitions = {
   DELIVERED: ["CANCELLED"],
   CANCELLED: []
 };
-
 
 
 exports.getAllOrdersForAdmin = async (req, res) => {
@@ -67,11 +64,12 @@ exports.getAllOrdersForAdmin = async (req, res) => {
 
 
 // UPDATE ORDER STATUS
-
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+
+    const Product = require("../models/Product.model");
 
     if (!status) {
       return res.status(400).json({
@@ -87,18 +85,29 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ tenant-safe query
-    const Product = require("../models/Product.model");
-
     const order = await Order.findOne({
       _id: id,
       tenantId: req.user?.tenantId || req.tenantId
     });
 
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    // ✅ DEFINE HERE
     const currentStatus = order.orderStatus;
 
-  
+    if (!allowedTransitions[currentStatus].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status transition"
+      });
+    }
 
+    // ✅ restore inventory once
     if (status === "CANCELLED" && currentStatus !== "CANCELLED") {
       for (const item of order.items) {
         await Product.findByIdAndUpdate(
@@ -107,7 +116,6 @@ exports.updateOrderStatus = async (req, res) => {
         );
       }
     }
-
 
     order.orderStatus = status;
     await order.save();
@@ -126,4 +134,3 @@ exports.updateOrderStatus = async (req, res) => {
     });
   }
 };
-
