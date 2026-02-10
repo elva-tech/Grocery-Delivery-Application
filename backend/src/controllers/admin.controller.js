@@ -1,7 +1,8 @@
+const { createOrderStatusNotification } = require("../services/notification.service");
 const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
-const User = require("../models/User.model"); // ✅ NEW
-const Product = require("../models/Product.model"); // moved to top (clean code)
+const User = require("../models/User.model");
+const Product = require("../models/Product.model");
 
 const allowedStatuses = [
   "PLACED",
@@ -47,7 +48,7 @@ exports.getAllOrdersForAdmin = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
-      .populate("user", "name email");
+      .populate("userId", "name email");
 
     const totalOrders = await Order.countDocuments(query);
 
@@ -78,6 +79,10 @@ exports.updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ddf6664 (Story 14: Create notification on order status change)
     if (!status) {
       return res.status(400).json({
         success: false,
@@ -125,6 +130,18 @@ exports.updateOrderStatus = async (req, res) => {
 
     order.orderStatus = status;
     await order.save();
+
+    try {
+      await createOrderStatusNotification({
+      tenantId: order.tenantId,
+      userId: order.userId,
+      orderId: order._id,
+      status});
+    }catch (err){
+      console.log("Notification failed but order updated:", err.message);
+    }
+
+
 
     return res.status(200).json({
       success: true,
