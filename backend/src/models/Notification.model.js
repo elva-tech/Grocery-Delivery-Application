@@ -14,6 +14,16 @@ const notificationSchema = new mongoose.Schema(
       required: true,
     },
 
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      required: true,
+    },
+
+    status: {
+      type: String,
+    },
+
     message: {
       type: String,
       required: true,
