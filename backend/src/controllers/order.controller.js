@@ -1,6 +1,8 @@
 const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const mongoose = require("mongoose");
+const User = require("../models/User.model");
+
 
 const PAYMENT_MODES = ["COD", "ONLINE"];
 
@@ -163,6 +165,86 @@ exports.markOrderDelivered = async (req, res) => {
     console.error(error);
     res.status(500).json({
       message: "Something went wrong. Please try again later.",
+    });
+  }
+};
+
+exports.getCustomerOrderById = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const userId = req.user.userId;
+    const tenantId = req.user.tenantId;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format"
+      });
+    }
+
+    const user = await User.findById(userId).select("isBlocked");
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "User is blocked"
+      });
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      tenantId
+    }).lean();
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    if (order.userId.toString() !== req.user.userId.toString())
+ {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot access this order"
+      });
+    }
+
+    const safeItems = Array.isArray(order.items)
+      ? order.items.map(item => ({
+          productId: item.productId,
+          name: item.name,
+          qty: item.qty,
+          price: item.price
+        }))
+      : [];
+
+    return res.status(200).json({
+      success: true,
+      order: {
+        id: order._id,
+        items: safeItems,
+        totalAmount: order.totalAmount,
+        paymentMode: order.paymentMode,
+        paymentStatus: order.paymentStatus,
+        orderStatus: order.orderStatus,
+        deliveryAddress: order.deliveryAddress,
+        createdAt: order.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again later."
     });
   }
 };
