@@ -33,8 +33,8 @@ async function seed() {
     { tenantId, name: "Bread", category: "Bakery", price: 2.0, unit: "loaf", isAvailable: false },
   ]);
 
-  // Print product IDs (from other branch)
-  products.forEach(p => console.log(p.name, "=>", p._id.toString()));
+  // Print product IDs
+  products.forEach((p) => console.log(p.name, "=>", p._id.toString()));
 
   // Inventory
   await Inventory.insertMany(
@@ -52,11 +52,14 @@ async function seed() {
     { $set: { role: "ADMIN" } }
   );
 
-  console.log("Dummy data seeded successfully!");
+  console.log("✅ Dummy data seeded successfully!");
+  console.log("👉 ADMIN LOGIN PHONE: 2222222222");
+  console.log("👉 OTP: 123456");
+
   mongoose.connection.close();
 }
 
-seed().catch(err => {
+seed().catch((err) => {
   console.error("Seeding error:", err);
   mongoose.connection.close();
 });

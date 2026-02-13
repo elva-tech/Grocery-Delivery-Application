@@ -1,5 +1,7 @@
 const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
+const User = require("../models/User.model"); // ✅ NEW
+const Product = require("../models/Product.model"); // moved to top (clean code)
 
 const allowedStatuses = [
   "PLACED",
@@ -17,13 +19,16 @@ const allowedTransitions = {
   CANCELLED: []
 };
 
+//////////////////////////////////////////////////////////////
+// ✅ GET ALL ORDERS FOR ADMIN
+//////////////////////////////////////////////////////////////
 
 exports.getAllOrdersForAdmin = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
 
     const query = {
-      tenantId: req.user?.tenantId || req.tenantId
+      tenantId: req.user.tenantId
     };
 
     if (status) {
@@ -39,7 +44,7 @@ exports.getAllOrdersForAdmin = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const orders = await Order.find(query)
-      .sort({ createdAt: -1 }) // latest first
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .populate("user", "name email");
@@ -53,6 +58,7 @@ exports.getAllOrdersForAdmin = async (req, res) => {
       totalPages: Math.ceil(totalOrders / limit),
       orders,
     });
+
   } catch (error) {
     console.error("Error fetching admin orders:", error);
     res.status(500).json({
@@ -62,14 +68,15 @@ exports.getAllOrdersForAdmin = async (req, res) => {
   }
 };
 
+//////////////////////////////////////////////////////////////
+// ✅ UPDATE ORDER STATUS
+//////////////////////////////////////////////////////////////
 
-// UPDATE ORDER STATUS
 exports.updateOrderStatus = async (req, res) => {
   try {
+
     const { id } = req.params;
     const { status } = req.body;
-
-    const Product = require("../models/Product.model");
 
     if (!status) {
       return res.status(400).json({
@@ -87,7 +94,7 @@ exports.updateOrderStatus = async (req, res) => {
 
     const order = await Order.findOne({
       _id: id,
-      tenantId: req.user?.tenantId || req.tenantId
+      tenantId: req.user.tenantId
     });
 
     if (!order) {
@@ -97,7 +104,6 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ DEFINE HERE
     const currentStatus = order.orderStatus;
 
     if (!allowedTransitions[currentStatus].includes(status)) {
@@ -107,7 +113,7 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ restore inventory once
+    // Restore inventory if cancelled
     if (status === "CANCELLED" && currentStatus !== "CANCELLED") {
       for (const item of order.items) {
         await Product.findByIdAndUpdate(
@@ -131,6 +137,51 @@ exports.updateOrderStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update order status"
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// ✅ NEW STORY — LIST USERS FOR ADMIN
+//////////////////////////////////////////////////////////////
+
+exports.getUsers = async (req, res) => {
+  try {
+
+    const tenantId = req.user.tenantId;
+
+    let { page = 1, limit = 10 } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    if (page <= 0) page = 1;
+    if (limit <= 0) limit = 10;
+    if (limit > 100) limit = 100;
+
+    const skip = (page - 1) * limit;
+
+    const users = await User.find({ tenantId })
+      .select("_id phoneNumber role isActive createdAt")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalUsers = await User.countDocuments({ tenantId });
+
+    return res.status(200).json({
+      success: true,
+      page,
+      limit,
+      totalUsers,
+      users,
+    });
+
+  } catch (error) {
+    console.error("Admin getUsers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
     });
   }
 };
