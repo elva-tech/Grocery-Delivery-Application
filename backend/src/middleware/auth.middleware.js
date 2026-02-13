@@ -1,32 +1,57 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User.model");
 
+// ✅ AUTH MIDDLEWARE (Verifies Token)
 const authMiddleware = async (req, res, next) => {
-  // ✅ ALLOW PUBLIC AUTH ROUTES (VERY IMPORTANT)
-  if (req.originalUrl.startsWith("/api/auth")) {
-    return next();
-  }
-
   try {
+
+    // Allow public auth routes (login / otp)
+    if (req.originalUrl.startsWith("/api/auth")) {
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Authorization token missing" });
+      return res.status(401).json({
+        success: false,
+        message: "Authorization token missing",
+      });
     }
 
     const token = authHeader.split(" ")[1];
-    let decoded;
 
+    let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
-      return res.status(401).json({ message: "Invalid or expired token" });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired token",
+      });
     }
 
-    const user = await User.findById(decoded.userId);
-    if (!user || !user.isActive) {
-      return res.status(403).json({ message: "User blocked or not found" });
+    // ✅ Check user exists
+    const user = await User.findById(decoded.userId).select(
+      "_id role tenantId isActive"
+    );
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found",
+      });
     }
 
+    // ✅ Block inactive users
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "User is blocked",
+      });
+    }
+
+    // Attach user to request
     req.user = {
       userId: user._id,
       role: user.role,
@@ -34,23 +59,35 @@ const authMiddleware = async (req, res, next) => {
     };
 
     next();
+
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Server error" });
+    console.error("Auth middleware error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
-const adminOnly = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.userId);
-    if (!user || !user.isActive || user.role !== "ADMIN") {
-      return res.status(403).json({ message: "Admin access only" });
-    }
-    next();
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Server error" });
+
+// ✅ ADMIN ONLY MIDDLEWARE
+const adminOnly = (req, res, next) => {
+
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized",
+    });
   }
+
+  if (req.user.role !== "ADMIN") {
+    return res.status(403).json({
+      success: false,
+      message: "Admin access only",
+    });
+  }
+
+  next();
 };
 
 module.exports = { authMiddleware, adminOnly };
