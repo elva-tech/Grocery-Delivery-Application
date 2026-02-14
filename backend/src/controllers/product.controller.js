@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const Product = require("../models/Product.model");
+const Inventory = require("../models/Inventory.model");
+
 
 const addProduct = async (req, res) => {
   try {
@@ -57,6 +59,12 @@ if (price <= 0) {
     });
 
     await product.save();
+    await Inventory.create({
+  tenantId,
+  productId: product._id,
+  availableQty: 1,   // start with zero
+  thresholdQty: 10
+});
 
     return res.status(201).json({
       message: "Product added successfully",
@@ -148,5 +156,69 @@ if (price <= 0) {
     });
   }
 };
+const getAvailableProducts = async (req, res) => {
+  try {
+    const { category } = req.query;
+    const tenantId = req.headers["x-tenant-id"];
 
-module.exports = { addProduct, updateProductFromAdmin };
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant ID missing"
+      });
+    }
+
+    const productFilter = {
+      tenantId,
+      isAvailable: true
+    };
+
+    if (category) {
+      productFilter.category = {
+        $regex: `^${category}$`,
+        $options: "i"
+      };
+    }
+
+    const products = await Product.find(productFilter)
+      .select("_id name category price unit")
+      .sort({ name: 1 });
+
+    if (!products.length) {
+      return res.status(200).json({ success: true, products: [] });
+    }
+
+    const inventories = await Inventory.find({
+      tenantId,
+      productId: { $in: products.map(p => p._id) },
+      availableQty: { $gt: 0 }
+    });
+
+    const inventoryMap = {};
+    inventories.forEach(inv => {
+      inventoryMap[inv.productId] = inv.availableQty;
+    });
+
+    const response = products
+      .filter(p => inventoryMap[p._id])
+      .map(p => ({
+        productId: p._id,
+        name: p.name,
+        category: p.category,
+        price: p.price,
+        unit: p.unit,
+        availableQty: inventoryMap[p._id]
+      }));
+
+    res.status(200).json({ success: true, products: response });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+module.exports = {
+  addProduct,
+  updateProductFromAdmin,
+  getAvailableProducts
+};

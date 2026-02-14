@@ -28,11 +28,14 @@ const { authMiddleware } = require("./middleware/auth.middleware");
 // Public routes
 app.use("/api/auth", authRoutes);
 
+// Product routes
+app.use("/api/products", productRoutes);
+
 // Protect routes below this line
 app.use(authMiddleware);
 
 // Protected routes
-app.use("/api", productRoutes);
-app.use("/api", orderRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/admin", adminRoutes);
 
 module.exports = app;
