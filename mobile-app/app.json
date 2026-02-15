@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Enandi",
+    "slug": "Enandi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo-2.png",
+    "scheme": "enandi",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/logo-2.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.vittesh.enandi"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/logo-2.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo-2.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dfd2f395-76a6-42c8-8219-10563be5e39d"
+      }
+    }
+  }
+}

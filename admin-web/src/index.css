@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+  /* This prevents the blue "flicker" on mobile/chrome when clicking buttons */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.select-none-on-tap {
+  user-select: auto; 
+}
+
+/* Ensure the hand icon is everywhere it needs to be */
+input[type="date"], 
+button, 
+[role="button"],
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Keep the text cursor for search bars */
+input[type="text"] {
+  cursor: text !important;
+}
