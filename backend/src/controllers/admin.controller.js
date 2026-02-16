@@ -1,7 +1,8 @@
+const { createOrderStatusNotification } = require("../services/notification.service");
 const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
-const User = require("../models/User.model"); // ✅ NEW
-const Product = require("../models/Product.model"); // moved to top (clean code)
+const Product = require("../models/Product.model");
+const User = require("../models/User.model");
 
 const allowedStatuses = [
   "PLACED",
@@ -20,19 +21,26 @@ const allowedTransitions = {
 };
 
 //////////////////////////////////////////////////////////////
-// ✅ GET ALL ORDERS FOR ADMIN
+// GET ALL ORDERS FOR ADMIN
 //////////////////////////////////////////////////////////////
 
 exports.getAllOrdersForAdmin = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+
+    let page = parseInt(req.query.page);
+    let limit = parseInt(req.query.limit);
+    const { status } = req.query;
+
+    if (isNaN(page) || page <= 0) page = 1;
+    if (isNaN(limit) || limit <= 0) limit = 10;
+    if (limit > 100) limit = 100;
 
     const query = {
       tenantId: req.user.tenantId
     };
 
     if (status) {
-      if (typeof status !== "string" || !allowedStatuses.includes(status)) {
+      if (!allowedStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
           message: "Invalid status"
@@ -46,30 +54,32 @@ exports.getAllOrdersForAdmin = async (req, res) => {
     const orders = await Order.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
-      .populate("user", "name email");
+      .limit(limit)
+      .populate("userId", "name email");
 
     const totalOrders = await Order.countDocuments(query);
+    const totalPages = Math.ceil(totalOrders / limit);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
+      page,
+      limit,
       totalOrders,
-      currentPage: parseInt(page),
-      totalPages: Math.ceil(totalOrders / limit),
+      totalPages,
       orders,
     });
 
   } catch (error) {
     console.error("Error fetching admin orders:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Failed to fetch orders",
+      message: error.message || "Failed to fetch orders",
     });
   }
 };
 
 //////////////////////////////////////////////////////////////
-// ✅ UPDATE ORDER STATUS
+// UPDATE ORDER STATUS
 //////////////////////////////////////////////////////////////
 
 exports.updateOrderStatus = async (req, res) => {
@@ -113,7 +123,6 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Restore inventory if cancelled
     if (status === "CANCELLED" && currentStatus !== "CANCELLED") {
       for (const item of order.items) {
         await Product.findByIdAndUpdate(
@@ -126,6 +135,17 @@ exports.updateOrderStatus = async (req, res) => {
     order.orderStatus = status;
     await order.save();
 
+    try {
+      await createOrderStatusNotification({
+        tenantId: order.tenantId,
+        userId: order.userId,
+        orderId: order._id,
+        status
+      });
+    } catch (err) {
+      console.log("Notification failed but order updated:", err.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: "Order status updated successfully",
@@ -136,13 +156,13 @@ exports.updateOrderStatus = async (req, res) => {
     console.error("Error updating order status:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to update order status"
+      message: error.message || "Failed to update order status"
     });
   }
 };
 
 //////////////////////////////////////////////////////////////
-// ✅ NEW STORY — LIST USERS FOR ADMIN
+// LIST USERS FOR ADMIN
 //////////////////////////////////////////////////////////////
 
 exports.getUsers = async (req, res) => {
@@ -150,13 +170,11 @@ exports.getUsers = async (req, res) => {
 
     const tenantId = req.user.tenantId;
 
-    let { page = 1, limit = 10 } = req.query;
+    let page = parseInt(req.query.page);
+    let limit = parseInt(req.query.limit);
 
-    page = parseInt(page);
-    limit = parseInt(limit);
-
-    if (page <= 0) page = 1;
-    if (limit <= 0) limit = 10;
+    if (isNaN(page) || page <= 0) page = 1;
+    if (isNaN(limit) || limit <= 0) limit = 10;
     if (limit > 100) limit = 100;
 
     const skip = (page - 1) * limit;
@@ -168,12 +186,14 @@ exports.getUsers = async (req, res) => {
       .limit(limit);
 
     const totalUsers = await User.countDocuments({ tenantId });
+    const totalPages = Math.ceil(totalUsers / limit);
 
     return res.status(200).json({
       success: true,
       page,
       limit,
       totalUsers,
+      totalPages,
       users,
     });
 
@@ -181,7 +201,7 @@ exports.getUsers = async (req, res) => {
     console.error("Admin getUsers error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch users",
+      message: error.message || "Failed to fetch users",
     });
   }
 };

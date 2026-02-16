@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User.model");
 
-// ✅ AUTH MIDDLEWARE (Verifies Token)
+//  AUTH MIDDLEWARE (Verifies Token)
 const authMiddleware = async (req, res, next) => {
   try {
 
@@ -22,16 +22,17 @@ const authMiddleware = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
 
     let decoded;
+
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
       return res.status(401).json({
         success: false,
-        message: "Invalid or expired token",
+        message: err.message || "Invalid or expired token",
       });
     }
 
-    // ✅ Check user exists
+    //  Check user exists
     const user = await User.findById(decoded.userId).select(
       "_id role tenantId isActive"
     );
@@ -43,7 +44,7 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
-    // ✅ Block inactive users
+    //  Block inactive users
     if (!user.isActive) {
       return res.status(403).json({
         success: false,
@@ -64,13 +65,13 @@ const authMiddleware = async (req, res, next) => {
     console.error("Auth middleware error:", error);
     return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: error.message || "Server error", // ⭐ FIXED (Lead comment)
     });
   }
 };
 
 
-// ✅ ADMIN ONLY MIDDLEWARE
+//  ADMIN ONLY MIDDLEWARE
 const adminOnly = (req, res, next) => {
 
   if (!req.user) {
