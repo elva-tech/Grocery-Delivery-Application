@@ -18,7 +18,7 @@ async function seed() {
   // Users
   await User.insertMany([
     { tenantId, phoneNumber: "1111111111", name: "Alice", role: "CUSTOMER", isActive: true },
-    { tenantId, phoneNumber: "2222222222", name: "Bob", role: "ADMIN", isActive: true },
+    { tenantId, phoneNumber: "2222222222", name: "Bob", role: "ADMIN", isActive: true }, // ✅ ADMIN USER
     { tenantId, phoneNumber: "3333333333", name: "Charlie", role: "OPS", isActive: true },
     { tenantId, phoneNumber: "4444444444", name: "David", role: "CUSTOMER", isActive: true },
     { tenantId, phoneNumber: "5555555555", name: "Eve", role: "CUSTOMER", isActive: false },
@@ -33,28 +33,7 @@ async function seed() {
     { tenantId, name: "Bread", category: "Bakery", price: 2.0, unit: "loaf", isAvailable: false },
   ]);
 
-<<<<<<< HEAD
-
   // Inventory (one per product)
-  const inventory = await Inventory.insertMany(products.map((product, i) => ({
-    tenantId,
-    productId: product._id,
-    availableQty: 100 - i * 10,
-    thresholdQty: 10 + i * 2,
-  })));
-  // Ensure Bob is ADMIN
-await User.updateOne(
-  { phoneNumber: "2222222222", tenantId },
-  { $set: { role: "ADMIN" } }
-);
-
-
-=======
-  // ✅ PRINT PRODUCT IDS
-  products.forEach(p => console.log(p.name, "=>", p._id.toString()));
->>>>>>> 22c720553eef19657c75434a7a55f700403ac3c5
-
-  // Inventory
   await Inventory.insertMany(
     products.map((product, i) => ({
       tenantId,
@@ -64,7 +43,10 @@ await User.updateOne(
     }))
   );
 
-  console.log("Dummy data seeded successfully!");
+  console.log("✅ Dummy data seeded successfully!");
+  console.log("👉 ADMIN LOGIN PHONE: 2222222222");
+  console.log("👉 OTP: 123456");
+
   mongoose.connection.close();
 }
 

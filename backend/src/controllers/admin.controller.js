@@ -2,7 +2,7 @@ const { createOrderStatusNotification } = require("../services/notification.serv
 const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const Product = require("../models/Product.model");
-
+const User = require("../models/User.model");
 
 const allowedStatuses = [
   "PLACED",
@@ -20,17 +20,27 @@ const allowedTransitions = {
   CANCELLED: []
 };
 
+//////////////////////////////////////////////////////////////
+// GET ALL ORDERS FOR ADMIN
+//////////////////////////////////////////////////////////////
 
 exports.getAllOrdersForAdmin = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+
+    let page = parseInt(req.query.page);
+    let limit = parseInt(req.query.limit);
+    const { status } = req.query;
+
+    if (isNaN(page) || page <= 0) page = 1;
+    if (isNaN(limit) || limit <= 0) limit = 10;
+    if (limit > 100) limit = 100;
 
     const query = {
-      tenantId: req.user?.tenantId || req.tenantId
+      tenantId: req.user.tenantId
     };
 
     if (status) {
-      if (typeof status !== "string" || !allowedStatuses.includes(status)) {
+      if (!allowedStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
           message: "Invalid status"
@@ -42,36 +52,41 @@ exports.getAllOrdersForAdmin = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const orders = await Order.find(query)
-      .sort({ createdAt: -1 }) // latest first
+      .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(limit)
       .populate("userId", "name email");
 
     const totalOrders = await Order.countDocuments(query);
+    const totalPages = Math.ceil(totalOrders / limit);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
+      page,
+      limit,
       totalOrders,
-      currentPage: parseInt(page),
-      totalPages: Math.ceil(totalOrders / limit),
+      totalPages,
       orders,
     });
+
   } catch (error) {
     console.error("Error fetching admin orders:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Failed to fetch orders",
+      message: error.message || "Failed to fetch orders",
     });
   }
 };
 
-
+//////////////////////////////////////////////////////////////
 // UPDATE ORDER STATUS
+//////////////////////////////////////////////////////////////
+
 exports.updateOrderStatus = async (req, res) => {
   try {
+
     const { id } = req.params;
     const { status } = req.body;
-
 
     if (!status) {
       return res.status(400).json({
@@ -89,7 +104,7 @@ exports.updateOrderStatus = async (req, res) => {
 
     const order = await Order.findOne({
       _id: id,
-      tenantId: req.user?.tenantId || req.tenantId
+      tenantId: req.user.tenantId
     });
 
     if (!order) {
@@ -99,7 +114,6 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ DEFINE HERE
     const currentStatus = order.orderStatus;
 
     if (!allowedTransitions[currentStatus].includes(status)) {
@@ -109,7 +123,6 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ restore inventory once
     if (status === "CANCELLED" && currentStatus !== "CANCELLED") {
       for (const item of order.items) {
         await Product.findByIdAndUpdate(
@@ -124,15 +137,14 @@ exports.updateOrderStatus = async (req, res) => {
 
     try {
       await createOrderStatusNotification({
-      tenantId: order.tenantId,
-      userId: order.userId,
-      orderId: order._id,
-      status});
-    }catch (err){
+        tenantId: order.tenantId,
+        userId: order.userId,
+        orderId: order._id,
+        status
+      });
+    } catch (err) {
       console.log("Notification failed but order updated:", err.message);
     }
-
-
 
     return res.status(200).json({
       success: true,
@@ -144,7 +156,52 @@ exports.updateOrderStatus = async (req, res) => {
     console.error("Error updating order status:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to update order status"
+      message: error.message || "Failed to update order status"
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// LIST USERS FOR ADMIN
+//////////////////////////////////////////////////////////////
+
+exports.getUsers = async (req, res) => {
+  try {
+
+    const tenantId = req.user.tenantId;
+
+    let page = parseInt(req.query.page);
+    let limit = parseInt(req.query.limit);
+
+    if (isNaN(page) || page <= 0) page = 1;
+    if (isNaN(limit) || limit <= 0) limit = 10;
+    if (limit > 100) limit = 100;
+
+    const skip = (page - 1) * limit;
+
+    const users = await User.find({ tenantId })
+      .select("_id phoneNumber role isActive createdAt")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalUsers = await User.countDocuments({ tenantId });
+    const totalPages = Math.ceil(totalUsers / limit);
+
+    return res.status(200).json({
+      success: true,
+      page,
+      limit,
+      totalUsers,
+      totalPages,
+      users,
+    });
+
+  } catch (error) {
+    console.error("Admin getUsers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch users",
     });
   }
 };
