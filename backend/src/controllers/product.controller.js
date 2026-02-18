@@ -148,12 +148,16 @@ if (price <= 0) {
     });
   }
 };
+  // Escape regex special characters (prevents regex injection)
+const escapeRegex = (str) =>
+  str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const getAvailableProducts = async (req, res) => {
   try {
     const category = req.query?.category?.trim();
     const tenantId = req.headers["x-tenant-id"]?.trim();
 
-    // ✅ Tenant validation
+    // Tenant validation
     if (!tenantId) {
       return res.status(400).json({
         success: false,
@@ -161,40 +165,49 @@ const getAvailableProducts = async (req, res) => {
       });
     }
 
+    // Base filter
     const productFilter = {
       tenantId,
       isAvailable: true
     };
 
-    // ✅ Safe category filtering (No regex injection)
+    // Category filter (case-insensitive + safe)
     if (category) {
-      productFilter.category = category.toLowerCase();
+      const safeCategory = escapeRegex(category);
+      productFilter.category = {
+        $regex: `^${safeCategory}$`,
+        $options: "i"
+      };
     }
 
+    // Fetch products
     const products = await Product.find(productFilter)
       .select("_id name category price unit")
       .sort({ name: 1 });
 
-    if (!products || products.length === 0) {
+    if (!products.length) {
       return res.status(200).json({
         success: true,
         products: []
       });
     }
 
+    // Fetch inventory for those products
     const inventories = await Inventory.find({
       tenantId,
       productId: { $in: products.map(p => p._id) },
       availableQty: { $gt: 0 }
     });
 
+    // Map inventory quantities
     const inventoryMap = {};
     inventories.forEach(inv => {
       inventoryMap[inv.productId.toString()] = inv.availableQty;
     });
 
+    // Final response
     const response = products
-      .filter(p => inventoryMap[p._id.toString()])
+      .filter(p => inventoryMap[p._id.toString()] > 0)
       .map(p => ({
         productId: p._id,
         name: p.name,
@@ -217,6 +230,8 @@ const getAvailableProducts = async (req, res) => {
     });
   }
 };
+
+
 
 module.exports = {
   addProduct,
