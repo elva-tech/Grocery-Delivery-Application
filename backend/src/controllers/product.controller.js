@@ -150,9 +150,10 @@ if (price <= 0) {
 };
 const getAvailableProducts = async (req, res) => {
   try {
-    const { category } = req.query;
-    const tenantId = req.headers["x-tenant-id"];
+    const category = req.query?.category?.trim();
+    const tenantId = req.headers["x-tenant-id"]?.trim();
 
+    // ✅ Tenant validation
     if (!tenantId) {
       return res.status(400).json({
         success: false,
@@ -165,19 +166,20 @@ const getAvailableProducts = async (req, res) => {
       isAvailable: true
     };
 
+    // ✅ Safe category filtering (No regex injection)
     if (category) {
-      productFilter.category = {
-        $regex: `^${category}$`,
-        $options: "i"
-      };
+      productFilter.category = category.toLowerCase();
     }
 
     const products = await Product.find(productFilter)
       .select("_id name category price unit")
       .sort({ name: 1 });
 
-    if (!products.length) {
-      return res.status(200).json({ success: true, products: [] });
+    if (!products || products.length === 0) {
+      return res.status(200).json({
+        success: true,
+        products: []
+      });
     }
 
     const inventories = await Inventory.find({
@@ -188,24 +190,31 @@ const getAvailableProducts = async (req, res) => {
 
     const inventoryMap = {};
     inventories.forEach(inv => {
-      inventoryMap[inv.productId] = inv.availableQty;
+      inventoryMap[inv.productId.toString()] = inv.availableQty;
     });
 
     const response = products
-      .filter(p => inventoryMap[p._id])
+      .filter(p => inventoryMap[p._id.toString()])
       .map(p => ({
         productId: p._id,
         name: p.name,
         category: p.category,
         price: p.price,
         unit: p.unit,
-        availableQty: inventoryMap[p._id]
+        availableQty: inventoryMap[p._id.toString()]
       }));
 
-    res.status(200).json({ success: true, products: response });
+    return res.status(200).json({
+      success: true,
+      products: response
+    });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Error in getAvailableProducts:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
 
