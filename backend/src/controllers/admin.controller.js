@@ -3,6 +3,7 @@ const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const User = require("../models/User.model");
 const Product = require("../models/Product.model");
+const mongoose = require("mongoose");
 
 const allowedStatuses = [
   "PLACED",
@@ -26,11 +27,15 @@ const allowedTransitions = {
 
 exports.getAllOrdersForAdmin = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    let page = parseInt(req.query.page);
+    let limit = parseInt(req.query.limit);
+    const { status } = req.query;
+    
+    if (isNaN(page) || page <= 0) page = 1;
+    if (isNaN(limit) || limit <= 0) limit = 10;
+    if (limit > 100) limit = 100;
 
-    const query = {
-      tenantId: req.user.tenantId
-    };
+    const query = { tenantId: req.user.tenantId };
 
     if (status) {
       if (typeof status !== "string" || !allowedStatuses.includes(status)) {
@@ -75,14 +80,9 @@ exports.getAllOrdersForAdmin = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
   try {
-
     const { id } = req.params;
     const { status } = req.body;
 
-<<<<<<< HEAD
-=======
-
->>>>>>> ddf6664 (Story 14: Create notification on order status change)
     if (!status) {
       return res.status(400).json({
         success: false,
@@ -164,7 +164,6 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.getUsers = async (req, res) => {
   try {
-
     const tenantId = req.user.tenantId;
 
     let { page = 1, limit = 10 } = req.query;
@@ -199,6 +198,65 @@ exports.getUsers = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch users",
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// BLOCK / UNBLOCK USER
+//////////////////////////////////////////////////////////////
+
+exports.blockOrUnblockUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
+
+    if (req.user.userId === id) {
+      return res.status(400).json({
+        success: false,
+        message: "Admin cannot block themselves",
+      });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.isActive === isActive) {
+      return res.status(400).json({
+        success: false,
+        message: isActive
+          ? "User already active"
+          : "User already blocked",
+      });
+    }
+
+    user.isActive = isActive;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: isActive
+        ? "User unblocked successfully"
+        : "User blocked successfully",
+    });
+  } catch (error) {
+    console.error("Block/Unblock Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
     });
   }
 };
