@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import { CheckCircle, XCircle, AlertCircle, Eye } from 'lucide-react';
 
 const ReturnManagement = () => {
   const { returns, processReturnRequest } = useAppState();
+  const [adminNotes, setAdminNotes] = useState({});
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -11,6 +12,14 @@ const ReturnManagement = () => {
       case 'REJECTED': return 'bg-red-100 text-red-700';
       default: return 'bg-amber-100 text-amber-700';
     }
+  };
+
+  const handleAction = (id, decision) => {
+    if (!adminNotes[id]?.trim()) {
+      alert("Please provide a reason for the customer.");
+      return;
+    }
+    processReturnRequest(id, decision, adminNotes[id]);
   };
 
   return (
@@ -24,17 +33,10 @@ const ReturnManagement = () => {
         {returns.map((request) => (
           <div key={request.id} className="bg-white border rounded-[24px] p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex flex-col lg:flex-row gap-6">
-              
-              {/* Image Evidence from User App */}
               <div className="w-full lg:w-48 h-48 rounded-2xl overflow-hidden bg-gray-100 border">
-                <img 
-                  src={request.evidence} 
-                  alt="Evidence" 
-                  className="w-full h-full object-cover"
-                />
+                <img src={request.evidence} alt="Evidence" className="w-full h-full object-cover" />
               </div>
 
-              {/* Request Details */}
               <div className="flex-1 space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
@@ -61,19 +63,36 @@ const ReturnManagement = () => {
                   <p className="text-[10px] uppercase font-black text-amber-600 mb-1">Customer Comment</p>
                   <p className="text-sm text-slate-600 italic">"{request.comment}"</p>
                 </div>
+
+                {request.status === 'PENDING' ? (
+                  <div className="pt-2">
+                    <textarea
+                      placeholder="Enter resolution note for customer..."
+                      className="w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 focus:ring-[#1A4D2E]"
+                      value={adminNotes[request.id] || ''}
+                      onChange={(e) => setAdminNotes({...adminNotes, [request.id]: e.target.value})}
+                    />
+                  </div>
+                ) : (
+                   request.adminComment && (
+                    <div className="bg-slate-50 p-4 rounded-xl border border-dashed border-slate-200">
+                      <p className="text-[10px] uppercase font-black text-slate-400 mb-1">Your Resolution Note</p>
+                      <p className="text-sm text-slate-600 font-bold">"{request.adminComment}"</p>
+                    </div>
+                   )
+                )}
               </div>
 
-              {/* Action Buttons */}
               {request.status === 'PENDING' && (
                 <div className="flex flex-row lg:flex-col gap-2 justify-center">
                   <button 
-                    onClick={() => processReturnRequest(request.id, 'APPROVE')}
+                    onClick={() => handleAction(request.id, 'APPROVE')}
                     className="flex-1 bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700"
                   >
                     <CheckCircle size={18} /> Approve
                   </button>
                   <button 
-                    onClick={() => processReturnRequest(request.id, 'REJECT')}
+                    onClick={() => handleAction(request.id, 'REJECT')}
                     className="flex-1 bg-red-50 text-red-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-100"
                   >
                     <XCircle size={18} /> Reject

@@ -122,9 +122,9 @@ const DashboardHome = () => {
         <div onClick={() => navigate('/orders')} className="cursor-pointer">
           <StatCard title="Active Orders" value={activeOrdersCount} icon={<Truck />} color="purple" />
         </div>
-        <div onClick={() => navigate('/products')} className="cursor-pointer">
+        {/* <div onClick={() => navigate('/products')} className="cursor-pointer">
           <StatCard title="Stock-Outs" value={stockOutCount} icon={<XCircle />} color="red" />
-        </div>
+        </div> */}
       </div>
 
       <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm relative overflow-hidden w-full">
