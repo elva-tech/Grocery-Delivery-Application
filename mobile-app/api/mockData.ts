@@ -62,6 +62,7 @@ export const MOCK_PRODUCTS = [
     price: 85,
     unit: '1 Litre',
     stock: 15,
+    description: 'Rich, creamy, and 100% pure buffalo milk. High in fat content and perfect for making thick curd or traditional Indian sweets.',
     image: ['https://tse1.mm.bing.net/th/id/OIP.PiQ06zHaAA2cJ4kMnJRxSQHaGL?pid=Api&P=0&h=180', 'https://tse1.mm.bing.net/th/id/OIP.PiQ06zHaAA2cJ4kMnJRxSQHaGL?pid=Api&P=0&h=180'],
   },
   {
@@ -365,6 +366,36 @@ export const MOCK_ORDERS = [
     items: [
       { id: 'p1', name: 'Farm Fresh Buffalo Milk', price: 85, quantity: 2, unit: '1 Litre', image: ['https://images.unsplash.com/photo-1563636619-e91000f21fca?q=80&w=800'] },
       { id: 'p4', name: 'Premium Set Curd', price: 45, quantity: 1, unit: '500g', image: ['https://images.unsplash.com/photo-1485962391905-dc37bcd2c73c?q=80&w=800'] },
+    ]
+  },
+  /* --- TEST CASE: REFUND APPROVED --- */
+  {
+    id: 'ORD_TEST_OK',
+    userId: 'user-123',
+    status: 'REFUND_APPROVED',
+    createdAt: '2026-02-20T10:00:00',
+    deliverySlot: '7-10 AM',
+    address: 'TEST HOUSE, Sector 5, Bengaluru',
+    totalAmount: 310,
+    adminComment: 'We have approved your refund for the leaked Ghee jar. The amount will reflect in your bank in 3-5 days.',
+    resolvedAt: '2026-02-20T14:00:00',
+    items: [
+      { id: 'p12', name: 'Desi Cow Ghee', price: 310, quantity: 1, unit: '500ml', image: 'https://images.unsplash.com/photo-1615485291234-9e7e1f6b7c7c' }
+    ]
+  },
+  /* --- TEST CASE: REFUND REJECTED --- */
+  {
+    id: 'ORD_TEST_NO',
+    userId: 'user-123',
+    status: 'REFUND_REJECTED',
+    createdAt: '2026-02-20T11:00:00',
+    deliverySlot: '7-10 AM',
+    address: 'TEST HOUSE, Sector 5, Bengaluru',
+    totalAmount: 44,
+    adminComment: 'Request denied. The evidence photo shows a tampered seal from the customer side.',
+    resolvedAt: '2026-02-20T15:00:00',
+    items: [
+      { id: 'p20', name: 'Classic Buttermilk', price: 22, quantity: 2, unit: '250ml', image: 'https://images.unsplash.com/photo-1621939514649-280e2ee25f60' }
     ]
   },
    {

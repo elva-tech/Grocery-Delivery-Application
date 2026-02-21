@@ -4,13 +4,13 @@ import {
   MOCK_ORDERS, 
   MOCK_RIDERS, 
   MOCK_CATEGORIES, 
-  MOCK_BANNERS
+  MOCK_BANNERS,
+  MOCK_RETURNS 
 } from '../services/mockData';
 
 const AppStateContext = createContext();
 
 export const AppStateProvider = ({ children }) => {
-  // 1. FIXED: Added setCategories setter
   const [products, setProducts] = useState(() => {
     const saved = sessionStorage.getItem('app_products');
     return saved ? JSON.parse(saved) : MOCK_PRODUCTS; 
@@ -27,6 +27,7 @@ export const AppStateProvider = ({ children }) => {
 
     return parsed.map(o => {
       const numericTotal = Number(o.total || o.totalAmount);
+
       let normalizedAddress = o.address;
 
       if (typeof o.address === 'string') {
@@ -51,7 +52,9 @@ export const AppStateProvider = ({ children }) => {
 
         normalizedAddress = {
           ...o.address,
-          full: parts.length > 0 ? parts.join(', ') : o.address.full || 'No Address Detail'
+          full: parts.length > 0
+            ? parts.join(', ')
+            : o.address.full || 'No Address Detail'
         };
       }
 
@@ -74,16 +77,19 @@ export const AppStateProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : MOCK_BANNERS;
   });
 
+  const [returns, setReturns] = useState(() => {
+    const saved = sessionStorage.getItem('app_returns');
+    return saved ? JSON.parse(saved) : (MOCK_RETURNS || []);
+  });
+
   useEffect(() => {
     sessionStorage.setItem('app_products', JSON.stringify(products));
     sessionStorage.setItem('app_categories', JSON.stringify(categories));
     sessionStorage.setItem('app_orders', JSON.stringify(orders));
     sessionStorage.setItem('app_riders', JSON.stringify(riders));
+    sessionStorage.setItem('app_returns', JSON.stringify(returns));
     sessionStorage.setItem('app_banners', JSON.stringify(banners));
-  }, [products, categories, orders, riders, banners]);
-
-  // ACTIONS
-  const addCategory = (c) => setCategories(prev => [...prev, c]);
+  }, [products, categories, orders, riders, banners, returns]);
 
   const addRider = (r) =>
     setRiders(prev => [...prev, { ...r, id: `r${Date.now()}`, activeOrders: 0 }]);
@@ -91,7 +97,9 @@ export const AppStateProvider = ({ children }) => {
   const toggleRiderStatus = (id) => {
     setRiders(prev =>
       prev.map(r =>
-        r.id === id ? { ...r, status: r.status === 'Online' ? 'Offline' : 'Online' } : r
+        r.id === id
+          ? { ...r, status: r.status === 'Online' ? 'Offline' : 'Online' }
+          : r
       )
     );
   };
@@ -99,13 +107,17 @@ export const AppStateProvider = ({ children }) => {
   const assignRider = (orderId, riderName) => {
     setOrders(prev =>
       prev.map(o =>
-        o.id === orderId ? { ...o, assignment: riderName, status: 'OUT_FOR_DELIVERY' } : o
+        o.id === orderId
+          ? { ...o, assignment: riderName, status: 'OUT_FOR_DELIVERY' }
+          : o
       )
     );
 
     setRiders(prev =>
       prev.map(r =>
-        r.name === riderName ? { ...r, activeOrders: (r.activeOrders || 0) + 1 } : r
+        r.name === riderName
+          ? { ...r, activeOrders: (r.activeOrders || 0) + 1 }
+          : r
       )
     );
   };
@@ -115,13 +127,20 @@ export const AppStateProvider = ({ children }) => {
       prev.map(o => {
         if (o.id === orderId) {
           const nextStatus = newStatus?.toUpperCase();
-          if ((nextStatus === 'DELIVERED' || nextStatus === 'CANCELLED') && o.assignment !== 'Pending') {
+
+          if (
+            (nextStatus === 'DELIVERED' || nextStatus === 'CANCELLED') &&
+            o.assignment !== 'Pending'
+          ) {
             setRiders(prevR =>
               prevR.map(r =>
-                r.name === o.assignment ? { ...r, activeOrders: Math.max(0, (r.activeOrders || 0) - 1) } : r
+                r.name === o.assignment
+                  ? { ...r, activeOrders: Math.max(0, (r.activeOrders || 0) - 1) }
+                  : r
               )
             );
           }
+
           return { ...o, status: nextStatus };
         }
         return o;
@@ -136,17 +155,43 @@ export const AppStateProvider = ({ children }) => {
       orders,
       riders,
       banners,
-      // 2. FIXED: Exposed addCategory and corrected addProduct ID logic
-      addProduct: p => setProducts(prev => [...prev, { ...p, id: Date.now() }]),
+      returns,
+      addProduct: p => setProducts(prev => [...prev, { ...p, id: `p${Date.now()}` }]),
       updateProduct: (id, up) => setProducts(prev => prev.map(p => p.id === id ? { ...p, ...up } : p)),
       deleteProduct: id => setProducts(prev => prev.filter(p => p.id !== id)),
-      addCategory,
+      addCategory: c => setCategories(prev => [...prev, { ...c, id: `cat${Date.now()}` }]),
+      updateCategory: (id, up) => setCategories(prev => prev.map(c => c.id === id ? { ...c, ...up } : c)),
+      deleteCategory: id => setCategories(prev => prev.filter(c => c.id !== id)),
       updateOrderStatus,
       addRider,
       toggleRiderStatus,
       assignRider,
       addBanner: b => setBanners(prev => [...prev, { ...b, id: Date.now().toString() }]),
-      deleteBanner: id => setBanners(prev => prev.filter(b => b.id !== id))
+      deleteBanner: id => setBanners(prev => prev.filter(b => b.id !== id)),
+      deleteBanner: id => setBanners(prev => prev.filter(b => b.id !== id)),
+      processReturnRequest: (returnId, decision, adminComment) => {
+        setReturns(prev =>
+          prev.map(req => {
+            if (req.id === returnId) {
+              const newStatus = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+              
+              // Sync with Orders so User App sees the update
+              setOrders(orderPrev => orderPrev.map(ord => 
+                ord.id === req.orderId 
+                  ? { 
+                      ...ord, 
+                      status: decision === 'APPROVE' ? 'REFUND_APPROVED' : 'REFUND_REJECTED',
+                      adminComment: adminComment 
+                    } 
+                  : ord
+              ));
+
+              return { ...req, status: newStatus, adminComment };
+            }
+            return req;
+          })
+        );
+      }
     }}>
       {children}
     </AppStateContext.Provider>

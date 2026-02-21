@@ -30,7 +30,7 @@ function App() {
               {/* <Route path="reports" element={<SalesReport />} /> */}
               <Route path="export" element={<ReportsPage />} />
               <Route path="/riders" element={<RiderManagement />} />
-              {/* <Route path="/returns" element={<ReturnManagement />} /> */}
+              <Route path="/returns" element={<ReturnManagement />} />
               <Route path="/banners" element={<BannerManagement />} />
             </Route>
           </Routes>

@@ -1,22 +1,33 @@
-// mockData.js
+// src/config/appConfig.js
+export const APP_CONFIG = {
+  brand: {
+    name: 'Enandi', // Change this here to update the whole dashboard
+    colors: {
+      primary: '#1A4D2E',
+    }
+  }
+};
 
 export const MOCK_CATEGORIES = [
   // MAIN PILLARS
-  { id: 'cat_dairy', name: 'Dairy', icon: 'water-outline', image: ['https://images.unsplash.com/photo-1550583724-125581f770d3?auto=format&fit=crop&q=80&w=800'] },
-  { id: 'cat_agarbathis', name: 'Agarbathis', icon: 'flame-outline', image: ['https://images.unsplash.com/photo-1612538498456-e861df91d4d0?auto=format&fit=crop&q=80&w=800'] },
-  { id: 'cat_dryfruits', name: 'Dry Fruits', icon: 'leaf-outline', image: ['https://images.unsplash.com/photo-1596591606975-97ee5cee3032?auto=format&fit=crop&q=80&w=800'] },
+  { id: 'cat_dairy', name: 'Dairy', icon: 'water-outline', image: ['https://tse1.mm.bing.net/th/id/OIP.PiQ06zHaAA2cJ4kMnJRxSQHaGL?pid=Api&P=0&h=180'], parentId: null },
+  { id: 'cat_agarbathis', name: 'Agarbathis', icon: 'flame-outline', image: ['https://tse3.mm.bing.net/th/id/OIP.oh2jMLVRDfdRHdTcEg43YAHaE8?pid=Api&P=0&h=180'], parentId: null },
+  { id: 'cat_dryfruits', name: 'Dry Fruits', icon: 'leaf-outline', image: ['https://tse2.mm.bing.net/th/id/OIP._DG7k_H47fUscE0o4LKX3QHaEK?pid=Api&P=0&h=180'], parentId: null },
 
-  // SUB-CATEGORIES
-  { id: 'sub_milk', parentId: 'cat_dairy', name: 'Milk', icon: 'water' },
-  { id: 'sub_curd', parentId: 'cat_dairy', name: 'Curd', icon: 'ice-cream' },
-  { id: 'sub_solids', parentId: 'cat_dairy', name: 'Dairy Solids', icon: 'cube' },
-  { id: 'sub_sweets', parentId: 'cat_dairy', name: 'Sweets', icon: 'rose' },
-  { id: 'sub_icecream', parentId: 'cat_dairy', name: 'Ice Creams', icon: 'snow' },
-  { id: 'sub_scented', parentId: 'cat_agarbathis', name: 'Scented', icon: 'flower' },
-  { id: 'sub_dhoop', parentId: 'cat_agarbathis', name: 'Dhoop', icon: 'cloud' },
-  { id: 'sub_almonds', parentId: 'cat_dryfruits', name: 'Almonds', icon: 'nutrition' },
-  { id: 'sub_cashews', parentId: 'cat_dryfruits', name: 'Cashews', icon: 'nutrition' },
-  { id: 'sub_walnuts', parentId: 'cat_dryfruits', name: 'Walnuts', icon: 'nutrition' }
+  // DAIRY SUB-CATEGORIES
+  { id: 'sub_milk', parentId: 'cat_dairy', name: 'Milk', icon: 'water', image: ['https://tse1.mm.bing.net/th/id/OIP.PiQ06zHaAA2cJ4kMnJRxSQHaGL?pid=Api&P=0&h=180'] },
+  { id: 'sub_curd', parentId: 'cat_dairy', name: 'Curd & Yogurt', icon: 'ice-cream', image: ['https://tse3.mm.bing.net/th/id/OIP.Vmvg1SWcx3sJAUbjRw73TgHaHa?pid=Api&P=0&h=180'] },
+  { id: 'sub_butter', parentId: 'cat_dairy', name: 'Butter & Ghee', icon: 'flame', image: ['https://tse1.mm.bing.net/th/id/OIP.2S6bJGikSHzyFRtJOO0K7AHaE3?pid=Api&P=0&h=180'] },
+  { id: 'sub_paneer', parentId: 'cat_dairy', name: 'Paneer', icon: 'cube', image: ['https://images.unsplash.com/photo-1631452180519-c014fe946bc7'] },
+  { id: 'sub_cheese', parentId: 'cat_dairy', name: 'Cheese', icon: 'pizza', image: ['https://tse2.mm.bing.net/th/id/OIP.EnsGWvO4GrNoOCvnTBjf0QHaFL?pid=Api&P=0&h=180'] },
+
+  // AGARBATHIS SUB-CATEGORIES
+  { id: 'sub_scented', parentId: 'cat_agarbathis', name: 'Scented', icon: 'flower', image: ['https://images.unsplash.com/photo-1618221195710-dd6b41faaea6'] },
+  { id: 'sub_dhoop', parentId: 'cat_agarbathis', name: 'Dhoop', icon: 'cloud', image: ['https://images.unsplash.com/photo-1621939514649-280e2ee25f60'] },
+
+  // DRY FRUITS SUB-CATEGORIES
+  { id: 'sub_almonds', parentId: 'cat_dryfruits', name: 'Almonds', icon: 'nutrition', image: ['https://images.unsplash.com/photo-1615484478243-c94e896edbae'] },
+  { id: 'sub_cashews', parentId: 'cat_dryfruits', name: 'Cashews', icon: 'nutrition', image: ['https://images.unsplash.com/photo-1606313564200-e75d5e30476c'] },
 ];
 
 export const MOCK_PRODUCTS = [
@@ -43,7 +54,19 @@ export const MOCK_PRODUCTS = [
   { id: 320, parentCategoryId: 'cat_dryfruits', subCategoryId: 'sub_walnuts', name: 'Chilean Walnuts (Inshell)', price: 550, stock: 30, status: 'Active', images: ['https://images.unsplash.com/photo-1552345387-f8364f33777d?auto=format&fit=crop&q=80&w=800'] },
   { id: 321, parentCategoryId: 'cat_dryfruits', subCategoryId: 'sub_walnuts', name: 'Premium Walnut Kernels', price: 890, stock: 25, status: 'Active', images: ['https://images.unsplash.com/photo-1621511202874-124b89ca0528?auto=format&fit=crop&q=80&w=800'] }
 ];
-
+export const MOCK_RETURNS = [
+  {
+    id: 'RET-1001',
+    orderId: 'ORD000123',
+    customerName: 'John Doe',
+    reason: 'Item damaged',
+    comment: 'The milk carton was leaking inside the bag.',
+    status: 'PENDING', 
+    date: new Date().toISOString(),
+    amount: 120,
+    evidence: 'https://images.unsplash.com/photo-1628102422620-234c3a0b948a?q=80&w=400', // Mock evidence image
+  }
+];
 export const MOCK_ORDERS = [
   { 
     id: 'ORD-101', customerName: 'Rahul Sharma', 

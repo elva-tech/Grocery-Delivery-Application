@@ -30,12 +30,12 @@ const Sidebar = () => {
         { name: 'Delivery Partners', path: '/riders', icon: Bike, color: 'text-blue-500' },
         // FIXED: Added 'name' for the key and 'color' for the icon style
         { name: 'App Banners', path: '/banners', icon: ImageIcon, color: 'text-purple-600' },
-//         { 
-//   name: 'Returns & Refunds', 
-//   path: '/returns', 
-//   icon: RotateCcw, 
-//   color: 'text-red-500' 
-// },
+        { 
+  name: 'Returns & Refunds', 
+  path: '/returns', 
+  icon: RotateCcw, 
+  color: 'text-red-500' 
+},
       ]
     }
   ];
