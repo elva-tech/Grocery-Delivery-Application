@@ -218,12 +218,12 @@ exports.blockOrUnblockUser = async (req, res) => {
       });
     }
 
-    if (req.user.userId === id) {
-      return res.status(400).json({
-        success: false,
-        message: "Admin cannot block themselves",
-      });
-    }
+    if (req.user.userId.toString() === id.toString()) {
+  return res.status(400).json({
+    success: false,
+    message: "Admin cannot block themselves",
+  });
+}
 
     const user = await User.findById(id);
 
@@ -234,16 +234,20 @@ exports.blockOrUnblockUser = async (req, res) => {
       });
     }
 
-    if (user.isActive === isActive) {
-      return res.status(400).json({
-        success: false,
-        message: isActive
-          ? "User already active"
-          : "User already blocked",
-      });
-    }
+   // Force boolean comparison
+const requestedState = Boolean(isActive);
 
-    user.isActive = isActive;
+if (user.isActive === requestedState) {
+  return res.status(400).json({
+    success: false,
+    message: requestedState
+      ? "User already active"
+      : "User already blocked",
+  });
+}
+
+
+    user.isActive = requestedState;
     await user.save();
 
     return res.status(200).json({
