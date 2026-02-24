@@ -3,8 +3,13 @@ import { useAppState } from '../../context/AppStateContext';
 import { CheckCircle, XCircle, AlertCircle, Eye } from 'lucide-react';
 
 const ReturnManagement = () => {
-  const { returns, processReturnRequest } = useAppState();
+  const { returns, processReturnRequest, appSettings } = useAppState(); // Added appSettings here
   const [adminNotes, setAdminNotes] = useState({});
+
+  // GUARD: If disabled in backend/context, hide the entire page content
+  if (!appSettings.allowRefunds) {
+    return null; 
+  }
 
   const getStatusColor = (status) => {
     switch (status) {

@@ -50,6 +50,7 @@ export default function AddressesScreen() {
   const [othersConfirmed, setOthersConfirmed] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false); // New state for API call
   const [label, setLabel] = useState('');
   const [full, setFull] = useState('');
   const [phone, setPhone] = useState('');
@@ -128,6 +129,7 @@ const handleFinalConfirm = async () => {
   }
 
   try {
+    setIsPlacingOrder(true);
     // 3. THE DATA PAYLOAD
     // This is how you distinguish between 'Self' and 'Others' for the backend
     const orderPayload = {
@@ -140,20 +142,24 @@ const handleFinalConfirm = async () => {
 
     console.log("SENDING ORDER TO API:", orderPayload);
 
-    // TODO: await api.createOrder(orderPayload);
-    // This is where your actual API call goes!
+    // FIX: Calling the actual API function
+    const response = await createOrder(orderPayload);
 
-    // 4. Success Actions
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    // IMPORTANT: Clear the "Others" data so the next order doesn't reuse it
-    setOthersForm(EMPTY_OTHERS);
-    setOthersConfirmed(false);
-    
-    dispatch(clearCart());
-    router.replace('/(tabs)/order-success');
+    if (response.success) {
+      // 4. Success Actions
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      // IMPORTANT: Clear the "Others" data so the next order doesn't reuse it
+      setOthersForm(EMPTY_OTHERS);
+      setOthersConfirmed(false);
+      
+      dispatch(clearCart());
+      router.replace('/(tabs)/order-success');
+    }
   } catch (error) {
     showToast('error', 'Order Failed', 'Please try again');
+  } finally {
+    setIsPlacingOrder(false);
   }
 };
 
@@ -333,16 +339,27 @@ const handleFinalConfirm = async () => {
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.confirmBtn} onPress={handleFinalConfirm} activeOpacity={0.85}>
+            <TouchableOpacity 
+              style={[styles.confirmBtn, isPlacingOrder && { opacity: 0.8 }]} 
+              onPress={handleFinalConfirm} 
+              disabled={isPlacingOrder}
+              activeOpacity={0.85}
+            >
               <View style={styles.confirmBtnInner}>
-                <View style={styles.confirmBtnLeft}>
-                  <Text style={styles.confirmBtnItemCount}>{items.length} item{items.length > 1 ? 's' : ''}</Text>
-                  <Text style={styles.confirmBtnText}>Place Order</Text>
-                </View>
-                <View style={styles.confirmBtnRight}>
-                  <Text style={styles.confirmBtnAmount}>₹{totalAmount}</Text>
-                  <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.8)" />
-                </View>
+                {isPlacingOrder ? (
+                  <ActivityIndicator color="#fff" style={{ flex: 1 }} />
+                ) : (
+                  <>
+                    <View style={styles.confirmBtnLeft}>
+                      <Text style={styles.confirmBtnItemCount}>{items.length} item{items.length > 1 ? 's' : ''}</Text>
+                      <Text style={styles.confirmBtnText}>Place Order</Text>
+                    </View>
+                    <View style={styles.confirmBtnRight}>
+                      <Text style={styles.confirmBtnAmount}>₹{totalAmount}</Text>
+                      <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.8)" />
+                    </View>
+                  </>
+                )}
               </View>
             </TouchableOpacity>
           )}

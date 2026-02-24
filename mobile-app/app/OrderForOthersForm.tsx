@@ -4,7 +4,7 @@ import {
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { showToast } from '@/utils/toast'; // Use your custom toast helper
+import { showToast } from '@/utils/toast'; 
 
 export type OthersData = {
   recipientName: string;

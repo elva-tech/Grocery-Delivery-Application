@@ -1,67 +1,99 @@
 import * as Location from 'expo-location';
 
-let ADDRESS_DB = [];
+let ADDRESS_DB: any[] = [];
 const savedKeys = new Set();
+const COUNTRY_CODE = "+91"; // Backend controlled
 
-const makeKey = (address) =>
+const makeKey = (address: any) =>
   `${address.label?.trim()}|${address.full?.trim()}|${address.phone?.trim()}`;
 
-// --- EXISTING FUNCTIONS ---
-export const getAddressFromCoords = async (lat, lng, signal) => {
+export const getAddressFromCoords = async (lat: number, lng: number, signal?: AbortSignal) => {
   if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
   try {
     const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
     if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
     if (!result || result.length === 0) return 'Address not found';
+    
     const addr = result[0];
-    const parts = [addr.name || addr.houseNumber, addr.street, addr.district || addr.subregion, addr.city, addr.postalCode]
-      .filter(part => part && part !== 'null' && part !== 'undefined');
+
+    // FIXED: Using property names recognized by expo-location to remove red lines
+    const parts = [
+      addr.name, 
+      addr.street, 
+      addr.district, 
+      addr.subregion, 
+      addr.city, 
+      addr.postalCode
+    ].filter(part => part && part !== 'null' && part !== 'undefined' && part !== '');
+
     return parts.length > 0 ? parts.join(', ') : 'Unknown Location';
-  } catch (error) {
+  } catch (error: any) {
     if (error.name === 'AbortError') throw error;
     return 'Error fetching address';
   }
 };
 
 export const getAddresses = async () => {
-  return new Promise((resolve) => setTimeout(() => resolve([...ADDRESS_DB]), 100));
+  return new Promise<any[]>((resolve) => setTimeout(() => resolve([...ADDRESS_DB]), 100));
 };
 
-export const addAddress = async (address) => {
-  return new Promise((resolve, reject) => {
+// NEW: OTP Request API
+export const requestOtp = async (phone: string) => {
+  return new Promise((resolve) => {
+    // Backend logic: Prepend code for the SMS Gateway
+    console.log(`[SMS GATEWAY] Sending code to: ${COUNTRY_CODE}${phone}`);
+    setTimeout(() => {
+      resolve({ success: true, message: "OTP Sent Successfully" });
+    }, 800);
+  });
+};
+
+export const addAddress = async (address: any) => {
+  return new Promise<any>((resolve, reject) => {
     setTimeout(() => {
       const key = makeKey(address);
       if (savedKeys.has(key)) {
         reject(Object.assign(new Error('This address is already saved.'), { code: 'DUPLICATE' }));
         return;
       }
+      
+      // BACKEND LOGIC: Prepend country code before saving to DB
+      const newAddress = { 
+        ...address, 
+        id: Date.now().toString(),
+        phone: `${COUNTRY_CODE} ${address.phone}`,
+        altPhone: address.altPhone ? `${COUNTRY_CODE} ${address.altPhone}` : ''
+      };
+      
       savedKeys.add(key);
-      const newAddress = { ...address, id: Date.now().toString() };
       ADDRESS_DB.push(newAddress);
       resolve(newAddress);
     }, 100);
   });
 };
 
-// --- NEW ORDER API FUNCTION ---
-export const createOrder = async (orderPayload) => {
-  return new Promise((resolve, reject) => {
+export const createOrder = async (orderPayload: any) => {
+  return new Promise<any>((resolve, reject) => {
     setTimeout(() => {
-      // Logic: If orderType is 'others', we ensure recipientDetails exists
-      console.log("FINAL API CALL DATA:", JSON.stringify(orderPayload, null, 2));
-      
       if (!orderPayload.items || orderPayload.items.length === 0) {
         reject(new Error("Cart is empty"));
         return;
       }
 
-      // Simulate success
+      // BACKEND LOGIC: Format recipient phone for 'others'
+      if (orderPayload.orderType === 'others' && orderPayload.recipientDetails) {
+        const rawPhone = orderPayload.recipientDetails.recipientPhone;
+        orderPayload.recipientDetails.recipientPhone = `${COUNTRY_CODE} ${rawPhone}`;
+      }
+
+      console.log("FINAL API CALL DATA:", JSON.stringify(orderPayload, null, 2));
+
       resolve({ 
         success: true, 
         orderId: `ORD-${Math.floor(Math.random() * 1000000)}`,
         timestamp: new Date().toISOString()
       });
-    }, 1500); // 1.5s delay to simulate network
+    }, 1500);
   });
 };
 

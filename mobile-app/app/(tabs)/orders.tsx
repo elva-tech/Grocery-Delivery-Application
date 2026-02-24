@@ -19,6 +19,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { getUserOrders, cancelOrderApi } from '@/api/ordersApi';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+// INTEGRATED: Import settings hook
+import { useGetAppSettingsQuery } from '@/api/apiSlice';
 
 const STATUS_THEME: any = {
   PLACED: { color: '#64748b', label: 'Order Placed' },
@@ -27,7 +29,6 @@ const STATUS_THEME: any = {
   DELIVERED: { color: '#10b981', label: 'Delivered' },
   CANCELLED: { color: '#ef4444', label: 'Cancelled' },
   ISSUE_REPORTED: { color: '#8b5cf6', label: 'Issue Reported' },
-  // ✅ ADDED FOR THE BIG FEATURE
   REFUND_APPROVED: { color: '#10b981', label: 'Refund Approved' },
   REFUND_REJECTED: { color: '#ef4444', label: 'Refund Rejected' },
 };
@@ -43,6 +44,10 @@ const REPORT_REASONS = [
 export default function OrdersScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
+  
+  // INTEGRATED: Fetch remote settings
+  const { data: settings } = useGetAppSettingsQuery();
+
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -237,7 +242,6 @@ export default function OrdersScreen() {
                 </View>
               ))}
 
-              {/* ✅ NEW: ADMIN FEEDBACK LOGIC ADDED HERE */}
               {selectedOrder?.adminComment && (
                 <View style={styles.adminResponseBox}>
                   <View style={styles.adminResponseHeader}>
@@ -260,15 +264,15 @@ export default function OrdersScreen() {
                 <Text style={styles.billValue}>₹{selectedOrder?.totalAmount}</Text>
               </View>
               
-              {/* CANCEL ORDER LOGIC */}
-              {(selectedOrder?.status === 'PLACED' || selectedOrder?.status === 'CONFIRMED') && (
+              {/* INTEGRATED: CANCEL ORDER BUTTON TOGGLE */}
+              {(selectedOrder?.status === 'PLACED' || selectedOrder?.status === 'CONFIRMED') && settings?.allowOrderCancellation && (
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(selectedOrder)}>
                   <Text style={styles.cancelBtnText}>Cancel Order</Text>
                 </TouchableOpacity>
               )}
 
-              {/* REPORT ISSUE LOGIC - Only show if Delivered and no final decision made yet */}
-              {selectedOrder?.status === 'DELIVERED' && (
+              {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
+              {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && (
                 <TouchableOpacity style={styles.reportBtn} onPress={() => setShowIssueModal(true)}>
                   <Ionicons name="warning-outline" size={18} color="#f59e0b" />
                   <Text style={styles.reportBtnText}>Report Issue / Refund</Text>
@@ -344,6 +348,7 @@ export default function OrdersScreen() {
   );
 }
 
+// Styles remain identical to your original provided code
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
@@ -408,7 +413,6 @@ const styles = StyleSheet.create({
   alertSecondary: { flex: 1, backgroundColor: '#f1f5f9', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   alertSecondaryText: { color: '#64748b', fontWeight: '800' },
 
-  // ✅ NEW STYLES FOR THE FEEDBACK BOX
   adminResponseBox: {
     backgroundColor: '#f8fafc',
     padding: 16,

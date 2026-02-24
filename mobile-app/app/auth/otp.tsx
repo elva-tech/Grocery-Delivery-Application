@@ -4,7 +4,8 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useDispatch } from "react-redux";
 import { setCredentials } from "@/store/slices/authSlice";
 import { Colors, Fonts } from "@/theme/theme";
-import LottieView from "lottie-react-native"; // Import Lottie
+import LottieView from "lottie-react-native";
+import { requestOtp } from "@/api/addresses"; // Import API
 
 export default function OTP() {
   const router = useRouter();
@@ -13,7 +14,7 @@ export default function OTP() {
 
   const [otp, setOtp] = useState(["", "", "", ""]);
   const [timer, setTimer] = useState(30);
-  const [loading, setLoading] = useState(false); // For async-await logic
+  const [loading, setLoading] = useState(false);
   const inputs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
@@ -24,40 +25,44 @@ export default function OTP() {
     return () => clearInterval(interval);
   }, [timer]);
 
- 
-const handleChange = (text: string, i: number) => {
-  // Only allow numbers
-  const numericText = text.replace(/[^0-9]/g, ''); 
-  if (text && !numericText) return; // Block letters entirely
+  const handleChange = (text: string, i: number) => {
+    const numericText = text.replace(/[^0-9]/g, ''); 
+    if (text && !numericText) return;
 
-  const copy = [...otp];
-  copy[i] = numericText.slice(-1);
-  setOtp(copy);
-  
-  if (numericText && i < 3) {
-    inputs.current[i + 1]?.focus();
-  }
-  if (copy.join("").length === 4) Keyboard.dismiss();
-};
+    const copy = [...otp];
+    copy[i] = numericText.slice(-1);
+    setOtp(copy);
+    
+    if (numericText && i < 3) {
+      inputs.current[i + 1]?.focus();
+    }
+    if (copy.join("").length === 4) Keyboard.dismiss();
+  };
 
-  const handleResend = () => {
-    setOtp(["", "", "", ""]);
-    setTimer(30);
-    inputs.current[0]?.focus();
+  const handleResend = async () => {
+    setLoading(true);
+    try {
+      await requestOtp(phone as string); // Hit Backend again
+      setOtp(["", "", "", ""]);
+      setTimer(30);
+      inputs.current[0]?.focus();
+    } catch (e) {
+      alert("Resend failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerify = async () => {
     if (otp.join("").length !== 4) return;
-
-    setLoading(true); // Start loading
-
-    // Pretend we are doing an async API call (Generating Order ID / Verifying)
+    setLoading(true);
+    
     await new Promise(resolve => setTimeout(resolve, 1500)); 
 
     dispatch(setCredentials({
       user: {
         id: Math.random().toString(36).substr(2, 9),
-        phone: phone as string,
+        phone: `+91 ${phone}`, // Store with code
         name: name as string,
       },
       token: "mock-session-token"
@@ -69,12 +74,9 @@ const handleChange = (text: string, i: number) => {
 
   return (
     <View style={styles.container}>
-      {/* 3D SECURITY LOTTIE */}
       <LottieView
         source={require('../../assets/animations/Security System.json')}
-        autoPlay
-        loop
-        style={styles.lottieHero}
+        autoPlay loop style={styles.lottieHero}
       />
 
       <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Verification</Text>
@@ -92,28 +94,19 @@ const handleChange = (text: string, i: number) => {
             maxLength={1}
             value={d}
             onChangeText={(t) => handleChange(t, i)}
-            onKeyPress={(e) => {
-               if (e.nativeEvent.key === 'Backspace' && !otp[i] && i > 0) {
-                 inputs.current[i - 1]?.focus();
-               }
-            }}
           />
         ))}
       </View>
 
       <TouchableOpacity 
-        style={[styles.button, otp.join("").length < 4 && styles.buttonDisabled]} 
+        style={[styles.button, (otp.join("").length < 4 || loading) && styles.buttonDisabled]} 
         onPress={handleVerify}
         disabled={otp.join("").length < 4 || loading}
       >
-        {loading ? (
-          <ActivityIndicator color={Colors.WHITE} />
-        ) : (
-          <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Verify & Login</Text>
-        )}
+        {loading ? <ActivityIndicator color={Colors.WHITE} /> : <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Verify & Login</Text>}
       </TouchableOpacity>
       
-      <TouchableOpacity style={styles.resendContainer} onPress={handleResend} disabled={timer > 0}>
+      <TouchableOpacity style={styles.resendContainer} onPress={handleResend} disabled={timer > 0 || loading}>
         <Text style={[styles.resendText, { color: timer > 0 ? Colors.TEXT_MUTED : Colors.PRIMARY }]}>
           {timer > 0 ? `Resend code in ${timer}s` : "Resend Code"}
         </Text>
