@@ -3,6 +3,7 @@ const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const Product = require("../models/Product.model");
 const User = require("../models/User.model");
+const mongoose = require("mongoose");
 
 const allowedStatuses = [
   "PLACED",
@@ -26,7 +27,6 @@ const allowedTransitions = {
 
 exports.getAllOrdersForAdmin = async (req, res) => {
   try {
-
     let page = parseInt(req.query.page);
     let limit = parseInt(req.query.limit);
     const { status } = req.query;
@@ -35,9 +35,7 @@ exports.getAllOrdersForAdmin = async (req, res) => {
     if (isNaN(limit) || limit <= 0) limit = 10;
     if (limit > 100) limit = 100;
 
-    const query = {
-      tenantId: req.user.tenantId
-    };
+    const query = { tenantId: req.user.tenantId };
 
     if (status) {
       if (!allowedStatuses.includes(status)) {
@@ -84,7 +82,6 @@ exports.getAllOrdersForAdmin = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
   try {
-
     const { id } = req.params;
     const { status } = req.body;
 
@@ -167,7 +164,6 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.getUsers = async (req, res) => {
   try {
-
     const tenantId = req.user.tenantId;
 
     let page = parseInt(req.query.page);
@@ -202,6 +198,69 @@ exports.getUsers = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch users",
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// BLOCK / UNBLOCK USER
+//////////////////////////////////////////////////////////////
+
+exports.blockOrUnblockUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
+
+    if (req.user.userId.toString() === id.toString()) {
+  return res.status(400).json({
+    success: false,
+    message: "Admin cannot block themselves",
+  });
+}
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+   // Force boolean comparison
+const requestedState = Boolean(isActive);
+
+if (user.isActive === requestedState) {
+  return res.status(400).json({
+    success: false,
+    message: requestedState
+      ? "User already active"
+      : "User already blocked",
+  });
+}
+
+
+    user.isActive = requestedState;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: isActive
+        ? "User unblocked successfully"
+        : "User blocked successfully",
+    });
+  } catch (error) {
+    console.error("Block/Unblock Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
     });
   }
 };

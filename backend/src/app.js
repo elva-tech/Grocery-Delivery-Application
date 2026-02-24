@@ -28,14 +28,12 @@ const orderRoutes = require("./routes/order.routes");
 // Public routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
+
 // Protected routes
 app.use(authMiddleware);
 
-// Register protected routes
-
+// Protected route registrations
 app.use("/api/orders", orderRoutes);
-
 app.use("/api/admin", adminRoutes);
-
 
 module.exports = app;
