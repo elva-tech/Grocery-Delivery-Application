@@ -5,71 +5,78 @@ const Inventory = require("../models/Inventory.model");
 
 const addProduct = async (req, res) => {
   try {
-    const { name, category, price, unit } = req.body;
-    const tenantId = req.user.tenantId; // 🔑 from JWT
+    const { name, category, price, unit, stocks } = req.body;
+    const tenantId = req.user.tenantId;
 
-    // Validation: Check each required field
+    // Validation
     const missingFields = [];
     if (!name) missingFields.push("name");
     if (!category) missingFields.push("category");
     if (price === undefined) missingFields.push("price");
     if (!unit) missingFields.push("unit");
+    if (stocks === undefined) missingFields.push("stocks");
 
     if (missingFields.length > 0) {
       return res.status(400).json({
         message: `Missing required field(s): ${missingFields.join(", ")}`,
       });
-    } 
+    }
+
     // Price validation
-if (typeof price !== "number") {
-  return res.status(400).json({
-    message: "Price must be a number",
-  });
-}
+    if (typeof price !== "number" || price <= 0) {
+      return res.status(400).json({
+        message: "Price must be a positive number",
+      });
+    }
 
-if (price <= 0) {
-  return res.status(400).json({
-    message: "Price must be greater than zero",
-  });
-}
+    // Stocks validation
+    if (typeof stocks !== "number" || stocks < 0) {
+      return res.status(400).json({
+        message: "Stocks must be a non-negative number",
+      });
+    }
 
-
-    // Duplicate check: same name & tenant
+    // Duplicate check
     const existingProduct = await Product.findOne({ tenantId, name });
     if (existingProduct) {
-      return res.status(409).json({ message: "Product with this name already exists" });
+      return res.status(409).json({
+        message: "Product with this name already exists",
+      });
     }
-    
 
+    // Create product
     const product = new Product({
       tenantId,
       name,
       category,
       price,
       unit,
-      // isAvailable → default true
     });
 
     await product.save();
+
+    // Create inventory using stocks
     await Inventory.create({
-  tenantId,
-  productId: product._id,
-  availableQty: 1,   // start with zero
-  thresholdQty: 10
-});
+      tenantId,
+      productId: product._id,
+      availableQty: stocks,   // 🔥 using stocks here
+      thresholdQty: 10,
+    });
 
     return res.status(201).json({
       message: "Product added successfully",
       product,
     });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Server error" });
   }
 };
- const updateProductFromAdmin = async (req, res) => {
+const updateProductFromAdmin = async (req, res) => {
   try {
     const { id } = req.params;
+    const tenantId = req.user.tenantId;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -100,28 +107,27 @@ if (price <= 0) {
       }
     });
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No valid fields provided for update"
-      });
+    const { stocks } = req.body;
+
+    // Validate price
+    if (updateData.price !== undefined) {
+      if (typeof updateData.price !== "number" || updateData.price <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Price must be a positive number"
+        });
+      }
     }
 
-    if (updateData.price !== undefined) {
-  if (typeof updateData.price !== "number") {
-    return res.status(400).json({
-      success: false,
-      message: "Price must be a number"
-    });
-  }
-
-  if (updateData.price <= 0) {
-    return res.status(400).json({
-      success: false,
-      message: "Price must be greater than zero"
-    });
-  }
-}
+    // Validate stocks
+    if (stocks !== undefined) {
+      if (typeof stocks !== "number" || stocks < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Stocks must be a non-negative number"
+        });
+      }
+    }
 
     const product = await Product.findById(id);
 
@@ -132,14 +138,34 @@ if (price <= 0) {
       });
     }
 
+    // Update product fields
     Object.assign(product, updateData);
     await product.save();
+
+    // 🔥 Update inventory if stocks provided
+    if (stocks !== undefined) {
+      const inventory = await Inventory.findOne({
+        tenantId,
+        productId: product._id
+      });
+
+      if (!inventory) {
+        return res.status(404).json({
+          success: false,
+          message: "Inventory record not found"
+        });
+      }
+
+      inventory.availableQty = stocks;
+      await inventory.save();
+    }
 
     res.status(200).json({
       success: true,
       message: "Product updated successfully",
       data: product
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({
