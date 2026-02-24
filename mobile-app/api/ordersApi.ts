@@ -61,6 +61,28 @@ export const getUserOrders = async (userId: string) => {
   }
 };
 
+// Add this to ordersApi.ts
+export const processAdminRefundApi = async (orderId: string, decision: 'APPROVE' | 'REJECT', adminNote: string) => {
+  const existingOrders = await AsyncStorage.getItem(ORDERS_KEY);
+  if (existingOrders) {
+    const orders = JSON.parse(existingOrders);
+    const updatedOrders = orders.map((o: any) => {
+      if (o.id === orderId) {
+        return { 
+          ...o, 
+          status: decision === 'APPROVE' ? 'REFUND_APPROVED' : 'REFUND_REJECTED',
+          adminNote: adminNote,
+          resolvedAt: new Date().toISOString()
+        };
+      }
+      return o;
+    });
+    await AsyncStorage.setItem(ORDERS_KEY, JSON.stringify(updatedOrders));
+    return { success: true };
+  }
+  return { success: false };
+};
+
 export const saveNewOrder = async (orderData: any) => {
   try {
     const orderId = await generateBackendOrderId();

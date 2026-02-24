@@ -1,7 +1,6 @@
 /**
  * @file OrdersScreen.tsx
- * @description Order history management with updated Expo Image Picker API 
- * and fixed React Native component tags.
+ * @description Order history management with Admin Feedback Loop integrated.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -20,6 +19,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { getUserOrders, cancelOrderApi } from '@/api/ordersApi';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+// INTEGRATED: Import settings hook
+import { useGetAppSettingsQuery } from '@/api/apiSlice';
 
 const STATUS_THEME: any = {
   PLACED: { color: '#64748b', label: 'Order Placed' },
@@ -28,6 +29,8 @@ const STATUS_THEME: any = {
   DELIVERED: { color: '#10b981', label: 'Delivered' },
   CANCELLED: { color: '#ef4444', label: 'Cancelled' },
   ISSUE_REPORTED: { color: '#8b5cf6', label: 'Issue Reported' },
+  REFUND_APPROVED: { color: '#10b981', label: 'Refund Approved' },
+  REFUND_REJECTED: { color: '#ef4444', label: 'Refund Rejected' },
 };
 
 const REPORT_REASONS = [
@@ -41,6 +44,10 @@ const REPORT_REASONS = [
 export default function OrdersScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
+  
+  // INTEGRATED: Fetch remote settings
+  const { data: settings } = useGetAppSettingsQuery();
+
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -223,7 +230,7 @@ export default function OrdersScreen() {
                 <Ionicons name="close-circle" size={32} color="#cbd5e1" />
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalScroll}>
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {selectedOrder?.items?.map((product: any, idx: number) => (
                 <View key={idx} style={styles.productRow}>
                   <Image source={{ uri: Array.isArray(product.image) ? product.image[0] : product.image }} style={styles.productImage} />
@@ -234,118 +241,92 @@ export default function OrdersScreen() {
                   <Text style={styles.productPrice}>₹{product.price * product.quantity}</Text>
                 </View>
               ))}
+
+              {selectedOrder?.adminComment && (
+                <View style={styles.adminResponseBox}>
+                  <View style={styles.adminResponseHeader}>
+                    <Ionicons name="chatbubble-ellipses" size={16} color="#4b6f9e" />
+                    <Text style={styles.adminResponseTitle}>ADMIN RESPONSE</Text>
+                  </View>
+                  <Text style={styles.adminResponseText}>"{selectedOrder.adminComment}"</Text>
+                  {selectedOrder.resolvedAt && (
+                    <Text style={styles.adminResponseDate}>
+                      Resolved on: {new Date(selectedOrder.resolvedAt).toLocaleDateString()}
+                    </Text>
+                  )}
+                </View>
+              )}
             </ScrollView>
+
             <View style={styles.modalFooter}>
               <View style={styles.billRow}>
                 <Text style={styles.billLabel}>Total Paid</Text>
                 <Text style={styles.billValue}>₹{selectedOrder?.totalAmount}</Text>
               </View>
               
-              {/* ✅ CANCEL ORDER LOGIC RETAINED */}
-              {(selectedOrder?.status === 'PLACED' || selectedOrder?.status === 'CONFIRMED') && (
+              {/* INTEGRATED: CANCEL ORDER BUTTON TOGGLE */}
+              {(selectedOrder?.status === 'PLACED' || selectedOrder?.status === 'CONFIRMED') && settings?.allowOrderCancellation && (
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(selectedOrder)}>
                   <Text style={styles.cancelBtnText}>Cancel Order</Text>
                 </TouchableOpacity>
               )}
 
-              {/* ✅ REPORT ISSUE REMOVED PER CLIENT REQUEST */}
-              {/* {selectedOrder?.status === 'DELIVERED' && (
+              {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
+              {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && (
                 <TouchableOpacity style={styles.reportBtn} onPress={() => setShowIssueModal(true)}>
                   <Ionicons name="warning-outline" size={18} color="#f59e0b" />
                   <Text style={styles.reportBtnText}>Report Issue / Refund</Text>
                 </TouchableOpacity>
-              )} */}
+              )}
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* ✅ ISSUE REPORT MODAL - COMMENTED OUT */}
-      {/*   <Modal visible={showIssueModal} animationType="fade" transparent>
-
+      {/* ISSUE REPORT MODAL */}
+      <Modal visible={showIssueModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
-
           <View style={[styles.modalContent, { height: '80%' }]}>
-
             <View style={styles.modalHeader}>
-
               <Text style={styles.modalTitle}>Refund / Issue</Text>
-
               <TouchableOpacity onPress={() => setShowIssueModal(false)}>
-
                 <Ionicons name="close-circle" size={32} color="#cbd5e1" />
-
               </TouchableOpacity>
-
             </View>
-
             <ScrollView showsVerticalScrollIndicator={false}>
-
               <Text style={styles.label}>Reason for report</Text>
-
               <View style={styles.reasonGrid}>
-
                 {REPORT_REASONS.map((r) => (
-
                   <TouchableOpacity 
-
                     key={r} 
-
                     style={[styles.reasonChip, selectedReason === r && styles.reasonChipActive]} 
-
                     onPress={() => setSelectedReason(r)}
-
                   >
-
                     <Text style={[styles.reasonChipText, selectedReason === r && styles.reasonChipTextActive]}>{r}</Text>
-
                   </TouchableOpacity>
-
                 ))}
-
               </View>
 
-
-
               <Text style={styles.label}>Describe the issue</Text>
-
               <TextInput style={styles.inputArea} placeholder="Details..." multiline value={issueComment} onChangeText={setIssueComment} />
 
-
-
               <Text style={styles.label}>Upload Evidence</Text>
-
               <TouchableOpacity style={styles.pickerBox} onPress={pickImage}>
-
                 {issueImage ? <Image source={{ uri: issueImage }} style={styles.previewImg} /> : <Ionicons name="camera" size={30} color="#94a3b8" />}
-
               </TouchableOpacity>
-
-
 
               <TouchableOpacity 
-
                 style={[styles.primaryBtn, { marginTop: 30 }, isSubmittingReport && { opacity: 0.6 }]} 
-
                 onPress={submitFinalReport}
-
                 disabled={isSubmittingReport}
-
               >
-
                 {isSubmittingReport ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Submit the issue</Text>}
-
               </TouchableOpacity>
-
             </ScrollView>
-
           </View>
-
         </View>
-
       </Modal>
-      */}
-
+      
       {/* CONFIRMATION POPUP */}
       <Modal visible={showConfirmModal} transparent animationType="fade">
         <View style={styles.alertOverlay}>
@@ -367,13 +348,13 @@ export default function OrdersScreen() {
   );
 }
 
+// Styles remain identical to your original provided code
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   headerTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b' },
   list: { padding: 16 },
   
-  // Card Styles
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   orderId: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
@@ -385,20 +366,17 @@ const styles = StyleSheet.create({
   totalPrice: { fontWeight: '900', color: '#1e293b', fontSize: 18 },
   footer: { flexDirection: 'row', gap: 10 },
   
-  // Button Styles
   primaryBtn: { flex: 1, backgroundColor: '#4b6f9e', height: 48, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   primaryBtnText: { color: '#fff', fontWeight: '800' },
   secondaryBtn: { flex: 0.5, height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center' },
   secondaryBtnText: { color: '#64748b', fontWeight: '700' },
   
-  // Modal Common Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   modalTitle: { fontSize: 22, fontWeight: '900', color: '#1e293b' },
   modalScroll: { marginBottom: 20 },
   
-  // Product Row in Details
   productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   productImage: { width: 60, height: 60, borderRadius: 14, backgroundColor: '#f8fafc' },
   productInfo: { flex: 1, marginLeft: 16 },
@@ -406,7 +384,6 @@ const styles = StyleSheet.create({
   productMeta: { fontSize: 13, color: '#94a3b8' },
   productPrice: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
   
-  // Bill & Footer Action
   modalFooter: { borderTopWidth: 1, borderColor: '#f1f5f9', paddingTop: 20 },
   billRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   billLabel: { fontSize: 18, fontWeight: '700', color: '#64748b' },
@@ -416,7 +393,6 @@ const styles = StyleSheet.create({
   reportBtn: { marginTop: 20, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   reportBtnText: { color: '#f59e0b', fontWeight: '800', fontSize: 15 },
   
-  // --- NEW ISSUE REPORT STYLES ---
   label: { fontSize: 14, fontWeight: '800', color: '#64748b', marginTop: 20, marginBottom: 12 },
   reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   reasonChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
@@ -427,7 +403,6 @@ const styles = StyleSheet.create({
   pickerBox: { height: 120, borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center', marginTop: 10, overflow: 'hidden' },
   previewImg: { width: '100%', height: '100%' },
 
-  // Alert Modal
   alertOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   alertBox: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', alignItems: 'center' },
   alertTitle: { fontSize: 20, fontWeight: '900', color: '#1e293b', marginBottom: 10 },
@@ -437,4 +412,38 @@ const styles = StyleSheet.create({
   alertPrimaryText: { color: '#fff', fontWeight: '800' },
   alertSecondary: { flex: 1, backgroundColor: '#f1f5f9', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   alertSecondaryText: { color: '#64748b', fontWeight: '800' },
+
+  adminResponseBox: {
+    backgroundColor: '#f8fafc',
+    padding: 16,
+    borderRadius: 16,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderStyle: 'dashed',
+  },
+  adminResponseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  adminResponseTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#4b6f9e',
+    letterSpacing: 1,
+  },
+  adminResponseText: {
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 20,
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
+  adminResponseDate: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginTop: 12,
+  },
 });
