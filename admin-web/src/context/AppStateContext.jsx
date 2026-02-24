@@ -11,6 +11,16 @@ import {
 const AppStateContext = createContext();
 
 export const AppStateProvider = ({ children }) => {
+  /* ----------- SETTINGS STATE ----------- */
+  const [appSettings, setAppSettings] = useState(() => {
+    const saved = sessionStorage.getItem('app_settings');
+    return saved ? JSON.parse(saved) : {
+      allowRefunds: true,
+      allowReportIssue: true,
+      allowOrderCancellation: true
+    };
+  });
+
   const [products, setProducts] = useState(() => {
     const saved = sessionStorage.getItem('app_products');
     return saved ? JSON.parse(saved) : MOCK_PRODUCTS; 
@@ -27,7 +37,6 @@ export const AppStateProvider = ({ children }) => {
 
     return parsed.map(o => {
       const numericTotal = Number(o.total || o.totalAmount);
-
       let normalizedAddress = o.address;
 
       if (typeof o.address === 'string') {
@@ -83,13 +92,14 @@ export const AppStateProvider = ({ children }) => {
   });
 
   useEffect(() => {
+    sessionStorage.setItem('app_settings', JSON.stringify(appSettings));
     sessionStorage.setItem('app_products', JSON.stringify(products));
     sessionStorage.setItem('app_categories', JSON.stringify(categories));
     sessionStorage.setItem('app_orders', JSON.stringify(orders));
     sessionStorage.setItem('app_riders', JSON.stringify(riders));
     sessionStorage.setItem('app_returns', JSON.stringify(returns));
     sessionStorage.setItem('app_banners', JSON.stringify(banners));
-  }, [products, categories, orders, riders, banners, returns]);
+  }, [products, categories, orders, riders, banners, returns, appSettings]);
 
   const addRider = (r) =>
     setRiders(prev => [...prev, { ...r, id: `r${Date.now()}`, activeOrders: 0 }]);
@@ -150,6 +160,8 @@ export const AppStateProvider = ({ children }) => {
 
   return (
     <AppStateContext.Provider value={{
+      appSettings,
+      updateSettings: (newSettings) => setAppSettings(prev => ({ ...prev, ...newSettings })),
       products,
       categories,
       orders,
@@ -168,14 +180,12 @@ export const AppStateProvider = ({ children }) => {
       assignRider,
       addBanner: b => setBanners(prev => [...prev, { ...b, id: Date.now().toString() }]),
       deleteBanner: id => setBanners(prev => prev.filter(b => b.id !== id)),
-      deleteBanner: id => setBanners(prev => prev.filter(b => b.id !== id)),
       processReturnRequest: (returnId, decision, adminComment) => {
         setReturns(prev =>
           prev.map(req => {
             if (req.id === returnId) {
               const newStatus = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
               
-              // Sync with Orders so User App sees the update
               setOrders(orderPrev => orderPrev.map(ord => 
                 ord.id === req.orderId 
                   ? { 
