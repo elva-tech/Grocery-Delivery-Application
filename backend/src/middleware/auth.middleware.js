@@ -91,4 +91,24 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { authMiddleware, adminOnly };
+//  RIDER ONLY MIDDLEWARE
+const riderOnly = (req, res, next) => {
+
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized",
+    });
+  }
+
+  if (req.user.role !== "RIDER") {
+    return res.status(403).json({
+      success: false,
+      message: "Rider access only",
+    });
+  }
+
+  next();
+};
+
+module.exports = { authMiddleware, adminOnly, riderOnly };

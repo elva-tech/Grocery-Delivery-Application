@@ -3,6 +3,7 @@ const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const Product = require("../models/Product.model");
 const User = require("../models/User.model");
+const Rider = require("../models/Rider.model");
 const mongoose = require("mongoose");
 
 const allowedStatuses = [
@@ -120,12 +121,34 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
+    // Handle cancellation - restore inventory
     if (status === "CANCELLED" && currentStatus !== "CANCELLED") {
       for (const item of order.items) {
         await Product.findByIdAndUpdate(
           item.productId,
           { $inc: { quantity: item.qty } }
         );
+      }
+    }
+
+    // Handle rider logic when order is delivered
+    if (status === "DELIVERED" && order.riderId) {
+      const rider = await Rider.findById(order.riderId);
+      if (rider) {
+        rider.activeOrders = Math.max(0, (rider.activeOrders || 0) - 1);
+        rider.totalDeliveries = (rider.totalDeliveries || 0) + 1;
+        rider.totalEarnings = (rider.totalEarnings || 0) + order.totalAmount;
+        order.riderDeliveryTime = new Date();
+        await rider.save();
+      }
+    }
+
+    // Handle rider logic when order is cancelled from OUT_FOR_DELIVERY
+    if (status === "CANCELLED" && currentStatus === "OUT_FOR_DELIVERY" && order.riderId) {
+      const rider = await Rider.findById(order.riderId);
+      if (rider) {
+        rider.activeOrders = Math.max(0, (rider.activeOrders || 0) - 1);
+        await rider.save();
       }
     }
 
