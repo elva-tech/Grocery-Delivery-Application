@@ -3,33 +3,47 @@ const User = require("../models/User.model");
 
 const STATIC_OTP = "123456";
 
-// ======================
-// SEND OTP
-// ======================
+/* ===============================
+   HELPER : PHONE VALIDATION
+================================ */
+const validatePhone = (phoneNumber) => {
+  const phone = String(phoneNumber || "").trim();
+
+  if (!phone) {
+    return "Phone number is required";
+  }
+
+  // only numbers allowed
+  if (!/^\d+$/.test(phone)) {
+    return "Phone number must contain only numbers";
+  }
+
+  // exactly 10 digits
+  if (phone.length !== 10) {
+    return "Phone number must be exactly 10 digits";
+  }
+
+  return null;
+};
+
+/* ===============================
+   SEND OTP
+================================ */
 const sendOtp = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
 
-    // ❌ Empty check
-    if (!phoneNumber) {
+    const phoneError = validatePhone(phoneNumber);
+    if (phoneError) {
       return res.status(400).json({
         success: false,
-        message: "Phone number is required",
+        message: phoneError,
       });
     }
 
     const phone = String(phoneNumber).trim();
 
-    // ❌ Check only digits + exactly 10 digits
-    const phoneRegex = /^\d{10}$/;
-    if (!phoneRegex.test(phone)) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number must be exactly 10 digits (numbers only)",
-      });
-    }
-
-    // ✅ OTP logic (static for testing)
+    // TEMP STATIC OTP (for testing)
     console.log(`OTP for ${phone} is ${STATIC_OTP}`);
 
     return res.status(200).json({
@@ -38,7 +52,7 @@ const sendOtp = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Send OTP Error:", error);
+    console.error("sendOtp error:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -46,45 +60,42 @@ const sendOtp = async (req, res) => {
   }
 };
 
-// ======================
-// VERIFY OTP
-// ======================
+/* ===============================
+   VERIFY OTP
+================================ */
 const verifyOtp = async (req, res) => {
   try {
     const { phoneNumber, otp } = req.body;
 
-    // ❌ Missing fields
-    if (!phoneNumber || !otp) {
+    // Phone validation
+    const phoneError = validatePhone(phoneNumber);
+    if (phoneError) {
       return res.status(400).json({
         success: false,
-        message: "Phone number and OTP are required",
+        message: phoneError,
       });
     }
 
-    const phone = String(phoneNumber).trim();
-
-    // ❌ Invalid phone
-    const phoneRegex = /^\d{10}$/;
-    if (!phoneRegex.test(phone)) {
+    // OTP checks
+    if (!otp) {
       return res.status(400).json({
         success: false,
-        message: "Invalid phone number format",
+        message: "OTP is required",
       });
     }
 
-    // ❌ Wrong OTP
-    if (String(otp).trim() !== STATIC_OTP) {
+    if (otp !== STATIC_OTP) {
       return res.status(401).json({
         success: false,
         message: "Invalid OTP",
       });
     }
 
+    const phone = String(phoneNumber).trim();
     const tenantId = "demo-tenant";
 
     let user = await User.findOne({ tenantId, phoneNumber: phone });
 
-    // Create new user if not exists
     if (!user) {
       user = await User.create({
         tenantId,
@@ -94,7 +105,6 @@ const verifyOtp = async (req, res) => {
       });
     }
 
-    // ❌ Blocked user
     if (!user.isActive) {
       return res.status(403).json({
         success: false,
@@ -102,7 +112,9 @@ const verifyOtp = async (req, res) => {
       });
     }
 
-    // Generate JWT token
+    // refresh user
+    user = await User.findById(user._id);
+
     const token = jwt.sign(
       {
         userId: user._id,
@@ -125,7 +137,7 @@ const verifyOtp = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Verify OTP Error:", error);
+    console.error("verifyOtp error:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
