@@ -4,7 +4,7 @@ import DataTable from '../../components/shared/DataTable';
 import CustomButton from '../../components/shared/CustomButton';
 import ProductForm from './ProductForm';
 import CategoryForm from './CategoryForm';
-import { Plus, Edit, Trash2, Search, FolderPlus, Package, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, FolderPlus, Package, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
 
 const ProductList = () => {
@@ -14,27 +14,27 @@ const ProductList = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Drill-down states
   const [activePillarId, setActivePillarId] = useState('All');
   const [activeSubCatId, setActiveSubCatId] = useState('All');
 
-  // Logic: 1. Main Pillars, 2. SubCategories of the active Pillar
+  // Helper to get image string safely
+  const getImageUrl = (imgData) => {
+    if (!imgData) return null;
+    if (Array.isArray(imgData)) return imgData[0];
+    return imgData;
+  };
+
   const mainPillars = useMemo(() => categories.filter(c => !c.parentId), [categories]);
   const subCategories = useMemo(() => 
-    categories.filter(c => c.parentId === activePillarId), 
+    categories.filter(c => String(c.parentId) === String(activePillarId)), 
     [categories, activePillarId]
   );
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const matchesSearch = (p.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Filter by Pillar
-      const matchesPillar = activePillarId === 'All' || p.parentCategoryId === activePillarId;
-      
-      // Filter by SubCategory
-      const matchesSub = activeSubCatId === 'All' || p.subCategoryId === activeSubCatId;
-
+      const matchesPillar = activePillarId === 'All' || String(p.parentCategoryId) === String(activePillarId);
+      const matchesSub = activeSubCatId === 'All' || String(p.subCategoryId) === String(activeSubCatId);
       return matchesSearch && matchesPillar && matchesSub;
     });
   }, [products, searchTerm, activePillarId, activeSubCatId]);
@@ -44,18 +44,17 @@ const ProductList = () => {
       header: 'Product', 
       accessor: 'name',
       render: (val, row) => {
-        const imgList = row.images || row.image || [];
-        const displayImg = Array.isArray(imgList) ? imgList[0] : imgList;
+        const displayImg = getImageUrl(row.images || row.image);
         const subCat = categories.find(c => String(c.id) === String(row.subCategoryId));
         const pillar = categories.find(c => String(c.id) === String(row.parentCategoryId));
 
         return (
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-gray-50 border overflow-hidden flex items-center justify-center">
+            <div className="w-12 h-12 rounded-lg bg-gray-100 border overflow-hidden flex items-center justify-center shrink-0">
               {displayImg ? (
-                <img src={displayImg} className="w-full h-full object-cover" alt="" />
+                <img src={displayImg} className="w-full h-full object-cover" alt={val} />
               ) : (
-                <Package className="text-gray-300" size={20} />
+                <Package className="text-gray-400" size={20} />
               )}
             </div>
             <div className="flex flex-col">
@@ -86,7 +85,7 @@ const ProductList = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-[#1A4D2E]">Enandi Inventory</h1>
+          <h1 className="text-3xl font-bold text-[#1A4D2E]">{APP_CONFIG.brand.name} Inventory</h1>
           <p className="text-slate-500">Live Backend Sync: {products.length} Products</p>
         </div>
         <div className="flex gap-3">
@@ -117,9 +116,9 @@ const ProductList = () => {
           />
         </div>
         
-        {/* 1. PILLAR SELECTOR (Only Parent Categories) */}
+        {/* PILLAR SELECTOR */}
         <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Please Select category</label>
+          <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Please Select Category</label>
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             <button 
               onClick={() => { setActivePillarId('All'); setActiveSubCatId('All'); }} 
@@ -131,16 +130,22 @@ const ProductList = () => {
               <button 
                 key={cat.id} 
                 onClick={() => { setActivePillarId(cat.id); setActiveSubCatId('All'); }} 
-                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black border whitespace-nowrap transition-all uppercase ${String(activePillarId) === String(cat.id) ? 'bg-[#1A4D2E] text-white border-[#1A4D2E]' : 'bg-white text-slate-500 border-slate-100'}`}
+                className={`flex items-center gap-3 px-4 py-2 rounded-xl text-xs font-black border whitespace-nowrap transition-all uppercase ${String(activePillarId) === String(cat.id) ? 'bg-[#1A4D2E] text-white border-[#1A4D2E]' : 'bg-white text-slate-500 border-slate-100'}`}
               >
-                {cat.image?.[0] && <img src={cat.image[0]} className="w-10 h-10 rounded-full object-cover" alt="" />}
+                <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20 bg-gray-100 flex items-center justify-center shrink-0">
+                  {getImageUrl(cat.image) ? (
+                    <img src={getImageUrl(cat.image)} className="w-full h-full object-cover" alt="" />
+                  ) : (
+                    <ImageIcon size={14} />
+                  )}
+                </div>
                 {cat.name}
               </button>
             ))}
           </div>
         </div>
 
-        {/* 2. SUB-CATEGORY SELECTOR (Only shows if a Pillar is selected) */}
+        {/* SUB-CATEGORY SELECTOR */}
         {activePillarId !== 'All' && (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Please Select Sub-Category</label>
@@ -149,15 +154,21 @@ const ProductList = () => {
                 onClick={() => setActiveSubCatId('All')} 
                 className={`px-6 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all uppercase border ${activeSubCatId === 'All' ? 'bg-[#1A4D2E] text-white border-[#1A4D2E]' : 'bg-white text-slate-400 border-slate-100'}`}
               >
-                All {categories.find(c => c.id === activePillarId)?.name}
+                All {categories.find(c => String(c.id) === String(activePillarId))?.name}
               </button>
               {subCategories.map(sub => (
                 <button 
                   key={sub.id} 
                   onClick={() => setActiveSubCatId(sub.id)} 
-                  className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black border whitespace-nowrap transition-all uppercase  ${String(activeSubCatId) === String(sub.id) ? 'bg-[#1A4D2E] text-white border-[#1A4D2E]' : 'bg-white text-slate-500 border-slate-100'}`}
+                  className={`flex items-center gap-3 px-3 py-1.5 rounded-xl text-xs font-black border whitespace-nowrap transition-all uppercase ${String(activeSubCatId) === String(sub.id) ? 'bg-[#1A4D2E] text-white border-[#1A4D2E]' : 'bg-white text-slate-500 border-slate-100'}`}
                 >
-                  {sub.image?.[0] && <img src={sub.image[0]} className="w-4 h-4 rounded-full object-cover" alt="" />}
+                  <div className="w-6 h-6 rounded-full overflow-hidden border border-white/20 bg-gray-100 flex items-center justify-center shrink-0">
+                    {getImageUrl(sub.image) ? (
+                      <img src={getImageUrl(sub.image)} className="w-full h-full object-cover" alt="" />
+                    ) : (
+                      <ImageIcon size={10} />
+                    )}
+                  </div>
                   {sub.name}
                 </button>
               ))}
@@ -168,7 +179,13 @@ const ProductList = () => {
 
       {showCatForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <CategoryForm onCancel={() => setShowCatForm(false)} onSubmit={(v) => { addCategory(v); setShowCatForm(false); }} />
+          <CategoryForm 
+            onCancel={() => setShowCatForm(false)} 
+            onSubmit={(v) => { 
+              addCategory({ ...v, id: `cat_${Date.now()}` }); 
+              setShowCatForm(false); 
+            }} 
+          />
         </div>
       )}
 
@@ -177,7 +194,7 @@ const ProductList = () => {
           initialValues={editingItem} 
           onCancel={() => { setShowForm(false); setEditingItem(null); }} 
           onSubmit={(v) => {
-            editingItem ? updateProduct(editingItem.id, v) : addProduct(v);
+            editingItem ? updateProduct(editingItem.id, v) : addProduct({ ...v, id: Date.now() });
             setShowForm(false);
             setEditingItem(null);
           }} 
@@ -188,8 +205,8 @@ const ProductList = () => {
           data={filteredProducts} 
           actions={(row) => (
             <div className="flex gap-2">
-              <button onClick={() => setEditingItem(row)} className="p-2 text-slate-400 hover:text-emerald-600"><Edit size={18}/></button>
-              <button onClick={() => deleteProduct(row.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={18}/></button>
+              <button onClick={() => setEditingItem(row)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"><Edit size={18}/></button>
+              <button onClick={() => deleteProduct(row.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
             </div>
           )} 
         />
