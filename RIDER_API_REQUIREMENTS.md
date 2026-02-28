@@ -374,5 +374,3 @@ db.orders.aggregate([
 - [ ] Test concurrent order assignments
 - [ ] Verify notifications trigger correctly
 - [ ] Test rider earnings calculations
-
-This is for demo purpose github session 123456
