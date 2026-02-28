@@ -6,6 +6,11 @@ const Inventory = require("../models/Inventory.model");
 const addProduct = async (req, res) => {
   try {
     const { name, category, price, unit, stocks } = req.body;
+    if (req.user.role !== "ADMIN") {
+  return res.status(403).json({
+    message: "Access denied. Admin only."
+  });
+}
     const tenantId = req.user.tenantId;
 
     // Validation
@@ -22,21 +27,18 @@ const addProduct = async (req, res) => {
       });
     }
 
-    // Price validation
     if (typeof price !== "number" || price <= 0) {
       return res.status(400).json({
         message: "Price must be a positive number",
       });
     }
 
-    // Stocks validation
     if (typeof stocks !== "number" || stocks < 0) {
       return res.status(400).json({
         message: "Stocks must be a non-negative number",
       });
     }
 
-    // Duplicate check
     const existingProduct = await Product.findOne({ tenantId, name });
     if (existingProduct) {
       return res.status(409).json({
@@ -44,22 +46,21 @@ const addProduct = async (req, res) => {
       });
     }
 
-    // Create product
-    const product = new Product({
+    // ✅ 1. Create & Save Product FIRST
+    const product = await Product.create({
       tenantId,
       name,
       category,
       price,
       unit,
+      isAvailable: stocks > 0   // 🔥 auto derived
     });
 
-    await product.save();
-
-    // Create inventory using stocks
+    // ✅ 2. Create Inventory
     await Inventory.create({
       tenantId,
       productId: product._id,
-      availableQty: stocks,   // 🔥 using stocks here
+      availableQty: stocks,
       thresholdQty: 10,
     });
 
@@ -76,6 +77,11 @@ const addProduct = async (req, res) => {
 const updateProductFromAdmin = async (req, res) => {
   try {
     const { id } = req.params;
+    if (req.user.role !== "ADMIN") {
+  return res.status(403).json({
+    message: "Access denied. Admin only."
+  });
+}
     const tenantId = req.user.tenantId;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -92,12 +98,12 @@ const updateProductFromAdmin = async (req, res) => {
       });
     }
 
+    // ❌ Removed "isAvailable" (admin cannot control availability manually)
     const allowedFields = [
       "name",
       "price",
       "category",
-      "unit",
-      "isAvailable"
+      "unit"
     ];
 
     const updateData = {};
@@ -129,7 +135,8 @@ const updateProductFromAdmin = async (req, res) => {
       }
     }
 
-    const product = await Product.findById(id);
+    // ✅ Tenant-safe product fetch
+    const product = await Product.findOne({ _id: id, tenantId });
 
     if (!product) {
       return res.status(404).json({
@@ -138,11 +145,11 @@ const updateProductFromAdmin = async (req, res) => {
       });
     }
 
-    // Update product fields
+    // Update product basic fields
     Object.assign(product, updateData);
     await product.save();
 
-    // 🔥 Update inventory if stocks provided
+    // 🔥 Update inventory & auto-sync availability
     if (stocks !== undefined) {
       const inventory = await Inventory.findOne({
         tenantId,
@@ -158,6 +165,10 @@ const updateProductFromAdmin = async (req, res) => {
 
       inventory.availableQty = stocks;
       await inventory.save();
+
+      // ✅ Auto-sync availability based on stock
+      product.isAvailable = stocks > 0;
+      await product.save();
     }
 
     res.status(200).json({
@@ -183,7 +194,6 @@ const getAvailableProducts = async (req, res) => {
     const category = req.query?.category?.trim();
     const tenantId = req.headers["x-tenant-id"]?.trim();
 
-    // Tenant validation
     if (!tenantId) {
       return res.status(400).json({
         success: false,
@@ -191,73 +201,72 @@ const getAvailableProducts = async (req, res) => {
       });
     }
 
-    // Base filter
-    const productFilter = {
+    // ✅ Fixed match stage
+    const matchStage = {
       tenantId,
-      isAvailable: true
+      isAvailable: true,
+      $or: [
+        { isActive: true },
+        { isActive: { $exists: false } }
+      ]
     };
 
-    // Category filter (case-insensitive + safe)
     if (category) {
       const safeCategory = escapeRegex(category);
-      productFilter.category = {
+      matchStage.category = {
         $regex: `^${safeCategory}$`,
         $options: "i"
       };
     }
 
-    // Fetch products
-    const products = await Product.find(productFilter)
-      .select("_id name category price unit")
-      .sort({ name: 1 });
+    const products = await Product.aggregate([
+      { $match: matchStage },
 
-    if (!products.length) {
-      return res.status(200).json({
-        success: true,
-        products: []
-      });
-    }
+      {
+        $lookup: {
+          from: "inventories",
+          localField: "_id",
+          foreignField: "productId",
+          as: "inventory"
+        }
+      },
 
-    // Fetch inventory for those products
-    const inventories = await Inventory.find({
-      tenantId,
-      productId: { $in: products.map(p => p._id) },
-      availableQty: { $gt: 0 }
-    });
+      { $unwind: "$inventory" },
 
-    // Map inventory quantities
-    const inventoryMap = {};
-    inventories.forEach(inv => {
-      inventoryMap[inv.productId.toString()] = inv.availableQty;
-    });
+      {
+        $match: {
+          "inventory.availableQty": { $gt: 0 }
+        }
+      },
 
-    // Final response
-    const response = products
-      .filter(p => inventoryMap[p._id.toString()] > 0)
-      .map(p => ({
-        productId: p._id,
-        name: p.name,
-        category: p.category,
-        price: p.price,
-        unit: p.unit,
-        availableQty: inventoryMap[p._id.toString()]
-      }));
+      {
+        $project: {
+          _id: 0,
+          productId: "$_id",
+          name: 1,
+          category: 1,
+          price: 1,
+          unit: 1,
+          availableQty: "$inventory.availableQty" 
+        }
+      },
+
+      { $sort: { name: 1 } }
+    ]);
 
     return res.status(200).json({
       success: true,
-      products: response
+      products
     });
 
-  } catch (err) {
-    console.error("Error in getAvailableProducts:", err);
+  } catch (error) {
+    console.error("Error in getAvailableProducts:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error"
     });
   }
 };
-
-
 
 module.exports = {
   addProduct,
