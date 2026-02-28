@@ -375,4 +375,4 @@ db.orders.aggregate([
 - [ ] Verify notifications trigger correctly
 - [ ] Test rider earnings calculations
 
-This is for for github session demo purpose
+This is for demo
