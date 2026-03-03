@@ -5,7 +5,10 @@ const {
   getAllOrdersForAdmin,
   updateOrderStatus,
   getUsers,
-  blockOrUnblockUser
+  blockOrUnblockUser,
+  getRevenue,
+  getActiveOrdersCount,
+  getPendingOrdersCount
 } = require("../controllers/admin.controller");
 
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
@@ -56,6 +59,34 @@ router.put(
   authMiddleware,
   adminOnly,
   blockOrUnblockUser
+);
+
+//////////////////////////////////////////////////////
+// DASHBOARD APIs
+//////////////////////////////////////////////////////
+
+// GET /api/admin/revenue?days=n
+router.get(
+  "/revenue",
+  authMiddleware,
+  adminOnly,
+  getRevenue
+);
+
+// GET /api/admin/active-orders
+router.get(
+  "/active-orders",
+  authMiddleware,
+  adminOnly,
+  getActiveOrdersCount
+);
+
+// GET /api/admin/pending-orders
+router.get(
+  "/pending-orders",
+  authMiddleware,
+  adminOnly,
+  getPendingOrdersCount
 );
 
 module.exports = router;
