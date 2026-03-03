@@ -264,3 +264,124 @@ if (user.isActive === requestedState) {
     });
   }
 };
+
+// GET REVENUE (LAST N DAYS)
+exports.getRevenue = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    // ✅ STEP 1: Read query param
+    const daysParam = parseInt(req.query.days);
+
+    // ✅ STEP 2: Default to 7 if not provided
+    const days = isNaN(daysParam) ? 7 : daysParam;
+
+    // ✅ STEP 3: Validation (VERY IMPORTANT)
+    if (days <= 0 || days > 365) {
+      return res.status(400).json({
+        success: false,
+        message: "Days must be between 1 and 365"
+      });
+    }
+
+    // ✅ STEP 4: Calculate fromDate
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+    fromDate.setHours(0, 0, 0, 0);
+
+    // ✅ STEP 5: Aggregate
+    const revenueData = await Order.aggregate([
+      {
+        $match: {
+        tenantId,
+        paymentStatus: "PAID",
+        createdAt: { $gte: fromDate }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: "%Y-%m-%d",
+            date: "$createdAt"
+          }
+        },
+        totalRevenue: { $sum: "$totalAmount" }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        date: "$_id",
+        revenue: "$totalRevenue"
+      }
+    },
+    { $sort: { date: 1 } 
+  }]);
+
+    return res.status(200).json({
+      success: true,
+      days,
+      data: revenueData
+    });
+
+  } catch (error) {
+    console.error("Revenue error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch revenue"
+    });
+  }
+};
+
+
+// GET ACTIVE ORDERS COUNT
+exports.getActiveOrdersCount = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    const count = await Order.countDocuments({
+      tenantId,
+      orderStatus: {
+        $in: ["PLACED", "CONFIRMED", "OUT_FOR_DELIVERY"]
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      activeOrders: count
+    });
+
+  } catch (error) {
+    console.error("Active orders error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch active orders"
+    });
+  }
+};
+
+
+// GET PENDING ORDERS COUNT
+exports.getPendingOrdersCount = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    const count = await Order.countDocuments({
+      tenantId,
+      orderStatus: "PLACED"
+    });
+
+    return res.status(200).json({
+      success: true,
+      pendingOrders: count
+    });
+
+  } catch (error) {
+    console.error("Pending orders error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending orders"
+    });
+  }
+};
