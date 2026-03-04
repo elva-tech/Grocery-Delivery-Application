@@ -6,8 +6,12 @@ const {
   updateOrderStatus,
   getUsers //  NEW
 } = require("../controllers/admin.controller");
+const {
+  deleteProductFromAdmin
+} = require("../controllers/product.controller");
 
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
+
 
 //////////////////////////////////////////////////////
 // GET ALL ORDERS
@@ -44,5 +48,15 @@ router.get(
   adminOnly,
   getUsers
 );
+
+//product.controller route
+
+router.delete(
+  "/products/:id",
+  authMiddleware,
+  adminOnly,
+  deleteProductFromAdmin
+);
+
 
 module.exports = router;
