@@ -1,42 +1,47 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
-import LottieView from "lottie-react-native"; // Import Lottie
+import LottieView from "lottie-react-native";
 import { Colors, Fonts } from "@/theme/theme";
+import { requestOtp } from "@/api/addresses"; // Import API
 
 export default function Register() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleNext = () => {
-    if (phone.length !== 10 || name.length < 2) return;
-    router.push({
-      pathname: '/auth/otp',
-      params: { phone, name }
-    });
+  // Validation: Starts with 6-9 and is exactly 10 digits
+  const indiaRegex = /^[6-9]\d{9}$/;
+  const isValid = indiaRegex.test(phone) && name.length >= 2;
+
+  const handleNext = async () => {
+    if (!isValid) return;
+
+    setLoading(true);
+    try {
+      await requestOtp(phone); // Hit Backend
+      router.push({
+        pathname: '/auth/otp',
+        params: { phone, name }
+      });
+    } catch (error) {
+      alert("Failed to send OTP. Try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const isValid = phone.length === 10 && name.length >= 2;
-
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1 }}
-    >
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container} bounces={false}>
-        {/* LOTTIE ANIMATION INSTEAD OF IMAGE */}
         <LottieView
-               source={require('../../assets/animations/Cyber Security.json')}
-               autoPlay
-               loop
-               style={styles.lottieHero}
-             />
+          source={require('../../assets/animations/Cyber Security.json')}
+          autoPlay loop style={styles.lottieHero}
+        />
 
         <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Create Account</Text>
-        <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>
-          Enter your details to get started
-        </Text>
+        <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>Enter your details to get started</Text>
 
         <View style={styles.inputWrapper}>
           <Text style={styles.inputLabel}>Full Name</Text>
@@ -51,13 +56,14 @@ export default function Register() {
 
         <View style={styles.inputWrapper}>
           <Text style={styles.inputLabel}>Mobile Number</Text>
+          {/* ✅ FIXED: Changed <div> to <View> */}
           <View style={styles.inputRow}>
             <View style={styles.countryCodeBox}>
               <Text style={styles.countryCodeText}>+91</Text>
             </View>
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              placeholder=""
+              placeholder="98765 43210"
               keyboardType="number-pad"
               maxLength={10}
               value={phone}
@@ -67,21 +73,19 @@ export default function Register() {
         </View>
 
         <TouchableOpacity
-          style={[styles.button, !isValid && styles.buttonDisabled]}
+          style={[styles.button, (!isValid || loading) && styles.buttonDisabled]}
           onPress={handleNext}
-          disabled={!isValid}
+          disabled={!isValid || loading}
           activeOpacity={0.85}
         >
-          <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Continue</Text>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Continue</Text>}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-// Added lottieHero style to the StyleSheet
 const styles = StyleSheet.create({
-  // ... existing styles ...
   container: { flexGrow: 1, backgroundColor: Colors.WHITE, padding: 24, justifyContent: "center" },
   lottieHero: { width: 250, height: 200, alignSelf: "center", marginBottom: 10 },
   title: { fontSize: 26, color: Colors.PRIMARY_TEXT, marginBottom: 8 },

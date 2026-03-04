@@ -24,18 +24,18 @@ const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const productRoutes = require("./routes/product.routes");
 const orderRoutes = require("./routes/order.routes");
+const riderRoutes = require("./routes/rider.routes");
 
 // Public routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
+
 // Protected routes
 app.use(authMiddleware);
 
-// Register protected routes
-
+// Protected route registrations
 app.use("/api/orders", orderRoutes);
-
+app.use("/api/riders", riderRoutes);
 app.use("/api/admin", adminRoutes);
-
 
 module.exports = app;

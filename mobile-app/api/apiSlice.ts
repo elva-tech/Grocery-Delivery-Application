@@ -3,6 +3,12 @@ import { MOCK_PRODUCTS, MOCK_CATEGORIES } from './mockData';
 
 /* ---------------- TYPES ---------------- */
 
+export interface AppSettings {
+  allowRefunds: boolean;
+  allowReportIssue: boolean;
+  allowOrderCancellation: boolean;
+}
+
 export interface Product {
   id: string;
   parentCategoryId: string;
@@ -28,6 +34,17 @@ export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
   endpoints: (builder) => ({
+
+    /* ----------- SETTINGS (Remote Config) ----------- */
+    getAppSettings: builder.query<AppSettings, void>({
+      queryFn: () => ({ 
+        data: { 
+          allowRefunds: true, 
+          allowReportIssue: true, 
+          allowOrderCancellation: true 
+        } 
+      }),
+    }),
 
     /* ----------- CATEGORIES ----------- */
     getCategories: builder.query<Category[], void>({
@@ -65,4 +82,5 @@ export const {
   useGetProductsQuery,
   useGetProductsByCategoryQuery,
   useGetFeaturedProductsQuery,
+  useGetAppSettingsQuery, // Added export
 } = apiSlice;

@@ -144,6 +144,15 @@ export default function ProductDetailScreen() {
               </Text>
             </View>
           </View>
+          {/* PRODUCT DESCRIPTION */}
+          <View style={{ marginTop: 20, backgroundColor: '#f8fafc', padding: 16, borderRadius: 20 }}>
+            <Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 }}>
+              About this product
+            </Text>
+            <Text style={{ fontSize: 15, color: '#475569', lineHeight: 22, fontWeight: '500' }}>
+              {product.description || `Pure and fresh ${product.name} delivered straight to your home. Premium quality guaranteed.`}
+            </Text>
+          </View>
 
           <View style={styles.divider} />
 

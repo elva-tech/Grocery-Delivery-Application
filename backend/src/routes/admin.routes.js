@@ -1,10 +1,11 @@
 const express = require("express");
 const router = express.Router();
 
-const { 
+const {
   getAllOrdersForAdmin,
   updateOrderStatus,
-  getUsers //  NEW
+  getUsers,
+  blockOrUnblockUser
 } = require("../controllers/admin.controller");
 const {
   deleteProductFromAdmin
@@ -26,7 +27,7 @@ router.get(
 );
 
 //////////////////////////////////////////////////////
-//  UPDATE ORDER STATUS
+// UPDATE ORDER STATUS
 //////////////////////////////////////////////////////
 
 // PUT /api/admin/orders/:id/status
@@ -38,7 +39,7 @@ router.put(
 );
 
 //////////////////////////////////////////////////////
-//  NEW STORY — LIST USERS
+// LIST USERS
 //////////////////////////////////////////////////////
 
 // GET /api/admin/users
@@ -60,3 +61,15 @@ router.delete(
 
 
 module.exports = router;
+
+
+// PUT /api/admin/users/:id/block
+router.put(
+  "/users/:id/block",
+  authMiddleware,
+  adminOnly,
+  blockOrUnblockUser
+);
+
+module.exports = router;
+

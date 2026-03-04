@@ -1,0 +1,307 @@
+import React, { useState, useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import type { RootState } from '../store/store';
+import { getUserOrders, cancelOrderApi } from '../api/ordersApi';
+import { addToCart } from '../store/slices/cartSlice';
+import { useNavigate, useLocation } from 'react-router-dom';
+import ReportIssueModal from './ReportIssueModal';
+import { MOCK_ORDERS } from '../api/mockdata';
+import { useGetAppSettingsQuery } from '../api/apiSlice';
+
+const STATUS_THEME: any = {
+  PLACED: { color: 'text-slate-500', bg: 'bg-slate-50', label: 'Order Placed' },
+  CONFIRMED: { color: 'text-blue-600', bg: 'bg-blue-50', label: 'Confirmed' },
+  OUT_FOR_DELIVERY: { color: 'text-amber-600', bg: 'bg-amber-50', label: 'On its way' },
+  DELIVERED: { color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Delivered' },
+  CANCELLED: { color: 'text-red-600', bg: 'bg-red-50', label: 'Cancelled' },
+  ISSUE_REPORTED: { color: 'text-purple-600', bg: 'bg-purple-50', label: 'Issue Reported' },
+  REFUND_APPROVED: { color: 'text-emerald-700', bg: 'bg-emerald-100', label: 'Refund Approved' },
+  REFUND_REJECTED: { color: 'text-red-700', bg: 'bg-red-100', label: 'Refund Rejected' },
+};
+
+const Orders = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const dispatch = useDispatch();
+  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+  
+  // NEW: Fetch remote features
+  const { data: settings } = useGetAppSettingsQuery();
+  
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [showSuccess, setShowSuccess] = useState(location.state?.fromCheckout || false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+        navigate('/');
+        return;
+    }
+    loadOrders();
+    if (location.state?.fromCheckout) {
+      window.history.replaceState({}, document.title);
+    }
+  }, [isAuthenticated]);
+
+const loadOrders = async () => {
+    setLoading(true);
+    const apiData = await getUserOrders(user?.id || 'user-123');
+    const localIds = new Set(apiData.map((o: any) => o.id));
+    const uniqueMocks = MOCK_ORDERS.filter(mock => !localIds.has(mock.id));
+    
+    const combinedData = [...apiData, ...uniqueMocks].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    setOrders(combinedData);
+    
+    if (selectedOrder) {
+      const updatedSelected = combinedData.find((o: any) => o.id === selectedOrder.id);
+      if (updatedSelected) setSelectedOrder(updatedSelected);
+    } else if (location.state?.fromCheckout && combinedData.length > 0) {
+      setSelectedOrder(combinedData[0]);
+    }
+    
+    setLoading(false);
+  };
+
+  const handleReorder = (items: any[]) => {
+    items.forEach(item => dispatch(addToCart(item)));
+    navigate('/cart');
+  };
+
+  const handleCancelOrder = async () => {
+    if (!selectedOrder) return;
+    await cancelOrderApi(selectedOrder.id);
+    await loadOrders();
+    setIsCancelModalOpen(false);
+  };
+
+  const handleReportSuccess = async () => {
+    await loadOrders();
+    setIsReportModalOpen(false);
+  };
+
+  const sections = [
+    { title: "On its way", data: orders.filter(o => o.status === 'OUT_FOR_DELIVERY') },
+    { title: "Order Placed", data: orders.filter(o => ['PLACED', 'CONFIRMED'].includes(o.status)) },
+    { title: "Delivered & Others", data: orders.filter(o => ['DELIVERED', 'ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED', 'CANCELLED'].includes(o.status)) }
+  ];
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <Loader2 className="animate-spin text-[#4b6f9e] mb-4" size={40} />
+      <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Syncing History...</p>
+    </div>
+  );
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-10 relative">
+      {showSuccess && (
+        <div className="mb-10 bg-emerald-50 border-2 border-emerald-100 p-6 rounded-[2rem] flex items-center justify-between animate-in slide-in-from-top-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-emerald-500 p-3 rounded-2xl text-white shadow-lg shadow-emerald-200">
+              <PartyPopper size={24} />
+            </div>
+            <div>
+              <h2 className="text-emerald-900 font-black text-xl tracking-tight">Order Successful!</h2>
+              <p className="text-emerald-600 font-bold text-sm">Your fresh supplies are being packed.</p>
+            </div>
+          </div>
+          <button onClick={() => setShowSuccess(false)} className="bg-white/50 p-2 rounded-full hover:bg-white text-emerald-900"><X size={18}/></button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-5 space-y-8">
+          <h1 className="text-3xl font-black text-slate-900 mb-6 px-2 italic uppercase tracking-tighter">Order History.</h1>
+          
+          {sections.map((section) => section.data.length > 0 && (
+            <div key={section.title} className="space-y-4">
+              <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{section.title}</h2>
+              {section.data.map((order) => (
+                <div 
+                  key={order.id}
+                  onClick={() => setSelectedOrder(order)}
+                  className={`group cursor-pointer p-6 rounded-[2rem] border-2 transition-all ${
+                    selectedOrder?.id === order.id ? 'border-[#4b6f9e] bg-white shadow-xl translate-x-2' : 'border-transparent bg-white hover:border-slate-100 shadow-sm'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">#{order.id}</span>
+                      <h3 className="font-black text-slate-800">
+                        {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
+                      </h3>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${STATUS_THEME[order.status]?.bg} ${STATUS_THEME[order.status]?.color}`}>
+                      {STATUS_THEME[order.status]?.label}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{order.items.length} Items</p>
+                    <p className="font-black text-slate-900">₹{order.totalAmount}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <div className="lg:col-span-7">
+          {selectedOrder ? (
+            <div className="bg-white rounded-[3rem] p-8 sticky top-24 border border-slate-100 shadow-2xl animate-in fade-in slide-in-from-right-4">
+              <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-50">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">Summary</h2>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedOrder.deliverySlot}</p>
+                </div>
+                <div className="text-right">
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Deliver to</p>
+                    <p className="text-xs font-bold text-slate-600 max-w-[150px] truncate">{selectedOrder.address}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                {selectedOrder.items.map((item: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-4 hover:bg-slate-50 p-2 rounded-2xl transition-colors">
+                    <img src={item.image} className="w-14 h-14 rounded-xl object-cover" alt="" />
+                    <div className="flex-1">
+                      <h4 className="font-black text-slate-800 text-sm leading-tight">{item.name}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{item.quantity} x {item.unit}</p>
+                    </div>
+                    <p className="font-black text-slate-900 text-sm">₹{item.price * item.quantity}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-slate-50 rounded-3xl p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Grand Total</span>
+                  <span className="text-2xl font-black text-slate-900">₹{selectedOrder.totalAmount}</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedOrder.status === 'DELIVERED' && (
+                    <>
+                      <button onClick={() => handleReorder(selectedOrder.items)} className="flex items-center justify-center gap-2 bg-[#1e293b] text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all">
+                        <RotateCcw size={14} /> Reorder
+                      </button>
+                      
+                      {/* REPORT ISSUE TOGGLE */}
+                      {settings?.allowReportIssue && (
+                        <button onClick={() => setIsReportModalOpen(true)} className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all">
+                          <AlertCircle size={14} /> Report Issue
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {['PLACED', 'CONFIRMED'].includes(selectedOrder.status) && settings?.allowOrderCancellation && (
+                    <button onClick={() => setIsCancelModalOpen(true)} className="col-span-2 flex items-center justify-center gap-2 border-2 border-red-100 text-red-500 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 transition-all">
+                      Cancel Order
+                    </button>
+                  )}
+
+                  {selectedOrder.status === 'OUT_FOR_DELIVERY' && (
+                    <button className="col-span-2 flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-400 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
+                       <Clock size={14} /> Tracking in Progress...
+                    </button>
+                  )}
+
+                  {['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder.status) && (
+                    <div className={`col-span-2 border-2 p-5 rounded-[2rem] space-y-3 animate-in fade-in zoom-in-95 ${
+                      selectedOrder.status === 'REFUND_APPROVED' ? 'bg-emerald-50 border-emerald-100' : 
+                      selectedOrder.status === 'REFUND_REJECTED' ? 'bg-red-50 border-red-100' : 
+                      'bg-purple-50 border-purple-100'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg text-white ${
+                          selectedOrder.status === 'REFUND_APPROVED' ? 'bg-emerald-500' : 
+                          selectedOrder.status === 'REFUND_REJECTED' ? 'bg-red-500' : 'bg-purple-600'
+                        }`}>
+                          {selectedOrder.status === 'REFUND_APPROVED' ? <CheckCircle2 size={16} /> : 
+                           selectedOrder.status === 'REFUND_REJECTED' ? <X size={16} /> : 
+                           <Clock size={16} />}
+                        </div>
+                        <div>
+                          <p className={`text-[10px] font-black uppercase tracking-widest ${
+                            selectedOrder.status === 'REFUND_APPROVED' ? 'text-emerald-700' : 
+                            selectedOrder.status === 'REFUND_REJECTED' ? 'text-red-700' : 'text-purple-700'
+                          }`}>
+                            {STATUS_THEME[selectedOrder.status]?.label}
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                            {selectedOrder.status === 'ISSUE_REPORTED' ? 'Reviewing your request' : 'Resolution Provided'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {selectedOrder.adminNote && (
+                        <div className="bg-white/80 p-3 rounded-2xl border border-black/5 shadow-sm">
+                          <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">Support Message:</p>
+                          <p className="text-xs font-bold text-slate-700 leading-relaxed italic uppercase tracking-tight">
+                            "{selectedOrder.adminNote}"
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedOrder.status !== 'ISSUE_REPORTED' && (
+                        <button 
+                          onClick={() => handleReorder(selectedOrder.items)} 
+                          className="w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-colors"
+                        >
+                          Reorder These Items
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedOrder.status === 'CANCELLED' && (
+                    <button onClick={() => handleReorder(selectedOrder.items)} className="col-span-2 flex items-center justify-center gap-2 bg-[#1e293b] text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all">
+                      <RotateCcw size={14} /> Try Reordering
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="hidden lg:flex flex-col items-center justify-center h-[500px] text-slate-200 border-2 border-dashed border-slate-100 rounded-[3rem]">
+              <Package size={64} strokeWidth={1} />
+              <p className="font-black uppercase tracking-widest text-[10px] mt-4 italic">Select an order to see details</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isCancelModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mb-6">
+                    <AlertTriangle size={32} />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase italic tracking-tighter">Cancel Order?</h3>
+                <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">This action cannot be undone. Are you sure you want to cancel this fresh delivery?</p>
+                <div className="flex gap-3">
+                    <button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">No, Keep It</button>
+                    <button onClick={handleCancelOrder} className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-200 transition-all">Yes, Cancel</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      <ReportIssueModal 
+        isOpen={isReportModalOpen} 
+        onClose={() => setIsReportModalOpen(false)} 
+        order={selectedOrder}
+        onSuccess={handleReportSuccess}
+      />
+    </div>
+  );
+};
+
+export default Orders;
