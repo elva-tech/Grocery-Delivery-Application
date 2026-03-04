@@ -5,7 +5,7 @@ const Inventory = require("../models/Inventory.model");
 
 const addProduct = async (req, res) => {
   try {
-    const { name, category, price, unit } = req.body;
+   const { name, category, price, unit, imageUrl } = req.body;
     const tenantId = req.user.tenantId; // 🔑 from JWT
 
     // Validation: Check each required field
@@ -47,6 +47,7 @@ if (price <= 0) {
       category,
       price,
       unit,
+      imageUrl,
       // isAvailable → default true
     });
 
@@ -90,7 +91,8 @@ if (price <= 0) {
       "price",
       "category",
       "unit",
-      "isAvailable"
+      "isAvailable",
+      "imageUrl"
     ];
 
     const updateData = {};
@@ -173,7 +175,7 @@ const getAvailableProducts = async (req, res) => {
     }
 
     const products = await Product.find(productFilter)
-      .select("_id name category price unit")
+      .select("_id name category price unit imageUrl")
       .sort({ name: 1 });
 
     if (!products.length) {
@@ -192,15 +194,16 @@ const getAvailableProducts = async (req, res) => {
     });
 
     const response = products
-      .filter(p => inventoryMap[p._id])
-      .map(p => ({
-        productId: p._id,
-        name: p.name,
-        category: p.category,
-        price: p.price,
-        unit: p.unit,
-        availableQty: inventoryMap[p._id]
-      }));
+  .filter(p => inventoryMap[p._id])
+  .map(p => ({
+    productId: p._id,
+    name: p.name,
+    category: p.category,
+    price: p.price,
+    unit: p.unit,
+    imageUrl: p.imageUrl,
+    availableQty: inventoryMap[p._id]
+  }));
 
     res.status(200).json({ success: true, products: response });
   } catch (err) {
