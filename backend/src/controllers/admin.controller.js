@@ -287,6 +287,7 @@ exports.getRevenue = async (req, res) => {
     // ✅ STEP 4: Calculate fromDate
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - days);
+    const toDate = new Date();
     fromDate.setHours(0, 0, 0, 0);
 
     // ✅ STEP 5: Aggregate
@@ -295,7 +296,10 @@ exports.getRevenue = async (req, res) => {
         $match: {
         tenantId,
         paymentStatus: "PAID",
-        createdAt: { $gte: fromDate }
+        createdAt: {
+          $gte: fromDate,
+          $lte: toDate
+        }
       }
     },
     {
@@ -303,7 +307,8 @@ exports.getRevenue = async (req, res) => {
         _id: {
           $dateToString: {
             format: "%Y-%m-%d",
-            date: "$createdAt"
+            date: "$createdAt",
+            timezone: "Asia/Kolkata"
           }
         },
         totalRevenue: { $sum: "$totalAmount" }
@@ -319,10 +324,16 @@ exports.getRevenue = async (req, res) => {
     { $sort: { date: 1 } 
   }]);
 
+  const totalRevenue = revenueData.reduce(
+    (sum, item) => sum + item.revenue,
+    0
+  );
+
     return res.status(200).json({
       success: true,
       days,
-      data: revenueData
+      totalRevenue,
+      dailyRevenue: revenueData
     });
 
   } catch (error) {
