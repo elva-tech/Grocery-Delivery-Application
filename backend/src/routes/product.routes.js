@@ -10,6 +10,7 @@ const {
   addProduct,
   updateProductFromAdmin,
   getAvailableProducts
+ 
 } = require("../controllers/product.controller");
 
 /**
@@ -33,5 +34,6 @@ router.put(
   adminOnly,
   updateProductFromAdmin
 );
+
 
 module.exports = router;

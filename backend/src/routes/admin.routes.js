@@ -7,8 +7,12 @@ const {
   getUsers,
   blockOrUnblockUser
 } = require("../controllers/admin.controller");
+const {
+  deleteProductFromAdmin
+} = require("../controllers/product.controller");
 
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
+
 
 //////////////////////////////////////////////////////
 // GET ALL ORDERS
@@ -46,9 +50,18 @@ router.get(
   getUsers
 );
 
-//////////////////////////////////////////////////////
-// BLOCK / UNBLOCK USER
-//////////////////////////////////////////////////////
+//product.controller route
+
+router.delete(
+  "/products/:id",
+  authMiddleware,
+  adminOnly,
+  deleteProductFromAdmin
+);
+
+
+module.exports = router;
+
 
 // PUT /api/admin/users/:id/block
 router.put(
@@ -59,3 +72,4 @@ router.put(
 );
 
 module.exports = router;
+

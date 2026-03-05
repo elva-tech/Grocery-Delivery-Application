@@ -267,9 +267,67 @@ const getAvailableProducts = async (req, res) => {
     });
   }
 };
+const deleteProductFromAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 🔐 Role Check
+    if (!req.user || req.user.role !== "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Admin only."
+      });
+    }
+
+    const tenantId = req.user.tenantId;
+
+    // ✅ Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID"
+      });
+    }
+
+    // ✅ Tenant-safe product check
+    const product = await Product.findOne({ _id: id, tenantId });
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    // ✅ Delete linked inventory FIRST
+    await Inventory.deleteMany({
+      tenantId,
+      productId: id
+    });
+
+    // ✅ Delete product
+    await Product.deleteOne({
+      _id: id,
+      tenantId
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Product and linked inventory deleted successfully"
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+};
 
 module.exports = {
   addProduct,
   updateProductFromAdmin,
-  getAvailableProducts
+  getAvailableProducts,
+  deleteProductFromAdmin 
 };
