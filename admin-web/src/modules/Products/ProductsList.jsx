@@ -6,6 +6,7 @@ import ProductForm from './ProductForm';
 import CategoryForm from './CategoryForm';
 import { Plus, Edit, Trash2, Search, FolderPlus, Package, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
+import { apiService } from '../../services/apiService';
 
 const ProductList = () => {
   const { products, categories, addProduct, updateProduct, deleteProduct, addCategory } = useAppState();
@@ -44,7 +45,7 @@ const ProductList = () => {
       header: 'Product', 
       accessor: 'name',
       render: (val, row) => {
-        const displayImg = getImageUrl(row.images || row.image);
+       const displayImg = getImageUrl(row.imageUrl || row.images || row.image);
         const subCat = categories.find(c => String(c.id) === String(row.subCategoryId));
         const pillar = categories.find(c => String(c.id) === String(row.parentCategoryId));
 
@@ -193,11 +194,43 @@ const ProductList = () => {
         <ProductForm 
           initialValues={editingItem} 
           onCancel={() => { setShowForm(false); setEditingItem(null); }} 
-          onSubmit={(v) => {
-            editingItem ? updateProduct(editingItem.id, v) : addProduct({ ...v, id: Date.now() });
-            setShowForm(false);
-            setEditingItem(null);
-          }} 
+       onSubmit={async (v) => {
+  try {
+
+    const payload = {
+      name: v.name,
+      category: v.parentCategoryId,
+      price: Number(v.price),
+      unit: v.unit,
+      imageUrl: v.image?.[0] || ""
+    };
+
+    if (editingItem) {
+      updateProduct(editingItem.id, payload);
+    } else {
+
+      await apiService.addProduct(payload);
+
+      // update UI state so product appears in table
+      addProduct({
+        id: Date.now(),
+        name: payload.name,
+        price: payload.price,
+        stock: Number(v.stock) || 0,
+        parentCategoryId: v.parentCategoryId,
+        subCategoryId: v.subCategoryId,
+        imageUrl: payload.imageUrl
+      });
+
+    }
+
+    setShowForm(false);
+    setEditingItem(null);
+
+  } catch (error) {
+    alert(error.response?.data?.message || "Error adding product");
+  }
+}}
         />
       ) : (
         <DataTable 
