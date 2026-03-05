@@ -1,32 +1,52 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  // 1. Initialize from LocalStorage so reload doesn't logout
+
+  // keep login after refresh
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('freshroot_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
   const login = (credentials) => {
-    if (credentials.email === 'admin@test.com' && credentials.password === 'admin123') {
-      const userData = { name: 'System Admin', role: 'admin' };
+
+    // DEFAULT LOGIN (DO NOT CHANGE)
+    if (
+      credentials.email === 'admin@test.com' &&
+      credentials.password === 'admin123'
+    ) {
+
+      const userData = {
+        name: 'System Admin',
+        role: 'admin',
+      };
+
       
-      // 2. Save to state AND LocalStorage
+      localStorage.setItem(
+        "jwtToken",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OThmMjZkODBkYmYwOGE5NTJiNGQ2ZTQiLCJyb2xlIjoiQURNSU4iLCJ0ZW5hbnRJZCI6ImRlbW8tdGVuYW50IiwiaWF0IjoxNzcyNDUxMDE5LCJleHAiOjE3NzMwNTU4MTl9.R0HknMM2tSrbKA84pIrCuHdVqhVhyrOYU3Fd_-e-aGQ"
+      );
+
+      // existing logic
       setUser(userData);
       localStorage.setItem('freshroot_user', JSON.stringify(userData));
+
       return true;
     }
+
     return false;
   };
 
   const logout = () => {
-    // 3. Clear both on logout
     setUser(null);
+
+    // remove both user + token
     localStorage.removeItem('freshroot_user');
-    // Optional: Force clear session to ensure redirect
-    window.location.href = '/login'; 
+    localStorage.removeItem('jwtToken');
+
+    window.location.href = '/login';
   };
 
   return (
