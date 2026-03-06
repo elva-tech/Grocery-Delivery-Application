@@ -13,6 +13,10 @@ const AppStateContext = createContext();
 
 export const AppStateProvider = ({ children }) => {
 
+  /* ---------- LOADING + ERROR STATE ---------- */
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
   /* ---------- SETTINGS ---------- */
   const [appSettings, setAppSettings] = useState(() => {
     const saved = sessionStorage.getItem('app_settings');
@@ -51,42 +55,51 @@ export const AppStateProvider = ({ children }) => {
   });
 
   /* ---------- FETCH ORDERS ---------- */
+  const fetchOrders = async () => {
+    try {
+
+      setLoading(true);
+      setError(null);
+
+      const data = await apiService.getOrders();
+
+      const normalized = (data.orders || []).map(o => ({
+        ...o,
+
+        id: o._id,
+        status: o.orderStatus,
+        total: o.totalAmount,
+        date: o.createdAt,
+
+        assignment: o.riderName || "Pending",
+
+        customer: o.userId?.name || "Guest User",
+
+        address: {
+          full: o.deliveryAddress?.line1 || "No Address"
+        },
+
+        itemsText: (o.items || [])
+          .map(i => `${i.name} x${i.qty}`)
+          .join(", ")
+      }));
+
+      setOrders(normalized);
+
+    } catch (err) {
+
+      console.error("Failed to fetch orders:", err);
+
+      setError("Unable to load orders. Please try again.");
+
+    } finally {
+
+      setLoading(false);
+
+    }
+  };
+
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const data = await apiService.getOrders();
-
-        const normalized = (data.orders || []).map(o => ({
-          ...o,
-
-          id: o._id,
-          status: o.orderStatus,
-          total: o.totalAmount,
-          date: o.createdAt,
-
-          assignment: o.riderName || "Pending",
-
-          //  CUSTOMER NAME
-          customer: o.userId?.name || "Guest User",
-
-          //  DELIVERY ADDRESS
-          address: {
-            full: o.deliveryAddress?.line1 || "No Address"
-          },
-
-          //  ITEMS TEXT
-          itemsText: (o.items || [])
-            .map(i => `${i.name} x${i.qty}`)
-            .join(", ")
-        }));
-
-        setOrders(normalized);
-
-      } catch (error) {
-        console.error("Failed to fetch orders:", error);
-      }
-    };
-
     fetchOrders();
   }, []);
 
@@ -128,38 +141,27 @@ export const AppStateProvider = ({ children }) => {
   /* ---------- UPDATE ORDER STATUS ---------- */
 
   const updateOrderStatus = async (orderId, newStatus) => {
+
     try {
+
+      setLoading(true);
 
       await apiService.updateOrderStatus(orderId, newStatus);
 
-      const data = await apiService.getOrders();
+      await fetchOrders();
 
-      const normalized = (data.orders || []).map(o => ({
-        ...o,
+    } catch (err) {
 
-        id: o._id,
-        status: o.orderStatus,
-        total: o.totalAmount,
-        date: o.createdAt,
+      console.error("Update order failed:", err);
 
-        assignment: o.riderName || "Pending",
+      setError("Failed to update order status.");
 
-        customer: o.userId?.name || "Guest User",
+    } finally {
 
-        address: {
-          full: o.deliveryAddress?.line1 || "No Address"
-        },
+      setLoading(false);
 
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
-      }));
-
-      setOrders(normalized);
-
-    } catch (error) {
-      console.error("Update order failed:", error);
     }
+
   };
 
   return (
@@ -174,6 +176,9 @@ export const AppStateProvider = ({ children }) => {
       riders,
       banners,
       returns,
+
+      loading,
+      error,
 
       addProduct: p =>
         setProducts(prev => [...prev, { ...p, id: `p${Date.now()}` }]),
