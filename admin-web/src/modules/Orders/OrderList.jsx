@@ -114,15 +114,25 @@ const OrderList = () => {
               )}
 
               {status === 'CONFIRMED' && (
-                <button onClick={() => setSelectedOrderId(row.id)} className="flex items-center gap-1 bg-[#1A4D2E] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:scale-105 transition-all shadow-sm">
-                  <UserPlus size={14} /> Assign Rider
-                </button>
+                <>
+                  <button onClick={() => setSelectedOrderId(row.id)} className="flex items-center gap-1 bg-[#1A4D2E] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:scale-105 transition-all shadow-sm">
+                    <UserPlus size={14} /> Assign Rider
+                  </button>
+                  <button onClick={() => setCancellingOrder(row)} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-all border border-red-100 shadow-sm">
+                    <X size={14} /> Cancel
+                  </button>
+                </>
               )}
 
               {status === 'OUT_FOR_DELIVERY' && (
-                <button onClick={() => updateOrderStatus(row.id, 'DELIVERED')} className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-all border border-emerald-200 shadow-sm">
-                  <CheckCircle2 size={14} /> Mark Delivered
-                </button>
+                <>
+                  <button onClick={() => updateOrderStatus(row.id, 'DELIVERED')} className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-all border border-emerald-200 shadow-sm">
+                    <CheckCircle2 size={14} /> Mark Delivered
+                  </button>
+                  <button onClick={() => setCancellingOrder(row)} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-all border border-red-100 shadow-sm">
+                    <X size={14} /> Cancel
+                  </button>
+                </>
               )}
             </div>
           );
