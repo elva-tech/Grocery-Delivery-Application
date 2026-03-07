@@ -248,3 +248,60 @@ exports.getCustomerOrderById = async (req, res) => {
     });
   }
 };
+
+/**
+ * ADMIN - GET ALL ORDERS (FOR REVENUE + EXPORT)
+ */
+exports.getAllOrders = async (req, res) => {
+  try {
+
+    const tenantId = req.user.tenantId;
+
+    const orders = await Order.find({ tenantId })
+      .sort({ createdAt: -1 })
+      .select("totalAmount orderStatus paymentStatus createdAt userId");
+
+    res.status(200).json({
+      message: "Orders fetched successfully",
+      orders
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong"
+    });
+  }
+};
+
+/**
+ * ADMIN - GET TOTAL REVENUE
+ */
+exports.getRevenue = async (req, res) => {
+  try {
+
+    const tenantId = req.user.tenantId;
+
+    const orders = await Order.find({
+      tenantId,
+      orderStatus: { $ne: "CANCELLED" }
+    });
+
+    const totalRevenue = orders.reduce(
+      (sum, order) => sum + order.totalAmount,
+      0
+    );
+
+    res.status(200).json({
+      message: "Revenue calculated successfully",
+      totalRevenue,
+      totalOrders: orders.length
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong"
+    });
+  }
+};
