@@ -12,13 +12,27 @@ const OrderList = () => {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
   const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [assigningLoading, setAssigningLoading] = useState(false);
 
   const availableRiders = riders ? riders.filter(r => r.status === 'Online') : [];
 
-  const handleSelectRider = (riderName) => {
-    assignRider(selectedOrderId, riderName);
-    updateOrderStatus(selectedOrderId, 'OUT_FOR_DELIVERY');
-    setSelectedOrderId(null);
+  const handleSelectRider = async (riderId, riderName) => {
+    setAssigningLoading(true);
+    try {
+      // Step 1: Assign the rider to the order
+      await assignRider(selectedOrderId, riderId, riderName);
+      
+      // Step 2: Update order status to OUT_FOR_DELIVERY
+      await updateOrderStatus(selectedOrderId, 'OUT_FOR_DELIVERY');
+      
+    } catch (error) {
+      console.error("Failed to assign rider:", error);
+      alert('Failed to assign rider. Please try again.');
+    } finally {
+      // Close modal regardless of success or error
+      setSelectedOrderId(null);
+      setAssigningLoading(false);
+    }
   };
 
   const confirmCancellation = () => {
@@ -191,21 +205,40 @@ const OrderList = () => {
           <div className="bg-white rounded-[28px] w-full max-w-sm shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center">
               <h2 className="font-black text-[#1A4D2E]">Assign Partner</h2>
-              <button onClick={() => setSelectedOrderId(null)} className="text-gray-400"><X size={20} /></button>
+              <button onClick={() => setSelectedOrderId(null)} disabled={assigningLoading} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
             </div>
-            <div className="p-4 space-y-2">
-              {availableRiders.map((rider) => (
-                <div key={rider.id} onClick={() => handleSelectRider(rider.name)} className="flex items-center justify-between p-4 rounded-2xl hover:bg-emerald-50 cursor-pointer transition-all border border-transparent hover:border-emerald-500">
-                  <div className="flex items-center gap-3">
-                    <User size={20} className="text-gray-400" />
-                    <div>
-                      <span className="font-bold text-slate-700 block">{rider.name}</span>
-                      <span className="text-[10px] font-bold text-gray-400">{rider.phone}</span>
-                    </div>
-                  </div>
-                  <CheckCircle size={16} className="text-emerald-500" />
+            <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
+              {availableRiders.length === 0 ? (
+                <div className="p-4 text-center text-gray-500">
+                  <p className="font-medium">No available riders</p>
+                  <p className="text-xs">Please ensure riders are registered and online</p>
                 </div>
-              ))}
+              ) : (
+                availableRiders.map((rider) => (
+                  <div 
+                    key={rider.id} 
+                    onClick={() => !assigningLoading && handleSelectRider(rider.id, rider.name)} 
+                    className={`flex items-center justify-between p-4 rounded-2xl transition-all border border-transparent ${
+                      assigningLoading 
+                        ? 'cursor-not-allowed opacity-50' 
+                        : 'hover:bg-emerald-50 cursor-pointer hover:border-emerald-500'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <User size={20} className="text-gray-400" />
+                      <div>
+                        <span className="font-bold text-slate-700 block">{rider.name}</span>
+                        <span className="text-[10px] font-bold text-gray-400">{rider.phone}</span>
+                      </div>
+                    </div>
+                    {assigningLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent"></div>
+                    ) : (
+                      <CheckCircle size={16} className="text-emerald-500" />
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

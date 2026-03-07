@@ -39,10 +39,7 @@ export const AppStateProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const [riders, setRiders] = useState(() => {
-    const saved = sessionStorage.getItem('app_riders');
-    return saved ? JSON.parse(saved) : MOCK_RIDERS;
-  });
+  const [riders, setRiders] = useState([]);
 
   const [banners, setBanners] = useState(() => {
     const saved = sessionStorage.getItem('app_banners');
@@ -58,6 +55,12 @@ export const AppStateProvider = ({ children }) => {
   useEffect(() => {
 
     const fetchOrders = async () => {
+
+      // Only fetch if user has a token
+      const token = localStorage.getItem('jwtToken');
+      if (!token) {
+        return;
+      }
 
       setLoading(true);
       setError(null);
@@ -86,6 +89,14 @@ export const AppStateProvider = ({ children }) => {
 
       } catch (err) {
 
+        // Handle 401 - redirect to login
+        if (err.response?.status === 401) {
+          localStorage.removeItem('jwtToken');
+          localStorage.removeItem('freshroot_user');
+          window.location.href = '/login';
+          return;
+        }
+
         console.error("Failed to fetch orders:", err);
         setError("Failed to load orders");
 
@@ -101,39 +112,126 @@ export const AppStateProvider = ({ children }) => {
 
   }, []);
 
+  /* ---------- FETCH RIDERS ---------- */
+  useEffect(() => {
+
+    const fetchRiders = async () => {
+
+      // Only fetch if user has a token
+      const token = localStorage.getItem('jwtToken');
+      if (!token) {
+        return;
+      }
+
+      try {
+
+        const data = await apiService.getRiders();
+
+        const normalized = (data.data?.riders || []).map(r => ({
+          ...r,
+          id: r._id,
+        }));
+
+        setRiders(normalized);
+
+      } catch (err) {
+
+        // Handle 401 - redirect to login
+        if (err.response?.status === 401) {
+          localStorage.removeItem('jwtToken');
+          localStorage.removeItem('freshroot_user');
+          window.location.href = '/login';
+          return;
+        }
+
+        console.error("Failed to fetch riders:", err);
+
+      }
+
+    };
+
+    fetchRiders();
+
+  }, []);
+
   /* ---------- SAVE STATE ---------- */
   useEffect(() => {
     sessionStorage.setItem('app_settings', JSON.stringify(appSettings));
     sessionStorage.setItem('app_products', JSON.stringify(products));
     sessionStorage.setItem('app_categories', JSON.stringify(categories));
-    sessionStorage.setItem('app_riders', JSON.stringify(riders));
     sessionStorage.setItem('app_returns', JSON.stringify(returns));
     sessionStorage.setItem('app_banners', JSON.stringify(banners));
-  }, [products, categories, riders, banners, returns, appSettings]);
+  }, [products, categories, banners, returns, appSettings]);
 
   /* ---------- RIDER FUNCTIONS ---------- */
 
-  const addRider = (r) =>
-    setRiders(prev => [...prev, { ...r, id: `r${Date.now()}`, activeOrders: 0 }]);
-
-  const toggleRiderStatus = (id) => {
-    setRiders(prev =>
-      prev.map(r =>
-        r.id === id
-          ? { ...r, status: r.status === 'Online' ? 'Offline' : 'Online' }
-          : r
-      )
-    );
+  const addRider = async (riderData) => {
+    try {
+      // Call API to create rider
+      await apiService.createRider(riderData);
+      
+      // Fetch updated riders list
+      const data = await apiService.getRiders();
+      const normalized = (data.data?.riders || []).map(r => ({
+        ...r,
+        id: r._id,
+      }));
+      
+      setRiders(normalized);
+    } catch (error) {
+      console.error("Add rider failed:", error);
+      throw error;
+    }
   };
 
-  const assignRider = (orderId, riderName) => {
-    setOrders(prev =>
-      prev.map(o =>
-        o.id === orderId
-          ? { ...o, assignment: riderName, status: 'OUT_FOR_DELIVERY' }
-          : o
-      )
-    );
+  const toggleRiderStatus = async (id, newStatus) => {
+    try {
+      // Call API to update rider status
+      await apiService.updateRiderStatus(id, newStatus);
+      
+      // Update local state
+      setRiders(prev =>
+        prev.map(r =>
+          r.id === id || r._id === id
+            ? { ...r, status: newStatus }
+            : r
+        )
+      );
+    } catch (error) {
+      console.error("Toggle rider status failed:", error);
+      throw error;
+    }
+  };
+
+  const assignRider = async (orderId, riderId, riderName) => {
+    try {
+      // Call API to assign rider
+      await apiService.assignRiderToOrder(riderId, orderId);
+
+      // Fetch updated orders
+      const data = await apiService.getOrders();
+
+      const normalized = (data.orders || []).map(o => ({
+        ...o,
+        id: o._id,
+        status: o.orderStatus,
+        total: o.totalAmount,
+        date: o.createdAt,
+        assignment: o.riderName || "Pending",
+        customer: o.userId?.name || "Guest User",
+        address: {
+          full: o.deliveryAddress?.line1 || "No Address"
+        },
+        itemsText: (o.items || [])
+          .map(i => `${i.name} x${i.qty}`)
+          .join(", ")
+      }));
+
+      setOrders(normalized);
+    } catch (error) {
+      console.error("Assign rider failed:", error);
+      throw error;
+    }
   };
 
   /* ---------- UPDATE ORDER STATUS ---------- */
