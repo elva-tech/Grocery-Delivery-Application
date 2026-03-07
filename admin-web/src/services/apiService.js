@@ -36,6 +36,23 @@ api.interceptors.response.use(
 
 /* -------- API SERVICES -------- */
 export const apiService = {
+  /* -------- GET ALL RETURN REQUESTS (ADMIN) -------- */
+  getAllReturns: async () => {
+    const res = await api.get("/api/returns/all");
+    return res.data;
+  },
+
+  /* -------- APPROVE RETURN REQUEST (ADMIN) -------- */
+  approveReturn: async (id, resolutionNote) => {
+    const res = await api.put(`/api/returns/approve/${id}`, { resolutionNote });
+    return res.data;
+  },
+
+  /* -------- REJECT RETURN REQUEST (ADMIN) -------- */
+  rejectReturn: async (id, resolutionNote) => {
+    const res = await api.put(`/api/returns/reject/${id}`, { resolutionNote });
+    return res.data;
+  },
 
   /* -------- SEND OTP -------- */
   sendOtp: async (phoneNumber) => {
