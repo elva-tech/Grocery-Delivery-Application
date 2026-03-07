@@ -24,7 +24,7 @@ const ProductList = () => {
     if (Array.isArray(imgData)) return imgData[0];
     return imgData;
   };
-
+  
   const mainPillars = useMemo(() => categories.filter(c => !c.parentId), [categories]);
   const subCategories = useMemo(() => 
     categories.filter(c => String(c.parentId) === String(activePillarId)), 
@@ -194,12 +194,13 @@ const ProductList = () => {
         <ProductForm 
           initialValues={editingItem} 
           onCancel={() => { setShowForm(false); setEditingItem(null); }} 
-       onSubmit={async (v) => {
+      onSubmit={async (v) => {
   try {
 
     const payload = {
       name: v.name,
-      category: v.parentCategoryId,
+      parentCategoryId: v.parentCategoryId,
+      subCategoryId: v.subCategoryId,
       price: Number(v.price),
       unit: v.unit,
       imageUrl: v.image?.[0] || ""
@@ -208,20 +209,11 @@ const ProductList = () => {
     if (editingItem) {
       updateProduct(editingItem.id, payload);
     } else {
+      const newProduct = await apiService.addProduct(payload);
 
-      await apiService.addProduct(payload);
-
-      // update UI state so product appears in table
-      addProduct({
-        id: Date.now(),
-        name: payload.name,
-        price: payload.price,
-        stock: Number(v.stock) || 0,
-        parentCategoryId: v.parentCategoryId,
-        subCategoryId: v.subCategoryId,
-        imageUrl: payload.imageUrl
-      });
-
+      if (newProduct) {
+        addProduct(newProduct);
+      }
     }
 
     setShowForm(false);
