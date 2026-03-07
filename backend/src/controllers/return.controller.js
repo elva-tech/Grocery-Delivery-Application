@@ -9,6 +9,48 @@ exports.createReturnRequest = async (req, res) => {
 
     const { orderId, reason, customerComment, refundAmount } = req.body;
 
+    // Validation
+    if (!orderId || !reason || refundAmount === undefined) {
+        return res.status(400).json({
+            success: false,
+            message: "orderId, reason and refundAmount are required"
+        });
+    }
+    
+    if (refundAmount < 0) {
+        return res.status(400).json({
+            success: false,
+            message: "refundAmount cannot be negative"
+        });
+    }
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+        return res.status(404).json({
+            success: false,
+            message: "Order not found"
+        });
+    }
+
+    // Ensure order belongs to the logged-in user
+    if (order.userId.toString() !== req.user.userId) {
+        return res.status(403).json({
+            success: false,
+            message: "Unauthorized order access"
+        });
+    }
+    
+    // Prevent duplicate return request
+    const existingReturn = await ReturnRequest.findOne({ orderId });
+
+    if (existingReturn) {
+        return res.status(400).json({
+            success: false,
+            message: "Return request already exists for this order"
+        });
+    }
+
     const returnRequest = await ReturnRequest.create({
       orderId,
       userId: req.user.userId,
@@ -36,8 +78,8 @@ exports.createReturnRequest = async (req, res) => {
 exports.getAllReturns = async (req, res) => {
 
   const returns = await ReturnRequest.find()
-  .populate("orderId")
-  .populate("userId")
+  .populate("orderId", "_id status totalAmount")
+  .populate("userId", "_id name email")
   .sort({ createdAt: -1 });
 
   res.json({
@@ -48,7 +90,6 @@ exports.getAllReturns = async (req, res) => {
 };
 
 
-
 /* APPROVE RETURN */
 
 exports.approveReturn = async (req, res) => {
@@ -57,21 +98,26 @@ exports.approveReturn = async (req, res) => {
     const { id } = req.params;
     const { resolutionNote } = req.body;
 
-    const request = await ReturnRequest.findByIdAndUpdate(
-      id,
-      {
-        status: "approved",
-        resolutionNote
-      },
-      { new: true }
-    );
+    const request = await ReturnRequest.findById(id);
 
     if (!request) {
-        return res.status(404).json({
-            success: false,
-            message: "Return request not found"
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Return request not found"
+      });
     }
+
+    if (request.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Return request already processed"
+      });
+    }
+
+    request.status = "approved";
+    request.resolutionNote = resolutionNote;
+
+    await request.save();
 
     // Update Order Status
     await Order.findByIdAndUpdate(request.orderId, {
@@ -94,25 +140,42 @@ exports.approveReturn = async (req, res) => {
 
 
 /* REJECT RETURN */
-
 exports.rejectReturn = async (req, res) => {
+  try {
 
-  const { id } = req.params;
-  const { resolutionNote } = req.body;
+    const { id } = req.params;
+    const { resolutionNote } = req.body;
 
-  const request = await ReturnRequest.findByIdAndUpdate(
-    id,
-    {
-      status: "rejected",
-      resolutionNote
-    },
-    { new: true }
-  );
+    const request = await ReturnRequest.findById(id);
 
-  res.json({
-    success: true,
-    message: "Return rejected",
-    data: request
-  });
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Return request not found"
+      });
+    }
 
+    if (request.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Return request already processed"
+      });
+    }
+
+    request.status = "rejected";
+    request.resolutionNote = resolutionNote;
+
+    await request.save();
+
+    res.json({
+      success: true,
+      message: "Return rejected",
+      data: request
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message
+    });
+  }
 };

@@ -3,12 +3,14 @@ const express = require("express");
 const router = express.Router();
 
 const returnController = require("../controllers/return.controller");
+const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
 
 
 /* CUSTOMER */
 
 router.post(
 "/create",
+authMiddleware,
 returnController.createReturnRequest
 );
 
@@ -17,18 +19,24 @@ returnController.createReturnRequest
 
 router.get(
 "/all",
+authMiddleware,
+adminOnly,
 returnController.getAllReturns
 );
 
 
 router.put(
 "/approve/:id",
+authMiddleware,
+adminOnly,
 returnController.approveReturn
 );
 
 
 router.put(
 "/reject/:id",
+authMiddleware,
+adminOnly,
 returnController.rejectReturn
 );
 
