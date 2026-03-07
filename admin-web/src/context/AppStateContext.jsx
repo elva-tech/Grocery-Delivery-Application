@@ -13,10 +13,6 @@ const AppStateContext = createContext();
 
 export const AppStateProvider = ({ children }) => {
 
-  /* ---------- LOADING + ERROR STATE ---------- */
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
   /* ---------- SETTINGS ---------- */
   const [appSettings, setAppSettings] = useState(() => {
     const saved = sessionStorage.getItem('app_settings');
@@ -39,6 +35,10 @@ export const AppStateProvider = ({ children }) => {
 
   const [orders, setOrders] = useState([]);
 
+  /* -------- LOADING + ERROR STATE -------- */
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
   const [riders, setRiders] = useState(() => {
     const saved = sessionStorage.getItem('app_riders');
     return saved ? JSON.parse(saved) : MOCK_RIDERS;
@@ -55,52 +55,50 @@ export const AppStateProvider = ({ children }) => {
   });
 
   /* ---------- FETCH ORDERS ---------- */
-  const fetchOrders = async () => {
-    try {
+  useEffect(() => {
+
+    const fetchOrders = async () => {
 
       setLoading(true);
       setError(null);
 
-      const data = await apiService.getOrders();
+      try {
 
-      const normalized = (data.orders || []).map(o => ({
-        ...o,
+        const data = await apiService.getOrders();
 
-        id: o._id,
-        status: o.orderStatus,
-        total: o.totalAmount,
-        date: o.createdAt,
+        const normalized = (data.orders || []).map(o => ({
+          ...o,
+          id: o._id,
+          status: o.orderStatus,
+          total: o.totalAmount,
+          date: o.createdAt,
+          assignment: o.riderName || "Pending",
+          customer: o.userId?.name || "Guest User",
+          address: {
+            full: o.deliveryAddress?.line1 || "No Address"
+          },
+          itemsText: (o.items || [])
+            .map(i => `${i.name} x${i.qty}`)
+            .join(", ")
+        }));
 
-        assignment: o.riderName || "Pending",
+        setOrders(normalized);
 
-        customer: o.userId?.name || "Guest User",
+      } catch (err) {
 
-        address: {
-          full: o.deliveryAddress?.line1 || "No Address"
-        },
+        console.error("Failed to fetch orders:", err);
+        setError("Failed to load orders");
 
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
-      }));
+      } finally {
 
-      setOrders(normalized);
+        setLoading(false);
 
-    } catch (err) {
+      }
 
-      console.error("Failed to fetch orders:", err);
+    };
 
-      setError("Unable to load orders. Please try again.");
-
-    } finally {
-
-      setLoading(false);
-
-    }
-  };
-
-  useEffect(() => {
     fetchOrders();
+
   }, []);
 
   /* ---------- SAVE STATE ---------- */
@@ -144,21 +142,31 @@ export const AppStateProvider = ({ children }) => {
 
     try {
 
-      setLoading(true);
-
       await apiService.updateOrderStatus(orderId, newStatus);
 
-      await fetchOrders();
+      const data = await apiService.getOrders();
 
-    } catch (err) {
+      const normalized = (data.orders || []).map(o => ({
+        ...o,
+        id: o._id,
+        status: o.orderStatus,
+        total: o.totalAmount,
+        date: o.createdAt,
+        assignment: o.riderName || "Pending",
+        customer: o.userId?.name || "Guest User",
+        address: {
+          full: o.deliveryAddress?.line1 || "No Address"
+        },
+        itemsText: (o.items || [])
+          .map(i => `${i.name} x${i.qty}`)
+          .join(", ")
+      }));
 
-      console.error("Update order failed:", err);
+      setOrders(normalized);
 
-      setError("Failed to update order status.");
+    } catch (error) {
 
-    } finally {
-
-      setLoading(false);
+      console.error("Update order failed:", error);
 
     }
 
@@ -167,6 +175,8 @@ export const AppStateProvider = ({ children }) => {
   return (
     <AppStateContext.Provider value={{
       appSettings,
+      loading,
+      error,
       updateSettings: (newSettings) =>
         setAppSettings(prev => ({ ...prev, ...newSettings })),
 
@@ -176,9 +186,6 @@ export const AppStateProvider = ({ children }) => {
       riders,
       banners,
       returns,
-
-      loading,
-      error,
 
       addProduct: p =>
         setProducts(prev => [...prev, { ...p, id: `p${Date.now()}` }]),
@@ -215,7 +222,13 @@ export const AppStateProvider = ({ children }) => {
 };
 
 export function useAppState() {
+
   const context = useContext(AppStateContext);
-  if (!context) throw new Error('useAppState must be used within an AppStateProvider');
+
+  if (!context) {
+    throw new Error('useAppState must be used within an AppStateProvider');
+  }
+
   return context;
+
 }
