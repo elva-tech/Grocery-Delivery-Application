@@ -16,7 +16,7 @@ const {
 /**
  * Customer API
  */
-router.get("/", getAvailableProducts);
+router.get("/", authMiddleware, getAvailableProducts);
 
 /**
  * Admin APIs

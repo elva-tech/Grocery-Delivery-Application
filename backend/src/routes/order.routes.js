@@ -8,14 +8,12 @@ const {
   getCustomerOrderHistory,
   markOrderDelivered,
   getCustomerOrderById,
-  getAllOrders,
-  getRevenue
+  getAllOrders
 } = require("../controllers/order.controller");
 
 router.post("/", authMiddleware, placeCustomerOrder);
 
 router.get("/", authMiddleware, getAllOrders);
-router.get("/revenue", authMiddleware, getRevenue);
 
 router.get("/my", authMiddleware, getCustomerOrderHistory);
 

@@ -80,9 +80,12 @@ const DashboardHome = () => {
   const stockOutCount = products.filter(p => p.stock === 0).length;
 
   // REVENUE
-  const totalRevenue = orders
-    .filter(o => o.status?.toUpperCase() !== 'CANCELLED')
-    .reduce((acc, curr) => acc + (curr.totalAmount || curr.total || 0), 0);
+  const totalRevenue = useMemo(() => {
+    return orders.reduce((acc, order) => {
+      if (order.status?.toUpperCase() === 'CANCELLED') return acc;
+      return acc + (order.totalAmount || order.total || 0);
+    }, 0);
+  }, [orders]);
   
   // FIXED STATUS MATCHING (Case Insensitive)
   const pendingActionsCount = orders.filter(o => 
