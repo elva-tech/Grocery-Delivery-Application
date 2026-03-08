@@ -72,9 +72,16 @@ const canAccessRider = async (req, res, next) => {
 // CHECK IF RIDER CAN BE ASSIGNED - Online status and active orders below threshold
 const canAssignRider = async (req, res, next) => {
   try {
-    const { riderId } = req.body;
+    // Debug log removed
+
+    let riderId = req.body.riderId;
+    if (!riderId) {
+      riderId = req.params.id;
+    }
+    // Debug log removed
 
     if (!riderId) {
+      // Debug log removed
       return res.status(400).json({
         success: false,
         message: "Rider ID required",
@@ -85,8 +92,10 @@ const canAssignRider = async (req, res, next) => {
       _id: riderId,
       tenantId: req.user.tenantId,
     });
+    // Debug log removed
 
     if (!rider) {
+      // Debug log removed
       return res.status(404).json({
         success: false,
         message: "Rider not found",
@@ -96,6 +105,7 @@ const canAssignRider = async (req, res, next) => {
     const MAX_ACTIVE_ORDERS = 5; // Configurable
 
     if (rider.status !== "Online") {
+      // Debug log removed
       return res.status(400).json({
         success: false,
         message: `Rider is ${rider.status}, cannot assign orders`,
@@ -103,6 +113,7 @@ const canAssignRider = async (req, res, next) => {
     }
 
     if (rider.activeOrders >= MAX_ACTIVE_ORDERS) {
+      // Debug log removed
       return res.status(400).json({
         success: false,
         message: `Rider has reached maximum active orders (${MAX_ACTIVE_ORDERS})`,
@@ -110,6 +121,7 @@ const canAssignRider = async (req, res, next) => {
     }
 
     if (!rider.isActive) {
+      // Debug log removed
       return res.status(400).json({
         success: false,
         message: "Rider is inactive",
@@ -118,6 +130,7 @@ const canAssignRider = async (req, res, next) => {
 
     // Attach rider to request for use in controller
     req.rider = rider;
+    // Debug log removed
     next();
   } catch (error) {
     console.error("canAssignRider error:", error);

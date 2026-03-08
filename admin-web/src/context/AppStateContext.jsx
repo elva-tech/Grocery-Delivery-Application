@@ -46,10 +46,62 @@ export const AppStateProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : MOCK_BANNERS;
   });
 
-  const [returns, setReturns] = useState(() => {
-    const saved = sessionStorage.getItem('app_returns');
-    return saved ? JSON.parse(saved) : (MOCK_RETURNS || []);
-  });
+  const [returns, setReturns] = useState([]);
+
+  // Fetch returns from backend
+  useEffect(() => {
+    const fetchReturns = async () => {
+      try {
+        const token = localStorage.getItem('jwtToken');
+        if (!token) return;
+        const data = await apiService.getAllReturns();
+        // Normalize for frontend usage
+        const normalized = (data.data || []).map(r => ({
+          id: r._id,
+          orderId: r.orderId?._id || r.orderId,
+          customerName: r.userId?.name || 'Unknown',
+          date: r.createdAt,
+          status: (r.status || '').toUpperCase(),
+          reason: r.reason,
+          amount: r.refundAmount,
+          comment: r.customerComment,
+          adminComment: r.resolutionNote,
+          evidence: r.evidence || '',
+        }));
+        setReturns(normalized);
+      } catch (err) {
+        setReturns([]);
+      }
+    };
+    fetchReturns();
+  }, []);
+  // Process return request (approve/reject)
+  const processReturnRequest = async (id, decision, resolutionNote) => {
+    try {
+      if (decision === 'APPROVE') {
+        await apiService.approveReturn(id, resolutionNote);
+      } else if (decision === 'REJECT') {
+        await apiService.rejectReturn(id, resolutionNote);
+      }
+      // Refresh returns after action
+      const data = await apiService.getAllReturns();
+      const normalized = (data.data || []).map(r => ({
+        id: r._id,
+        orderId: r.orderId?._id || r.orderId,
+        customerName: r.userId?.name || 'Unknown',
+        date: r.createdAt,
+        status: (r.status || '').toUpperCase(),
+        reason: r.reason,
+        amount: r.refundAmount,
+        comment: r.customerComment,
+        adminComment: r.resolutionNote,
+        evidence: r.evidence || '',
+      }));
+      setReturns(normalized);
+    } catch (err) {
+      alert('Failed to process return request.');
+    }
+  };
 
   /* ---------- FETCH ORDERS ---------- */
   useEffect(() => {
@@ -284,6 +336,7 @@ export const AppStateProvider = ({ children }) => {
       riders,
       banners,
       returns,
+      processReturnRequest,
 
       addProduct: p =>
         setProducts(prev => [...prev, { ...p, id: `p${Date.now()}` }]),
