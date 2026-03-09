@@ -112,5 +112,13 @@ export const apiService = {
 
     return res.data;
   },
+  /* -------- GET INVENTORY -------- */
+getInventory: async () => {
+
+  const res = await api.get("/api/admin/inventory");
+
+  return res.data;
+
+}
 
 };
