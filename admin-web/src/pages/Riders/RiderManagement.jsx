@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppState } from '../../context/AppStateContext';
+import { apiService } from '../../services/apiService';
 import { Bike, UserPlus, Search, Phone, Truck, Zap, X, AlertTriangle, Package, ExternalLink } from 'lucide-react';
 
 const RiderManagement = () => {
@@ -8,15 +9,48 @@ const RiderManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const [showWarning, setShowWarning] = useState(null); 
   const [viewTasks, setViewTasks] = useState(null); 
-  const [newRider, setNewRider] = useState({ name: '', phone: '', vehicle: 'Bike', status: 'Online' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [newRider, setNewRider] = useState({ name: '', phone: '', vehicle: 'Bike' });
+  const [localRiders, setLocalRiders] = useState(riders);
 
-  const filteredRiders = riders.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Refetch riders when component mounts to get latest data
+  useEffect(() => {
+    const refetchRiders = async () => {
+      try {
+        const data = await apiService.getRiders();
+        const normalized = (data.data?.riders || []).map(r => ({
+          ...r,
+          id: r._id,
+        }));
+        setLocalRiders(normalized);
+      } catch (error) {
+        console.error("Failed to refetch riders:", error);
+      }
+    };
 
-  const handleToggleClick = (rider) => {
+    refetchRiders();
+  }, []);
+
+  // Update local riders when context riders change
+  useEffect(() => {
+    setLocalRiders(riders);
+  }, [riders]);
+
+  const filteredRiders = localRiders.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const handleToggleClick = async (rider) => {
     if (rider.status === 'Online' && rider.activeOrders > 0) {
       setShowWarning(rider);
     } else {
-      toggleRiderStatus(rider.id);
+      setIsLoading(true);
+      try {
+        const newStatus = rider.status === 'Online' ? 'Offline' : 'Online';
+        await toggleRiderStatus(rider.id || rider._id, newStatus);
+      } catch (error) {
+        console.error("Failed to toggle rider status:", error);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -28,12 +62,29 @@ const RiderManagement = () => {
     );
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!newRider.name || !newRider.phone) return; 
-    addRider(newRider);
-    setShowModal(false);
-    setNewRider({ name: '', phone: '', vehicle: 'Bike', status: 'Online' });
+    if (!newRider.name || !newRider.phone) return;
+    
+    setIsLoading(true);
+    try {
+      await addRider(newRider);
+      
+      // Refetch local riders to show the newly added rider
+      const data = await apiService.getRiders();
+      const normalized = (data.data?.riders || []).map(r => ({
+        ...r,
+        id: r._id,
+      }));
+      setLocalRiders(normalized);
+      
+      setShowModal(false);
+      setNewRider({ name: '', phone: '', vehicle: 'Bike' });
+    } catch (error) {
+      console.error("Failed to add rider:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -43,7 +94,7 @@ const RiderManagement = () => {
           <h1 className="text-3xl font-black text-[#1A4D2E] tracking-tight">Delivery Partners</h1>
           <p className="text-gray-500 font-medium">Manage your fleet and live availability</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-[#1A4D2E] text-white px-6 py-3 rounded-2xl font-bold hover:scale-105 transition-all shadow-lg">
+        <button onClick={() => setShowModal(true)} disabled={isLoading} className="flex items-center gap-2 bg-[#1A4D2E] text-white px-6 py-3 rounded-2xl font-bold hover:scale-105 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
           <UserPlus size={20} /> Add New Partner
         </button>
       </div>
@@ -51,15 +102,15 @@ const RiderManagement = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
           <p className="text-gray-400 text-xs font-bold uppercase mb-1">Total Fleet</p>
-          <p className="text-3xl font-black text-slate-800">{riders.length}</p>
+          <p className="text-3xl font-black text-slate-800">{localRiders.length}</p>
         </div>
         <div className="bg-emerald-50 p-6 rounded-[24px] border border-emerald-100 shadow-sm">
           <p className="text-emerald-600 text-xs font-bold uppercase mb-1">Live Now</p>
-          <p className="text-3xl font-black text-emerald-700">{riders.filter(r => r.status === 'Online').length}</p>
+          <p className="text-3xl font-black text-emerald-700">{localRiders.filter(r => r.status === 'Online').length}</p>
         </div>
         <div className="bg-blue-50 p-6 rounded-[24px] border border-blue-100 shadow-sm">
           <p className="text-blue-600 text-xs font-bold uppercase mb-1">Active Tasks</p>
-          <p className="text-3xl font-black text-blue-700">{riders.reduce((acc, r) => acc + (r.activeOrders || 0), 0)}</p>
+          <p className="text-3xl font-black text-blue-700">{localRiders.reduce((acc, r) => acc + (r.activeOrders || 0), 0)}</p>
         </div>
       </div>
 
@@ -77,7 +128,7 @@ const RiderManagement = () => {
               <div className={`p-4 rounded-2xl ${rider.status === 'Online' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'}`}>
                 {rider.vehicle === 'Electric Van' ? <Truck size={28} /> : <Bike size={28} />}
               </div>
-              <button onClick={() => handleToggleClick(rider)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${rider.status === 'Online' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              <button onClick={() => handleToggleClick(rider)} disabled={isLoading} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all disabled:opacity-50 disabled:cursor-not-allowed ${rider.status === 'Online' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                 {rider.status === 'Online' ? 'Go Offline' : 'Go Online'}
               </button>
             </div>
@@ -175,7 +226,7 @@ const RiderManagement = () => {
                 <option value="Scooter">Scooter</option>
                 <option value="Electric Van">Electric Van</option>
               </select>
-              <button type="submit" className="w-full py-4 bg-[#1A4D2E] text-white rounded-2xl font-black shadow-lg">REGISTER PARTNER</button>
+              <button type="submit" disabled={isLoading} className="w-full py-4 bg-[#1A4D2E] text-white rounded-2xl font-black shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">{isLoading ? 'REGISTERING...' : 'REGISTER PARTNER'}</button>
             </form>
           </div>
         </div>

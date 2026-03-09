@@ -287,3 +287,179 @@ if (user.isActive === requestedState) {
     });
   }
 };
+
+
+//////////////////////////////////////////////////////////////
+// ADMIN DASHBOARD - ACTIVE ORDERS
+//////////////////////////////////////////////////////////////
+
+exports.getActiveOrders = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    const count = await Order.countDocuments({
+      tenantId,
+      orderStatus: { $in: ["PLACED", "CONFIRMED", "OUT_FOR_DELIVERY"] }
+    });
+
+    return res.status(200).json({
+      success: true,
+      activeOrders: count
+    });
+
+  } catch (error) {
+    console.error("Active Orders API error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch active orders"
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// ADMIN DASHBOARD - REVENUE (LAST N DAYS)
+//////////////////////////////////////////////////////////////
+
+exports.getRevenue = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    // Read days from query (default = 7)
+    let days = parseInt(req.query.days);
+
+
+    // Default value
+    if (isNaN(days)) {
+      days = 7;
+    }
+    
+    // Invalid values
+    if (days <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Days must be greater than 0"
+      });
+    }
+
+    // Max limit validation
+    if (days > 365) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum allowed range is 365 days"
+      });
+    }
+
+    // Calculate date range
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+
+    const toDate = new Date();
+    const today = new Date();
+    const dateMap = {};
+    
+    // Step 1: Aggregate revenue
+    const revenueData = await Order.aggregate([
+      {
+        $match: {
+          tenantId,
+          paymentStatus: "PAID",
+          createdAt: {
+            $gte: fromDate,
+            $lte: toDate
+          }
+        }
+      },
+      {
+        $group: {
+           _id: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$createdAt",
+              timezone: "Asia/Kolkata"
+            }
+          },
+          totalRevenue: { $sum: "$totalAmount" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          revenue: { $round: ["$totalRevenue", 2] }
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+
+    // Step 2: Convert to map
+    revenueData.forEach(item => {
+      dateMap[item.date] = item.revenue;
+    });
+
+    // Format revenue to 2 decimal places
+    revenueData.forEach(item => {
+      item.revenue = Number(item.revenue.toFixed(2));
+    });
+
+    // Step 3: Build full day list
+    const dailyRevenue = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+
+      const dateStr = d.toISOString().split("T")[0];
+
+      dailyRevenue.push({
+        date: dateStr,
+        revenue: dateMap[dateStr] || 0
+      });
+    }
+
+    // Step 4: Calculate total
+    const totalRevenue = Number(
+      revenueData.reduce((sum, item) => sum + item.revenue, 0).toFixed(2)
+    );
+    
+    
+    return res.status(200).json({
+      success: true,
+      days,
+      totalRevenue,
+      dailyRevenue
+    });
+  } catch (error) {
+    console.error("Revenue API error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch revenue"
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// ADMIN DASHBOARD - PENDING ORDERS
+//////////////////////////////////////////////////////////////
+
+exports.getPendingOrders = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    const count = await Order.countDocuments({
+      tenantId,
+      orderStatus: "PLACED"
+    });
+
+    return res.status(200).json({
+      success: true,
+      pendingOrders: count
+    });
+
+  } catch (error) {
+    console.error("Pending Orders API error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending orders"
+    });
+  }
+};

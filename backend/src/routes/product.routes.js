@@ -2,21 +2,24 @@ const express = require("express");
 const router = express.Router();
 
 const {
+  authMiddleware,
+  adminOnly
+} = require("../middleware/auth.middleware");
+
+const {
   addProduct,
   updateProductFromAdmin,
   getAvailableProducts
+ 
 } = require("../controllers/product.controller");
 
-const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
-
 /**
- * ✅ Customer API (PUBLIC)
- * GET /api/products
+ * Customer API
  */
 router.get("/", getAvailableProducts);
 
 /**
- * 🔐 Admin APIs
+ * Admin APIs
  */
 router.post(
   "/admin/products",
@@ -31,5 +34,6 @@ router.put(
   adminOnly,
   updateProductFromAdmin
 );
+
 
 module.exports = router;
