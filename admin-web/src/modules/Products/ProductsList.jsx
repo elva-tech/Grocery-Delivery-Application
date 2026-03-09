@@ -198,22 +198,28 @@ const ProductList = () => {
   try {
 
     const payload = {
-      name: v.name,
-      parentCategoryId: v.parentCategoryId,
-      subCategoryId: v.subCategoryId,
-      price: Number(v.price),
-      unit: v.unit,
-      imageUrl: v.image?.[0] || ""
-    };
+  name: v.name,
+  category: v.subCategoryId,
+  price: Number(v.price),
+  unit: v.unit,
+  imageUrl: ""
+};
 
     if (editingItem) {
       updateProduct(editingItem.id, payload);
     } else {
       const newProduct = await apiService.addProduct(payload);
 
-      if (newProduct) {
-        addProduct(newProduct);
-      }
+   if (newProduct) {
+  addProduct({
+    ...newProduct,
+    name: v.name,
+    price: Number(v.price),
+    stock: Number(v.stock),
+    parentCategoryId: v.parentCategoryId,
+    subCategoryId: v.subCategoryId
+  });
+}
     }
 
     setShowForm(false);
