@@ -1,4 +1,6 @@
 const Banner = require("../models/Banner.model");
+const User = require("../models/User.model");
+
 
 /**
  * CREATE BANNER
@@ -6,13 +8,20 @@ const Banner = require("../models/Banner.model");
 exports.createBanner = async (req, res) => {
   try {
 
-    const { title } = req.body;
+    const { title } = req.body; 
 
     const image = req.file.path;
+    const tenantId = req.user?.tenantId;
+    const userId = req.user?.userId;
+
+    // fetch full user from DB
+    const user = await User.findById(req.user.userId);
 
     const banner = new Banner({
       title,
-      image
+      image,
+      tenantId,
+      userId
     });
 
     await banner.save();
@@ -39,7 +48,12 @@ exports.getBanners = async (req, res) => {
 
   try {
 
-    const banners = await Banner.find({ isActive: true });
+    const tenantId = req.user.tenantId;
+
+    const banners = await Banner.find({ 
+      tenantId: req.user.tenantId,
+      isActive: true 
+    });
 
     res.json({
       success: true,

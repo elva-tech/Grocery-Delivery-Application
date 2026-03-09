@@ -11,6 +11,16 @@ const BannerSchema = new mongoose.Schema(
     type: String,
     required: true
   },
+  
+  tenantId: {
+    type: String,
+    required: true,
+  }, 
+    
+  userId: {
+    type: String,
+    required: true,
+  },
 
   isActive: {
     type: Boolean,

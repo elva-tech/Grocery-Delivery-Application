@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 
+
 // Import auth middleware
 const { authMiddleware } = require("./middleware/auth.middleware");
 
@@ -43,8 +44,8 @@ app.use(authMiddleware);
 // Protected route registrations
 app.use("/api/orders", orderRoutes);
 app.use("/api/riders", riderRoutes);
-app.use("/api/admin", adminRoutes);
+app.use("/api/admin",  adminRoutes);
 app.use("/api/returns", returnRoutes);
-app.use("/api/banners", bannerRoutes);
+app.use("/api/banners",  bannerRoutes);
 
 module.exports = app;
