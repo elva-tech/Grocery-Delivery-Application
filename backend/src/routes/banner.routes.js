@@ -25,5 +25,11 @@ router.get(
   bannerController.getBanners
 );
 
+router.delete(
+  "/delete-banner/:id",
+  authMiddleware,
+  bannerController.deleteBanner
+);
+
 
 module.exports = router;
