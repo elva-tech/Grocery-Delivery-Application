@@ -428,8 +428,10 @@ exports.assignOrderToRider = async (req, res) => {
     const { id } = req.params;
     const { orderId } = req.body;
     const tenantId = req.user.tenantId;
+    // Debug log removed
 
     if (!orderId) {
+      console.log("[ASSIGN RIDER] Missing orderId");
       return res.status(400).json({
         success: false,
         message: "Order ID is required",
@@ -437,6 +439,7 @@ exports.assignOrderToRider = async (req, res) => {
     }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log("[ASSIGN RIDER] Invalid rider ID:", id);
       return res.status(400).json({
         success: false,
         message: "Invalid rider ID",
@@ -448,7 +451,9 @@ exports.assignOrderToRider = async (req, res) => {
       id,
       tenantId
     );
+    // Debug log removed
     if (!availability.available) {
+      // Debug log removed
       return res.status(400).json({
         success: false,
         message: availability.reason,
@@ -460,8 +465,10 @@ exports.assignOrderToRider = async (req, res) => {
       _id: orderId,
       tenantId,
     });
+    // Debug log removed
 
     if (!order) {
+      // Debug log removed
       return res.status(404).json({
         success: false,
         message: "Order not found",
@@ -469,6 +476,7 @@ exports.assignOrderToRider = async (req, res) => {
     }
 
     if (order.orderStatus !== "CONFIRMED") {
+      // Debug log removed
       return res.status(400).json({
         success: false,
         message: "Only CONFIRMED orders can be assigned",
@@ -479,6 +487,7 @@ exports.assignOrderToRider = async (req, res) => {
     const { updatedOrder, updatedRider } =
       await riderService.assignOrderToRider(orderId, id, tenantId);
 
+    // Debug log removed
     return res.status(200).json({
       success: true,
       message: "Order assigned to rider successfully",

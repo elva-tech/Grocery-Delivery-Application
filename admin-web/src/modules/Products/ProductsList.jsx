@@ -6,6 +6,7 @@ import ProductForm from './ProductForm';
 import CategoryForm from './CategoryForm';
 import { Plus, Edit, Trash2, Search, FolderPlus, Package, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
+import { apiService } from '../../services/apiService';
 
 const ProductList = () => {
   const { products, categories, addProduct, updateProduct, deleteProduct, addCategory } = useAppState();
@@ -23,7 +24,7 @@ const ProductList = () => {
     if (Array.isArray(imgData)) return imgData[0];
     return imgData;
   };
-
+  
   const mainPillars = useMemo(() => categories.filter(c => !c.parentId), [categories]);
   const subCategories = useMemo(() => 
     categories.filter(c => String(c.parentId) === String(activePillarId)), 
@@ -44,7 +45,7 @@ const ProductList = () => {
       header: 'Product', 
       accessor: 'name',
       render: (val, row) => {
-        const displayImg = getImageUrl(row.images || row.image);
+       const displayImg = getImageUrl(row.imageUrl || row.images || row.image);
         const subCat = categories.find(c => String(c.id) === String(row.subCategoryId));
         const pillar = categories.find(c => String(c.id) === String(row.parentCategoryId));
 
@@ -193,11 +194,41 @@ const ProductList = () => {
         <ProductForm 
           initialValues={editingItem} 
           onCancel={() => { setShowForm(false); setEditingItem(null); }} 
-          onSubmit={(v) => {
-            editingItem ? updateProduct(editingItem.id, v) : addProduct({ ...v, id: Date.now() });
-            setShowForm(false);
-            setEditingItem(null);
-          }} 
+      onSubmit={async (v) => {
+  try {
+
+    const payload = {
+  name: v.name,
+  category: v.subCategoryId,
+  price: Number(v.price),
+  unit: v.unit,
+  imageUrl: ""
+};
+
+    if (editingItem) {
+      updateProduct(editingItem.id, payload);
+    } else {
+      const newProduct = await apiService.addProduct(payload);
+
+   if (newProduct) {
+  addProduct({
+    ...newProduct,
+    name: v.name,
+    price: Number(v.price),
+    stock: Number(v.stock),
+    parentCategoryId: v.parentCategoryId,
+    subCategoryId: v.subCategoryId
+  });
+}
+    }
+
+    setShowForm(false);
+    setEditingItem(null);
+
+  } catch (error) {
+    alert(error.response?.data?.message || "Error adding product");
+  }
+}}
         />
       ) : (
         <DataTable 
