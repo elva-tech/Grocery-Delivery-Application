@@ -365,10 +365,10 @@ const getInventory = async (req, res) => {
       { $sort: { name: 1 } }
     ]);
 
-      return res.status(200).json({
-      success: true,
-      inventory
-    });
+     return res.status(200).json({
+  success: true,
+  data: inventory
+});
 
   } catch (error) {
     console.error("Error in getInventory:", error);

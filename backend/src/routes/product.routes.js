@@ -35,5 +35,4 @@ router.put(
   updateProductFromAdmin
 );
 
-
 module.exports = router;
