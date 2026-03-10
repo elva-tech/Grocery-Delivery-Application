@@ -24,7 +24,7 @@ useEffect(() => {
       console.log("Inventory API:", res);
 
       if (res.success) {
-        setInventory(res.inventory);
+        setInventory(res.data);
       } else {
         setInventory([]);
       }
