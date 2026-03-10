@@ -1,32 +1,49 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
+import { apiService } from '../services/apiService';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  // 1. Initialize from LocalStorage so reload doesn't logout
+
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('freshroot_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  const login = (credentials) => {
-    if (credentials.email === 'admin@test.com' && credentials.password === 'admin123') {
-      const userData = { name: 'System Admin', role: 'admin' };
+  const login = async (phoneNumber, otp) => {
+    try {
+      const response = await apiService.verifyOtp(phoneNumber, otp);
       
-      // 2. Save to state AND LocalStorage
-      setUser(userData);
-      localStorage.setItem('freshroot_user', JSON.stringify(userData));
-      return true;
+      if (response.success && response.token) {
+        const userData = {
+          id: response.user.id,
+          phoneNumber: response.user.phoneNumber,
+          role: response.user.role,
+          tenantId: response.user.tenantId,
+        };
+
+        setUser(userData);
+        localStorage.setItem('freshroot_user', JSON.stringify(userData));
+        localStorage.setItem('jwtToken', response.token);
+
+        return { success: true, user: userData };
+      }
+
+      return { success: false, message: response.message || "Login failed" };
+    } catch (error) {
+      console.error("Login error:", error);
+      return { success: false, message: error.message || "Login failed" };
     }
-    return false;
   };
 
   const logout = () => {
-    // 3. Clear both on logout
+
     setUser(null);
+
     localStorage.removeItem('freshroot_user');
-    // Optional: Force clear session to ensure redirect
-    window.location.href = '/login'; 
+    localStorage.removeItem('jwtToken');
+
+    window.location.href = '/login';
   };
 
   return (
@@ -37,9 +54,12 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => {
+
   const context = useContext(AuthContext);
+
   if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
+
   return context;
 };

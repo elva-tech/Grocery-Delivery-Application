@@ -9,16 +9,13 @@ const addProduct = async (req, res) => {
     const { name, category, price, unit, stocks, stock, imageUrl } = req.body;
 
     if (req.user.role !== "ADMIN") {
-      return res.status(403).json({
-        message: "Access denied. Admin only."
-      });
+      return res.status(403).json({ message: "Access denied. Admin only." });
     }
 
     const tenantId = req.user.tenantId;
 
     const finalPrice = Number(price);
     let finalStocks = Number(stocks ?? stock);
-
     if (isNaN(finalStocks)) finalStocks = 0;
 
     const missingFields = [];
@@ -34,17 +31,12 @@ const addProduct = async (req, res) => {
     }
 
     if (isNaN(finalPrice) || finalPrice <= 0) {
-      return res.status(400).json({
-        message: "Price must be a positive number"
-      });
+      return res.status(400).json({ message: "Price must be a positive number" });
     }
 
     const existingProduct = await Product.findOne({ tenantId, name });
-
     if (existingProduct) {
-      return res.status(409).json({
-        message: "Product with this name already exists"
-      });
+      return res.status(409).json({ message: "Product with this name already exists" });
     }
 
     const product = await Product.create({
@@ -82,44 +74,27 @@ const updateProductFromAdmin = async (req, res) => {
     const { id } = req.params;
 
     if (req.user.role !== "ADMIN") {
-      return res.status(403).json({
-        message: "Access denied. Admin only."
-      });
+      return res.status(403).json({ message: "Access denied. Admin only." });
     }
 
     const tenantId = req.user.tenantId;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid product ID"
-      });
+      return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    const allowedFields = [
-      "name",
-      "price",
-      "category",
-      "unit",
-      "imageUrl"
-    ];
-
+    const allowedFields = ["name", "price", "category", "unit", "imageUrl"];
     const updateData = {};
 
     allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) {
-        updateData[field] = req.body[field];
-      }
+      if (req.body[field] !== undefined) updateData[field] = req.body[field];
     });
 
     if (updateData.price !== undefined) {
       const priceNum = Number(updateData.price);
-
       if (isNaN(priceNum) || priceNum <= 0) {
-        return res.status(400).json({
-          message: "Price must be a positive number"
-        });
+        return res.status(400).json({ message: "Price must be a positive number" });
       }
-
       updateData.price = priceNum;
     }
 
@@ -127,11 +102,8 @@ const updateProductFromAdmin = async (req, res) => {
     const finalStocks = Number(stocks ?? stock);
 
     const product = await Product.findOne({ _id: id, tenantId });
-
     if (!product) {
-      return res.status(404).json({
-        message: "Product not found"
-      });
+      return res.status(404).json({ message: "Product not found" });
     }
 
     Object.assign(product, updateData);
@@ -159,9 +131,7 @@ const updateProductFromAdmin = async (req, res) => {
 
   } catch (error) {
     console.error("Update Product Error:", error);
-    res.status(500).json({
-      message: "Internal server error"
-    });
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -176,23 +146,17 @@ const getAvailableProducts = async (req, res) => {
     const tenantId = req.headers["x-tenant-id"]?.trim();
 
     if (!tenantId) {
-      return res.status(400).json({
-        message: "Tenant ID missing"
-      });
+      return res.status(400).json({ message: "Tenant ID missing" });
     }
 
     const matchStage = {
       tenantId,
       isAvailable: true,
-      $or: [
-        { isActive: true },
-        { isActive: { $exists: false } }
-      ]
+      $or: [{ isActive: true }, { isActive: { $exists: false } }]
     };
 
     if (category) {
       const safeCategory = escapeRegex(category);
-
       matchStage.category = {
         $regex: `^${safeCategory}$`,
         $options: "i"
@@ -201,7 +165,6 @@ const getAvailableProducts = async (req, res) => {
 
     const products = await Product.aggregate([
       { $match: matchStage },
-
       {
         $lookup: {
           from: "inventories",
@@ -210,15 +173,8 @@ const getAvailableProducts = async (req, res) => {
           as: "inventory"
         }
       },
-
       { $unwind: "$inventory" },
-
-      {
-        $match: {
-          "inventory.availableQty": { $gt: 0 }
-        }
-      },
-
+      { $match: { "inventory.availableQty": { $gt: 0 } } },
       {
         $project: {
           _id: 0,
@@ -231,20 +187,14 @@ const getAvailableProducts = async (req, res) => {
           availableQty: "$inventory.availableQty"
         }
       },
-
       { $sort: { name: 1 } }
     ]);
 
-    return res.status(200).json({
-      products
-    });
+    return res.status(200).json({ products });
 
   } catch (error) {
     console.error("Get Products Error:", error);
-
-    return res.status(500).json({
-      message: "Internal server error"
-    });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -255,36 +205,22 @@ const deleteProductFromAdmin = async (req, res) => {
     const { id } = req.params;
 
     if (!req.user || req.user.role !== "ADMIN") {
-      return res.status(403).json({
-        message: "Access denied. Admin only."
-      });
+      return res.status(403).json({ message: "Access denied. Admin only." });
     }
 
     const tenantId = req.user.tenantId;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid product ID"
-      });
+      return res.status(400).json({ message: "Invalid product ID" });
     }
 
     const product = await Product.findOne({ _id: id, tenantId });
-
     if (!product) {
-      return res.status(404).json({
-        message: "Product not found"
-      });
+      return res.status(404).json({ message: "Product not found" });
     }
 
-    await Inventory.deleteMany({
-      tenantId,
-      productId: id
-    });
-
-    await Product.deleteOne({
-      _id: id,
-      tenantId
-    });
+    await Inventory.deleteMany({ tenantId, productId: id });
+    await Product.deleteOne({ _id: id, tenantId });
 
     return res.status(200).json({
       message: "Product and inventory deleted successfully"
@@ -292,10 +228,7 @@ const deleteProductFromAdmin = async (req, res) => {
 
   } catch (error) {
     console.error("Delete Product Error:", error);
-
-    return res.status(500).json({
-      message: "Internal server error"
-    });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 

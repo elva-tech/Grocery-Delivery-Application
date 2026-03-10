@@ -15,8 +15,6 @@ import ReturnManagement from './modules/Orders/ReturnManagement';
 
 // Create a helper component to handle the conditional logic inside the Router
 const AppRoutes = () => {
-  const { appSettings } = useAppState();
-
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -30,11 +28,7 @@ const AppRoutes = () => {
         {/* PROTECTED RETURN ROUTE: Redirects to home if disabled */}
         <Route 
           path="/returns" 
-          element={
-            appSettings.allowRefunds 
-              ? <ReturnManagement /> 
-              : <Navigate to="/" replace />
-          } 
+          element={<ReturnManagementWrapper />} 
         />
 
         <Route path="/banners" element={<BannerManagement />} />
@@ -43,6 +37,17 @@ const AppRoutes = () => {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
+};
+
+// Wrapper component that uses AppState context only when rendered
+const ReturnManagementWrapper = () => {
+  const { appSettings } = useAppState();
+  
+  if (!appSettings.allowRefunds) {
+    return <Navigate to="/" replace />;
+  }
+  
+  return <ReturnManagement />;
 };
 
 function App() {
