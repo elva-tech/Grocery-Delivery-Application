@@ -7,29 +7,33 @@ import { TrendingUp, ShoppingBag, FileText, Search, X, Download } from 'lucide-r
 
 const ReportsPage = () => {
   const { orders } = useAppState();
-const [inventory, setInventory] = useState([]);
+
   const [activeTab, setActiveTab] = useState('REVENUE');
   const [searchTerm, setSearchTerm] = useState('');
+
+const [inventory, setInventory] = useState([]);
+const [loading, setLoading] = useState(false);
 
 useEffect(() => {
   const fetchInventory = async () => {
     try {
+      setLoading(true);
+
       const res = await apiService.getInventory();
 
       console.log("Inventory API:", res);
 
-      const inventoryData =
-        Array.isArray(res)
-          ? res
-          : Array.isArray(res.data)
-          ? res.data
-          : Array.isArray(res.inventory)
-          ? res.inventory
-          : [];
+      if (res.success) {
+        setInventory(res.inventory);
+      } else {
+        setInventory([]);
+      }
 
-      setInventory(inventoryData);
     } catch (err) {
       console.error("Inventory error:", err);
+      setInventory([]);
+    } finally {
+      setLoading(false);
     }
   };
 
