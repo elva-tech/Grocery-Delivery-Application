@@ -127,7 +127,7 @@ export const AppStateProvider = ({ children }) => {
           status: o.orderStatus,
           total: o.totalAmount,
           date: o.createdAt,
-          assignment: o.riderName || "Pending",
+          assignment: o.riderId?.name || o.riderName || "Pending",
           customer: o.userId?.name || "Guest User",
           address: {
             full: o.deliveryAddress?.line1 || "No Address"
@@ -269,7 +269,7 @@ export const AppStateProvider = ({ children }) => {
         status: o.orderStatus,
         total: o.totalAmount,
         date: o.createdAt,
-        assignment: o.riderName || "Pending",
+        assignment: o.riderId?.name || o.riderName || "Pending",
         customer: o.userId?.name || "Guest User",
         address: {
           full: o.deliveryAddress?.line1 || "No Address"

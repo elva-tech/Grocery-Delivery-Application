@@ -9,10 +9,15 @@ const ReportsPage = () => {
   const [activeTab, setActiveTab] = useState('REVENUE');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. TOTAL REVENUE - FIXED: Now looks for totalAmount from Mock Data
+  // 1. TOTAL REVENUE - FIXED: Now matches Dashboard (only PAID orders, exclude CANCELLED)
   const totalRevenue = useMemo(() => {
     return (orders || [])
-      .filter(o => o.status?.toUpperCase() !== 'CANCELLED')
+      .filter(o => {
+        const status = o.status?.toUpperCase();
+        const paymentStatus = o.paymentStatus?.toUpperCase();
+        // Only count PAID and non-CANCELLED orders (matching Dashboard calculation)
+        return paymentStatus === 'PAID' && status !== 'CANCELLED';
+      })
       .reduce((sum, order) => sum + (Number(order.totalAmount || order.total) || 0), 0);
   }, [orders]);
 
