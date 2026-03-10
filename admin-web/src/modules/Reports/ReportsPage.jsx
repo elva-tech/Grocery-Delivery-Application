@@ -1,13 +1,44 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import DataTable from '../../components/shared/DataTable';
+import { apiService } from '../../services/apiService';
 import CustomButton from '../../components/shared/CustomButton';
 import { TrendingUp, ShoppingBag, FileText, Search, X, Download } from 'lucide-react';
 
 const ReportsPage = () => {
-  const { orders, products } = useAppState();
+  const { orders } = useAppState();
+
   const [activeTab, setActiveTab] = useState('REVENUE');
   const [searchTerm, setSearchTerm] = useState('');
+
+const [inventory, setInventory] = useState([]);
+const [loading, setLoading] = useState(false);
+
+useEffect(() => {
+  const fetchInventory = async () => {
+    try {
+      setLoading(true);
+
+      const res = await apiService.getInventory();
+
+      console.log("Inventory API:", res);
+
+      if (res.success) {
+        setInventory(res.data);
+      } else {
+        setInventory([]);
+      }
+
+    } catch (err) {
+      console.error("Inventory error:", err);
+      setInventory([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchInventory();
+}, []);
 
   // 1. TOTAL REVENUE - FIXED: Now matches Dashboard (only PAID orders, exclude CANCELLED)
   const totalRevenue = useMemo(() => {
@@ -68,14 +99,14 @@ const ReportsPage = () => {
       }));
   }, [orders]);
 
-  const inventoryReport = useMemo(() => {
-    return (products || []).map(p => ({
-      item: p.name,
-      stock: p.stock,
-      price: `₹${p.price}`,
-      status: p.stock < 10 ? 'RESTOCK SOON' : 'HEALTHY'
-    }));
-  }, [products]);
+ const inventoryReport = useMemo(() => {
+  return (inventory || []).map(p => ({
+    item: p.name,
+    stock: p.availableQty,
+    price: `₹${p.price}`,
+    status: p.availableQty < p.thresholdQty ? "RESTOCK SOON" : "HEALTHY"
+  }));
+}, [inventory]);
 
   const getFilteredData = () => {
     const currentData = activeTab === 'REVENUE' ? revenueData : 

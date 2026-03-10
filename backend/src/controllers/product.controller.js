@@ -231,6 +231,61 @@ const deleteProductFromAdmin = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+const getInventory = async (req, res) => {
+  try {
+    // 🔐 Admin check
+    if (!req.user || req.user.role !== "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Admin only."
+      });
+    }
+
+    const tenantId = req.user.tenantId;
+
+    // Fetch inventory with product details
+    const inventory = await Inventory.aggregate([
+      {
+        $match: { tenantId }
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "productId",
+          foreignField: "_id",
+          as: "product"
+        }
+      },
+      { $unwind: "$product" },
+      {
+        $project: {
+          _id: 0,
+          productId: "$product._id",
+          name: "$product.name",
+          category: "$product.category",
+          price: "$product.price",
+          unit: "$product.unit",
+          availableQty: 1,
+          thresholdQty: 1
+        }
+      },
+      { $sort: { name: 1 } }
+    ]);
+
+     return res.status(200).json({
+  success: true,
+  data: inventory
+});
+
+  } catch (error) {
+    console.error("Error in getInventory:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+};
 
 /* ================= EXPORTS ================= */
 
@@ -238,5 +293,7 @@ module.exports = {
   addProduct,
   updateProductFromAdmin,
   getAvailableProducts,
-  deleteProductFromAdmin
+  deleteProductFromAdmin,
+  getInventory
 };
+

@@ -117,4 +117,17 @@ export const apiService = {
     });
     return res.data;
   },
+
+  /* -------- GET INVENTORY -------- */
+/* -------- GET INVENTORY -------- */
+getInventory: async () => {
+  try {
+    const res = await api.get("/api/admin/inventory");
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+}
+
 };
+

@@ -12,7 +12,8 @@ const {
 } = require("../controllers/admin.controller");
 
 const {
-  deleteProductFromAdmin
+  deleteProductFromAdmin,
+  getInventory
 } = require("../controllers/product.controller");
 
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
@@ -103,6 +104,13 @@ router.delete(
   authMiddleware,
   adminOnly,
   deleteProductFromAdmin
+);
+
+router.get(
+  "/inventory",
+  authMiddleware,
+  adminOnly,
+  getInventory
 );
 
 module.exports = router;
