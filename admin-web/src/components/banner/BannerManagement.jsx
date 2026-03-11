@@ -161,7 +161,7 @@ const BannerManagement = () => {
               >
 
                 <img
-                  src={`http://localhost:5000/${b.image}`}
+                  src={`${import.meta.env.VITE_API_URL}/${b.image}`}
                   className="w-32 h-20 rounded-2xl object-cover shadow-inner"
                   alt={b.title}
                 />
