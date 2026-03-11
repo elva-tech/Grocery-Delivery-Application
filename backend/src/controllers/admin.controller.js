@@ -54,7 +54,8 @@ exports.getAllOrdersForAdmin = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("userId", "name email");
+      .populate("userId", "name email")
+      .populate("riderId", "name phone");
 
     const totalOrders = await Order.countDocuments(query);
     const totalPages = Math.ceil(totalOrders / limit);

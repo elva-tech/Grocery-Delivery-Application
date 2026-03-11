@@ -257,13 +257,32 @@ exports.getAllOrders = async (req, res) => {
 
     const tenantId = req.user.tenantId;
 
+    // ✅ FIXED: Include riderId and populate rider name
     const orders = await Order.find({ tenantId })
+      .populate("riderId", "name")
       .sort({ createdAt: -1 })
-      .select("totalAmount orderStatus paymentStatus createdAt userId");
+      .select("totalAmount orderStatus paymentStatus createdAt userId riderId items deliveryAddress");
+
+    // Map orders to include riderName for frontend
+    const mappedOrders = orders.map(order => {
+      const riderName = order.riderId?.name || null;
+      return {
+        _id: order._id,
+        totalAmount: order.totalAmount,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+        createdAt: order.createdAt,
+        userId: order.userId,
+        riderId: order.riderId?._id,
+        riderName: riderName,  // ✅ Include rider name
+        items: order.items,
+        deliveryAddress: order.deliveryAddress
+      };
+    });
 
     res.status(200).json({
       message: "Orders fetched successfully",
-      orders
+      orders: mappedOrders
     });
 
   } catch (error) {

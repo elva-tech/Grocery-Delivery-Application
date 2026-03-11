@@ -35,13 +35,29 @@ exports.getAllRiders = async (req, res) => {
       .skip(skip)
       .limit(limitNum);
 
+    // ✅ FIXED: Calculate activeOrders dynamically for each rider
+    const Order = require("../models/Order.model");
+    const ridersWithActiveOrders = await Promise.all(
+      riders.map(async (rider) => {
+        const activeCount = await Order.countDocuments({
+          tenantId,
+          riderId: rider._id,
+          orderStatus: { $in: ["ASSIGNED", "OUT_FOR_DELIVERY", "PICKED_UP"] }
+        });
+        
+        const riderObj = rider.toObject ? rider.toObject() : rider;
+        riderObj.activeOrders = activeCount;
+        return riderObj;
+      })
+    );
+
     const total = await Rider.countDocuments(query);
     const totalPages = Math.ceil(total / limitNum);
 
     return res.status(200).json({
       success: true,
       data: {
-        riders,
+        riders: ridersWithActiveOrders,
         pagination: {
           page: pageNum,
           limit: limitNum,

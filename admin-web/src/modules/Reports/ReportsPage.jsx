@@ -3,7 +3,7 @@ import { useAppState } from '../../context/AppStateContext';
 import DataTable from '../../components/shared/DataTable';
 import { apiService } from '../../services/apiService';
 import CustomButton from '../../components/shared/CustomButton';
-import { TrendingUp, ShoppingBag, FileText, Search, X, Download } from 'lucide-react';
+import { TrendingUp, ShoppingBag, FileText, Search, X, Download, Loader } from 'lucide-react';
 
 const ReportsPage = () => {
   const { orders } = useAppState();
@@ -153,7 +153,16 @@ useEffect(() => {
 
   return (
     <div className="space-y-6 pb-10">
-      <div className="bg-[#1A4D2E] text-white p-8 rounded-[32px] shadow-lg flex justify-between items-center">
+      {loading ? (
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center space-y-4">
+            <Loader className="w-12 h-12 text-emerald-500 animate-spin mx-auto" />
+            <p className="text-slate-600 font-semibold">Loading reports...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="bg-[#1A4D2E] text-white p-8 rounded-[32px] shadow-lg flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-black">Total Revenue: ₹{totalRevenue.toLocaleString('en-IN')}</h1>
           <p className="text-green-200/60 text-sm mt-1">Confirmed earnings excluding cancelled orders.</p>
@@ -187,9 +196,11 @@ useEffect(() => {
         </div>
       </div>
 
-      <div className="bg-white p-8 rounded-[32px] border shadow-sm">
-        <DataTable columns={reportConfigs[activeTab].columns} data={getFilteredData()} />
-      </div>
+          <div className="bg-white p-8 rounded-[32px] border shadow-sm">
+            <DataTable columns={reportConfigs[activeTab].columns} data={getFilteredData()} />
+          </div>
+        </>
+      )}
     </div>
   );
 };

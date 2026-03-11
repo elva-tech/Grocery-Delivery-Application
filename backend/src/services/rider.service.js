@@ -180,6 +180,13 @@ exports.calculateRiderStats = async (riderId, tenantId) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // ✅ FIXED: Calculate activeOrders dynamically from database instead of stored field
+    const activeOrdersCount = await Order.countDocuments({
+      tenantId,
+      riderId,
+      orderStatus: { $in: ["ASSIGNED", "OUT_FOR_DELIVERY", "PICKED_UP"] }
+    });
+
     const todayStats = await Order.aggregate([
       {
         $match: {
@@ -202,7 +209,7 @@ exports.calculateRiderStats = async (riderId, tenantId) => {
       totalDeliveries: rider.totalDeliveries,
       totalEarnings: rider.totalEarnings,
       averageRating: rider.averageRating,
-      activeOrders: rider.activeOrders,
+      activeOrders: activeOrdersCount,  // ✅ Now calculated dynamically
       status: rider.status,
       todayDeliveries: todayStats[0]?.todayDeliveries || 0,
       todayEarnings: todayStats[0]?.todayEarnings || 0,
@@ -257,10 +264,18 @@ exports.updateRiderStatus = async (riderId, tenantId, newStatus) => {
       throw new Error("Invalid status value");
     }
 
+    // ✅ FIXED: Calculate actual active orders dynamically instead of using stored field
+    const Order = require("../models/Order.model");
+    const actualActiveOrders = await Order.countDocuments({
+      tenantId,
+      riderId: rider._id,
+      orderStatus: { $in: ["ASSIGNED", "OUT_FOR_DELIVERY", "PICKED_UP"] }
+    });
+
     // Validation: Cannot go offline with active orders
-    if (newStatus === "Offline" && rider.activeOrders > 0) {
+    if (newStatus === "Offline" && actualActiveOrders > 0) {
       throw new Error(
-        `Cannot go offline with ${rider.activeOrders} active order(s)`
+        `Cannot go offline with ${actualActiveOrders} active order(s)`
       );
     }
 

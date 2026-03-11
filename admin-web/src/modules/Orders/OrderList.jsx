@@ -4,11 +4,11 @@ import DataTable from '../../components/shared/DataTable';
 import {
   Bike, CheckCircle, PackageCheck, Truck, X, User, CheckCircle2,
   Eye, Phone, Smartphone, Hash, MapPin, MapPinned, ShoppingBag,
-  XCircle, AlertTriangle, UserPlus, AlertCircle, Image as ImageIcon
+  XCircle, AlertTriangle, UserPlus, AlertCircle, Image as ImageIcon, Loader
 } from 'lucide-react';
 
 const OrderList = () => {
-  const { orders, riders, updateOrderStatus, assignRider } = useAppState();
+  const { orders, riders, loading, updateOrderStatus, assignRider } = useAppState();
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
   const [cancellingOrder, setCancellingOrder] = useState(null);
@@ -91,7 +91,16 @@ const OrderList = () => {
     <div className="space-y-6">
       <h1 className="text-3xl font-black text-[#1A4D2E]">Order Management</h1>
 
-      <DataTable
+      {loading ? (
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center space-y-4">
+            <Loader className="w-12 h-12 text-emerald-500 animate-spin mx-auto" />
+            <p className="text-slate-600 font-semibold">Loading orders...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <DataTable
         columns={columns}
         data={orders}
         actions={(row) => {
@@ -252,6 +261,8 @@ const OrderList = () => {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
