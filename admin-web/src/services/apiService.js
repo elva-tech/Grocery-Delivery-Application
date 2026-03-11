@@ -127,7 +127,50 @@ getInventory: async () => {
   } catch (error) {
     throw error.response?.data || error;
   }
-}
+},
+
+/* -------- BANNER APIs -------- */
+
+getBanners: async () => {
+  try {
+    const res = await api.get("/api/banners/get-banners");
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
+createBanner: async (formData) => {
+  try {
+    const res = await api.post(
+      "/api/banners/create-banner",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
+deleteBanner: async (id) => {
+  try {
+    const res = await api.delete(`/api/banners/${id}`);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
+deleteBanner: async (id) => {
+  const res = await api.delete(`/api/banners/delete-banner/${id}`);
+  return res.data;
+},
 
 };
 

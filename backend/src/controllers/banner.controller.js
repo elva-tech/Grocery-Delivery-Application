@@ -70,3 +70,32 @@ exports.getBanners = async (req, res) => {
   }
 
 };
+
+exports.deleteBanner = async (req, res) => {
+  try {
+
+    const bannerId = req.params.id;
+
+    const banner = await Banner.findByIdAndDelete(bannerId);
+
+    if (!banner) {
+      return res.status(404).json({
+        success: false,
+        message: "Banner not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Banner deleted successfully"
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+};
