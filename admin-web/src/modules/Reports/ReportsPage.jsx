@@ -36,7 +36,11 @@ const ReportsPage = () => {
       }).join("\n");
     } else if (activeTab === 'ORDERS') {
       headers = "Order ID,Customer,Total Amount,Status,Date\n";
-      rows = orders.map(o => `${o.id},${o.customerName || 'N/A'},${o.totalAmount || 0},${o.status},${formatDate(o.date)}`).join("\n");
+      rows = orders.map(o => {
+        // LOGIC: Map 'DELIVERED' to 'PAID' for the report output
+        const displayStatus = o.status?.toUpperCase() === 'DELIVERED' ? 'PAID' : o.status;
+        return `${o.id},${o.customerName || 'N/A'},${o.totalAmount || 0},${displayStatus},${formatDate(o.date)}`;
+      }).join("\n");
     } else if (activeTab === 'INVENTORY') {
       headers = "Item Name,Current Stock,Price,Status\n";
       rows = inventoryReport.map(i => `${i.item},${i.stock},${i.price.replace(/[₹,]/g, '')},${i.status}`).join("\n");
@@ -52,15 +56,19 @@ const ReportsPage = () => {
   };
 
   // 3. REVENUE DATA - FIXED: Using totalAmount and customerName
-  const revenueData = useMemo(() => {
+const revenueData = useMemo(() => {
     return (orders || [])
       .filter(o => o.status?.toUpperCase() !== 'CANCELLED')
-      .map(o => ({
-        date: o.date ? new Date(o.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A',
-        customer: o.customerName || o.customer || 'Unknown',
-        amount: `₹${(Number(o.totalAmount || o.total) || 0).toLocaleString('en-IN')}`,
-        status: o.status 
-      }));
+      .map(o => {
+        const status = o.status?.toUpperCase();
+        return {
+          date: o.date ? new Date(o.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A',
+          customer: o.customerName || o.customer || 'Unknown',
+          amount: `₹${(Number(o.totalAmount || o.total) || 0).toLocaleString('en-IN')}`,
+          // If status is DELIVERED, display as PAID
+          status: status === 'DELIVERED' ? 'PAID' : status 
+        };
+      });
   }, [orders]);
 
   const inventoryReport = useMemo(() => {
@@ -92,16 +100,21 @@ const ReportsPage = () => {
         </span>
       )}
     ]},
-    ORDERS: { title: 'Order History', columns: [
+    // UPDATED: replaced delivered to PAID 
+  ORDERS: { title: 'Order History', columns: [
       { header: 'Order ID', accessor: 'id' },
-      // FIXED: Specifically targeting customerName for Orders tab
       { header: 'Customer', accessor: 'customerName' },
-      { header: 'Status', accessor: 'status', render: (v) => (
-        <span className={`font-bold ${v?.toUpperCase() === 'CANCELLED' ? 'text-red-500' : 'text-slate-600'}`}>
-          {v}
-        </span>
-      )},
-      // FIXED: Targeting totalAmount
+      { header: 'Status', accessor: 'status', render: (v) => {
+        const status = v?.toUpperCase();
+        if (status === 'DELIVERED') {
+          return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black uppercase">PAID</span>;
+        }
+        return (
+          <span className={`font-bold ${status === 'CANCELLED' ? 'text-red-500' : 'text-slate-600'}`}>
+            {v}
+          </span>
+        );
+      }},
       { header: 'Total', accessor: 'totalAmount', render: (v) => `₹${(Number(v) || 0).toLocaleString('en-IN')}` }
     ]},
     INVENTORY: { title: 'Stock Audit', columns: [

@@ -77,13 +77,13 @@ const OrderList = () => {
     <div className="space-y-6">
       <h1 className="text-3xl font-black text-[#1A4D2E]">Order Management</h1>
 
-      <DataTable
+    <DataTable
         columns={columns}
         data={orders}
         actions={(row) => {
           const status = row.status?.toUpperCase();
           return (
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button onClick={() => setViewingOrder(row)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors shadow-sm">
                 <Eye size={18} />
               </button>
@@ -109,6 +109,18 @@ const OrderList = () => {
                 <button onClick={() => updateOrderStatus(row.id, 'DELIVERED')} className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-all border border-emerald-200 shadow-sm">
                   <CheckCircle2 size={14} /> Mark Delivered
                 </button>
+              )}
+
+              {/* NEW FEATURE: Show Paid badge after delivery */}
+              {status === 'DELIVERED' && (
+                <div className="flex items-center gap-1 bg-blue-50 text-blue-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase border border-blue-100">
+                   <PackageCheck size={14} /> Paid
+                </div>
+              )}
+              
+              {/* Optional: Show Cancelled label in actions to keep row height consistent */}
+              {status === 'CANCELLED' && (
+                <span className="text-[10px] font-bold text-slate-400 uppercase px-3">Voided</span>
               )}
             </div>
           );

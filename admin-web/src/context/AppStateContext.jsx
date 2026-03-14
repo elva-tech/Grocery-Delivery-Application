@@ -132,7 +132,7 @@ export const AppStateProvider = ({ children }) => {
     );
   };
 
-  const updateOrderStatus = (orderId, newStatus) => {
+const updateOrderStatus = (orderId, newStatus) => {
     setOrders(prev =>
       prev.map(o => {
         if (o.id === orderId) {
@@ -151,7 +151,12 @@ export const AppStateProvider = ({ children }) => {
             );
           }
 
-          return { ...o, status: nextStatus };
+          // NEW LOGIC: If status is DELIVERED, also mark as PAID
+          return { 
+            ...o, 
+            status: nextStatus,
+            paymentStatus: nextStatus === 'DELIVERED' ? 'PAID' : o.paymentStatus 
+          };
         }
         return o;
       })

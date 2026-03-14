@@ -12,6 +12,7 @@ import ReportsPage from './modules/Reports/ReportsPage';
 import RiderManagement from './pages/Riders/RiderManagement';
 import BannerManagement from './components/banner/BannerManagement';
 import ReturnManagement from './modules/Orders/ReturnManagement';
+import Signup from './modules/Auth/SignUp';
 
 // Create a helper component to handle the conditional logic inside the Router
 const AppRoutes = () => {
@@ -19,6 +20,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      <Route path="/signup" element={<Signup/>} />
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
         <Route index element={<DashboardHome />} /> 
