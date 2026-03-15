@@ -128,18 +128,34 @@ useEffect(() => {
         </span>
       )}
     ]},
-    ORDERS: { title: 'Order History', columns: [
-      { header: 'Order ID', accessor: 'id' },
-      // FIXED: Specifically targeting customerName for Orders tab
-      { header: 'Customer', accessor: 'customerName' },
-      { header: 'Status', accessor: 'status', render: (v) => (
+   ORDERS: { 
+  title: 'Order History', 
+  columns: [
+    { header: 'Order ID', accessor: 'id' },
+
+    { 
+      header: 'Customer',
+      accessor: 'customerName',
+      render: (_, row) => row.customerName || row.customer || 'Unknown'
+    },
+
+    { 
+      header: 'Status', 
+      accessor: 'status', 
+      render: (v) => (
         <span className={`font-bold ${v?.toUpperCase() === 'CANCELLED' ? 'text-red-500' : 'text-slate-600'}`}>
           {v}
         </span>
-      )},
-      // FIXED: Targeting totalAmount
-      { header: 'Total', accessor: 'totalAmount', render: (v) => `₹${(Number(v) || 0).toLocaleString('en-IN')}` }
-    ]},
+      )
+    },
+
+    { 
+      header: 'Total', 
+      accessor: 'totalAmount', 
+      render: (v) => `₹${(Number(v) || 0).toLocaleString('en-IN')}`
+    }
+  ]
+},
     INVENTORY: { title: 'Stock Audit', columns: [
       { header: 'Item Name', accessor: 'item' },
       { header: 'Current Stock', accessor: 'stock' },
