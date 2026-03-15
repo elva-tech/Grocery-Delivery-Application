@@ -7,21 +7,14 @@ const Order = require("../models/Order.model");
 exports.createReturnRequest = async (req, res) => {
   try {
 
-    const { orderId, reason, customerComment, refundAmount } = req.body;
+    const { orderId, reason, customerComment } = req.body;
 
     // Validation
-    if (!orderId || !reason || refundAmount === undefined) {
-        return res.status(400).json({
-            success: false,
-            message: "orderId, reason and refundAmount are required"
-        });
-    }
-    
-    if (refundAmount < 0) {
-        return res.status(400).json({
-            success: false,
-            message: "refundAmount cannot be negative"
-        });
+    if (!orderId || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: "orderId and reason are required"
+      });
     }
 
     const order = await Order.findById(orderId);
@@ -41,6 +34,9 @@ exports.createReturnRequest = async (req, res) => {
         });
     }
     
+    // calculate refund amount from order
+    const refundAmount = order.totalAmount;
+
     // Prevent duplicate return request
     const existingReturn = await ReturnRequest.findOne({ orderId });
 
@@ -77,7 +73,7 @@ exports.createReturnRequest = async (req, res) => {
 
 exports.getAllReturns = async (req, res) => {
 
-  const returns = await ReturnRequest.find()
+  const returns = await ReturnRequest.find({ orderId: { $ne: null } })
   .populate("orderId", "_id status totalAmount")
   .populate("userId", "_id name email")
   .sort({ createdAt: -1 });
@@ -91,12 +87,11 @@ exports.getAllReturns = async (req, res) => {
 
 
 /* APPROVE RETURN */
-
 exports.approveReturn = async (req, res) => {
   try {
 
     const { id } = req.params;
-    const { resolutionNote } = req.body;
+    const { resolutionNote, refundAmount } = req.body;
 
     const request = await ReturnRequest.findById(id);
 
@@ -114,14 +109,31 @@ exports.approveReturn = async (req, res) => {
       });
     }
 
+    const order = await Order.findById(request.orderId);
+
     request.status = "approved";
     request.resolutionNote = resolutionNote;
 
+    // Default refund = order total
+    request.refundAmount = order.totalAmount;
+
+    // Allow admin to edit refund
+    if (refundAmount !== undefined) {
+
+      if (refundAmount > order.totalAmount) {
+        return res.status(400).json({
+          success: false,
+          message: "Refund amount cannot exceed order total"
+        });
+      }
+
+      request.refundAmount = refundAmount;
+    }
+
     await request.save();
 
-    // Update Order Status
     await Order.findByIdAndUpdate(request.orderId, {
-      status: "REFUNDED"
+      orderStatus: "REFUNDED"
     });
 
     res.json({
@@ -136,7 +148,6 @@ exports.approveReturn = async (req, res) => {
     });
   }
 };
-
 
 
 /* REJECT RETURN */
