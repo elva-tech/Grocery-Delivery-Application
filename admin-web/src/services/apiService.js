@@ -45,6 +45,20 @@ export const apiService = {
     const res = await api.post("/api/products/admin/products", payload);
     return res.data;
   },
+updateProduct: async (productId, payload) => {
+
+  if (!productId) {
+    throw new Error("Invalid product ID");
+  }
+
+  const res = await api.put(
+    `/api/products/admin/products/${productId}`,
+    payload
+  );
+
+  return res.data;
+},
+
 
   /* -------- GET ALL RETURN REQUESTS -------- */
 
@@ -128,7 +142,6 @@ getInventory: async () => {
     throw error.response?.data || error;
   }
 },
-
 /* -------- BANNER APIs -------- */
 
 getBanners: async () => {
