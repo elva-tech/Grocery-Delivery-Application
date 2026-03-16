@@ -39,28 +39,38 @@ const Checkout = ({ address }: any) => {
 
 const handlePlaceOrder = async () => {
   if (items.length === 0) return;
-  
+
   setIsProcessing(true);
+
   try {
     const orderPayload = {
       userId: user?.id || 'user-123',
-      items: [...items], // Clone items
+      items: [...items],
       totalAmount: bill.grandTotal,
       address: address?.full || 'Default Address',
       deliverySlot: '7-10 AM',
     };
 
-    await saveNewOrder(orderPayload);
+    const response = await saveNewOrder(orderPayload);
 
-    navigate('/success', { state: { fromCheckout: true, orderItems: items } });
+    const orderId =
+      response?.order?._id ||
+      response?.orderId ||
+      `EN-${Date.now()}`;
 
-    setTimeout(() => {
-      dispatch(clearCart());
-      setIsProcessing(false);
-    }, 100);
+    navigate('/success', {
+      state: {
+        fromCheckout: true,
+        orderItems: items,
+        orderId: orderId
+      }
+    });
+
+    dispatch(clearCart());
 
   } catch (error) {
     console.error("Order placement failed", error);
+  } finally {
     setIsProcessing(false);
   }
 };

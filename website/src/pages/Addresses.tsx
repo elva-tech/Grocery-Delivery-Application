@@ -31,13 +31,16 @@ const Addresses = ({ items, onSelect }: any) => {
 
   // TOTAL PRICE CALCULATION (Checked for common item structures)
   const totalAmount = useMemo(() => {
-    if (!items || !Array.isArray(items)) return 0;
-    return items.reduce((sum, item) => {
-      const price = item.price || 0;
-      const qty = item.quantity || item.qty || 1;
-      return sum + (price * qty);
-    }, 0);
-  }, [items]);
+  if (!items || !Array.isArray(items)) return 0;
+
+  const subtotal = items.reduce((sum, item) => {
+    const price = item.price || 0;
+    const qty = item.quantity || item.qty || 1;
+    return sum + (price * qty);
+  }, 0);
+  const deliveryCharge = subtotal === 0 || subtotal >= 500 ? 0 : 40;
+  return subtotal + deliveryCharge;
+}, [items]);
 
   const fetchAddresses = async () => {
     setLoading(true);
