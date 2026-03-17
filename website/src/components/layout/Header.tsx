@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Search, MapPin, ChevronDown, User, Package, Smartphone, X } from 'lucide-react';
+import { ShoppingCart, Search, MapPin, ChevronDown, User, Package, Smartphone, X, LogOut } from 'lucide-react';
+import { logout } from '../../store/slices/authSlice';
 import { getAddressFromCoords } from '../../api/addresses';
 import type { RootState } from '../../store/store';
 import AddressModal from './AddressModal';
@@ -16,12 +17,14 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClick, onLoginClick }) => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { totalAmount } = useSelector((state: RootState) => state.cart);
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
   
   const [location, setLocation] = useState("Detecting...");
   const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
   const [showAppModal, setShowAppModal] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -42,6 +45,15 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
   const closeAppModal = () => {
     sessionStorage.setItem('hasSeenAppModal', 'true');
     setShowAppModal(false);
+  };
+
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    dispatch(logout());
+    setShowLogoutConfirm(false);
   };
 
   return (
@@ -147,7 +159,7 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
           {/* ACTION BUTTONS */}
           <div className="flex items-center gap-2 sm:gap-6 shrink-0">
             {isAuthenticated ? (
-              <div className="flex items-center gap-2 sm:gap-6">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <button 
                   onClick={() => navigate('/orders')}
                   className="flex items-center gap-2 text-slate-800 font-black text-[10px] uppercase tracking-[0.15em] hover:text-[#4b6f9e] transition-colors"
@@ -158,6 +170,13 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
                 <span className="hidden sm:block text-[10px] font-black text-[#4b6f9e] uppercase tracking-widest bg-blue-50 px-4 py-2 rounded-xl">
                   {user?.name?.split(' ')[0]}
                 </span>
+                <button 
+                  onClick={handleLogoutClick}
+                  className="flex items-center gap-2 text-slate-600 hover:text-red-500 font-black text-[10px] uppercase tracking-[0.15em] transition-colors p-2 hover:bg-red-50 rounded-lg"
+                  title="Logout"
+                >
+                  <LogOut size={16} strokeWidth={2.5} />
+                </button>
               </div>
             ) : (
               <button 
@@ -183,6 +202,37 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
         </div>
       </header>
       <AddressModal isOpen={isAddrModalOpen} onClose={() => setIsAddrModalOpen(false)} />
+
+      {/* LOGOUT CONFIRMATION MODAL */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-8">
+              <h2 className="text-2xl font-black text-slate-900 mb-4 text-center">
+                Confirm Logout
+              </h2>
+              <p className="text-slate-600 text-center mb-8 font-semibold">
+                Are you sure you want to logout? You'll need to login again to continue shopping.
+              </p>
+              
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 h-12 bg-slate-100 hover:bg-slate-200 text-slate-900 font-black rounded-xl transition-colors"
+                >
+                  Stay
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className="flex-1 h-12 bg-red-500 hover:bg-red-600 text-white font-black rounded-xl transition-colors"
+                >
+                  Yes, Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
