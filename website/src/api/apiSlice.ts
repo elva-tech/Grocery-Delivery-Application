@@ -34,17 +34,23 @@ export interface Category {
 
 export const apiSlice = createApi({
   reducerPath: 'api',
-  baseQuery: fetchBaseQuery({ baseUrl: '/' }),
+  baseQuery: fetchBaseQuery({
+    baseUrl: import.meta.env.VITE_API_URL,
+    prepareHeaders: (headers) => {
+      headers.set('x-tenant-id', 'demo-tenant');
+      return headers;
+    }
+  }),
   endpoints: (builder) => ({
 
-    /* ----------- SETTINGS (Remote Config) ----------- */
+    /* ----------- SETTINGS ----------- */
     getAppSettings: builder.query<AppSettings, void>({
-      queryFn: () => ({ 
-        data: { 
-          allowRefunds: true, 
+      queryFn: () => ({
+        data: {
+          allowRefunds: true,
           allowReportIssue: false,
-          allowOrderCancellation: true 
-        } 
+          allowOrderCancellation: true
+        }
       }),
     }),
 
@@ -55,23 +61,47 @@ export const apiSlice = createApi({
 
     /* ----------- PRODUCTS ----------- */
     getProducts: builder.query<Product[], void>({
-      queryFn: () => ({ data: MOCK_PRODUCTS as Product[] }),
+      query: () => ({
+        url: '/api/products',
+        method: 'GET'
+      }),
+      transformResponse: (response: any) => {
+
+        const apiProducts = response?.products || [];
+
+        const mappedProducts = apiProducts.map((p: any) => ({
+          id: p.productId || p._id,
+          parentCategoryId: p.category,
+          subCategoryId: p.category,
+          name: p.name,
+          price: p.price,
+          unit: p.unit,
+          image: p.imageUrl ? [p.imageUrl] : [],
+          stock: p.availableQty,
+          description: p.description || ""
+        }));
+
+        /* combine API + mock products */
+        return [...mappedProducts, ...MOCK_PRODUCTS];
+      }
     }),
-    
+
+    /* ----------- FEATURED PRODUCTS ----------- */
     getFeaturedProducts: builder.query<Product[], void>({
       queryFn: () => ({ data: MOCK_PRODUCTS.slice(0, 4) as Product[] }),
     }),
 
+    /* ----------- PRODUCTS BY CATEGORY ----------- */
     getProductsByCategory: builder.query<Product[], string>({
-      queryFn: (catId) => ({ 
-        data: MOCK_PRODUCTS.filter(p => 
-          String(p.parentCategoryId) === String(catId) || 
+      queryFn: (catId) => ({
+        data: MOCK_PRODUCTS.filter(p =>
+          String(p.parentCategoryId) === String(catId) ||
           String(p.subCategoryId) === String(catId)
         ) as Product[]
       }),
     }),
 
-    /* ----------- CART & BILLING ----------- */
+    /* ----------- CART BILLING ----------- */
     calculateCart: builder.mutation<{
       subtotal: number;
       deliveryCharge: number;
@@ -81,20 +111,30 @@ export const apiSlice = createApi({
       queryFn: async (items) => {
         try {
           const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
           const freeDeliveryThreshold = 500;
           const isFree = subtotal >= freeDeliveryThreshold;
+
           const deliveryCharge = (subtotal === 0 || isFree) ? 0 : 40;
 
-          return { 
+          return {
             data: {
               subtotal,
               deliveryCharge,
               grandTotal: subtotal + deliveryCharge,
               isFreeDelivery: isFree
-            } 
+            }
           };
+
         } catch (error) {
-          return { error: { status: 500, data: 'Calculation Error' } };
+
+          return {
+            error: {
+              status: 500,
+              data: 'Calculation Error'
+            }
+          };
+
         }
       },
     }),
@@ -102,11 +142,11 @@ export const apiSlice = createApi({
   }),
 });
 
-export const { 
-  useGetCategoriesQuery, 
+export const {
+  useGetCategoriesQuery,
   useGetProductsQuery,
-  useGetFeaturedProductsQuery, 
+  useGetFeaturedProductsQuery,
   useGetProductsByCategoryQuery,
   useCalculateCartMutation,
-  useGetAppSettingsQuery // Exported new hook
+  useGetAppSettingsQuery
 } = apiSlice;

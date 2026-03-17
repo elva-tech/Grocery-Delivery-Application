@@ -6,7 +6,7 @@ const Inventory = require("../models/Inventory.model");
 
 const addProduct = async (req, res) => {
   try {
-    const { name, category, price, unit, stocks, stock, imageUrl } = req.body;
+    const { name, category, price, unit, stocks, stock, imageUrl, description } = req.body;
 
     if (req.user.role !== "ADMIN") {
       return res.status(403).json({ message: "Access denied. Admin only." });
@@ -46,6 +46,7 @@ const addProduct = async (req, res) => {
       price: finalPrice,
       unit,
       imageUrl,
+      description,
       isAvailable: finalStocks > 0
     });
 
@@ -83,7 +84,7 @@ const updateProductFromAdmin = async (req, res) => {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    const allowedFields = ["name", "price", "category", "unit", "imageUrl"];
+    const allowedFields = ["name", "price", "category", "unit", "imageUrl", "description"];
     const updateData = {};
 
     allowedFields.forEach((field) => {
@@ -163,32 +164,33 @@ const getAvailableProducts = async (req, res) => {
       };
     }
 
-    const products = await Product.aggregate([
-      { $match: matchStage },
-      {
-        $lookup: {
-          from: "inventories",
-          localField: "_id",
-          foreignField: "productId",
-          as: "inventory"
-        }
-      },
-      { $unwind: "$inventory" },
-      { $match: { "inventory.availableQty": { $gt: 0 } } },
-      {
-        $project: {
-          _id: 0,
-          productId: "$_id",
-          name: 1,
-          category: 1,
-          price: 1,
-          unit: 1,
-          imageUrl: 1,
-          availableQty: "$inventory.availableQty"
-        }
-      },
-      { $sort: { name: 1 } }
-    ]);
+   const products = await Product.aggregate([
+  { $match: matchStage },
+  {
+    $lookup: {
+      from: "inventories",
+      localField: "_id",
+      foreignField: "productId",
+      as: "inventory"
+    }
+  },
+  { $unwind: "$inventory" },
+  { $match: { "inventory.availableQty": { $gt: 0 } } },
+  {
+    $project: {
+      _id: 0,
+      productId: "$_id",
+      name: 1,
+      category: 1,
+      price: 1,
+      unit: 1,
+      imageUrl: 1,
+      description: 1,
+      availableQty: "$inventory.availableQty"
+    }
+  },
+  { $sort: { name: 1 } }
+]);
 
     return res.status(200).json({ products });
 
@@ -231,9 +233,9 @@ const deleteProductFromAdmin = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 const getInventory = async (req, res) => {
   try {
-    // 🔐 Admin check
     if (!req.user || req.user.role !== "ADMIN") {
       return res.status(403).json({
         success: false,
@@ -243,7 +245,6 @@ const getInventory = async (req, res) => {
 
     const tenantId = req.user.tenantId;
 
-    // Fetch inventory with product details
     const inventory = await Inventory.aggregate([
       {
         $match: { tenantId }
@@ -296,4 +297,3 @@ module.exports = {
   deleteProductFromAdmin,
   getInventory
 };
-
