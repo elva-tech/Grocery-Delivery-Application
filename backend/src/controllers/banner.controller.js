@@ -45,30 +45,18 @@ exports.createBanner = async (req, res) => {
  * GET ALL BANNERS
  */
 exports.getBanners = async (req, res) => {
-
   try {
-
-    const tenantId = req.user.tenantId;
-
-    const banners = await Banner.find({ 
-      tenantId: req.user.tenantId,
-      isActive: true 
-    });
-
+    const banners = await Banner.find({ isActive: true }); // public banners only
     res.json({
       success: true,
       data: banners
     });
-
   } catch (error) {
-
     res.status(500).json({
       success: false,
       message: error.message
     });
-
   }
-
 };
 
 exports.deleteBanner = async (req, res) => {

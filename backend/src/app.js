@@ -37,7 +37,7 @@ const bannerRoutes = require("./routes/banner.routes");
 // Public routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
-
+app.use("/api/banners",  bannerRoutes);
 // Protected routes
 app.use(authMiddleware);
 
@@ -46,6 +46,6 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/riders", riderRoutes);
 app.use("/api/admin",  adminRoutes);
 app.use("/api/returns", returnRoutes);
-app.use("/api/banners",  bannerRoutes);
+
 
 module.exports = app;
