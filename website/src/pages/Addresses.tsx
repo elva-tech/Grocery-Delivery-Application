@@ -5,6 +5,7 @@ import {
   Gift, User, Users, X, Phone, UserCircle, MessageSquare 
 } from 'lucide-react';
 import { getAddresses, createOrder } from '../api/addresses';
+import { MOCK_PRODUCTS } from '../api/mockdata';
 import AddressModal from '../components/layout/AddressModal';
 
 const Addresses = ({ items, onSelect }: any) => {
@@ -55,38 +56,86 @@ const Addresses = ({ items, onSelect }: any) => {
   }, [items]);
 
   const handleFinalConfirm = async () => {
-    // If Self mode, find and pass address back to parent
-    if (orderMode === 'self') {
-      const selected = addresses.find(a => a.id === selectedId);
-      if (selected) onSelect(selected);
-      else return; // Don't proceed if nothing selected in self mode
-    }
-
     setIsSubmitting(true);
     try {
-      // SHARED BACKEND PAYLOAD STRUCTURE
+      console.log("FINAL ITEMS:", items);
+      
+      let deliveryAddress: any = null;
+      
+      if (orderMode === 'self') {
+        const selected = addresses.find(a => a.id === selectedId);
+        if (!selected) {
+          alert("Please select a delivery address");
+          setIsSubmitting(false);
+          return;
+        }
+        
+        deliveryAddress = {
+          line1: selected.full || selected.address || '',
+          city: 'Hassan',
+          state: 'Karnataka',
+          country: 'India',
+          zip: '573201',
+          lat: selected.coordinates?.lat || 15.3173,
+          lng: selected.coordinates?.lng || 75.7139,
+          phone: selected.phone || ''
+        };
+      } else {
+        deliveryAddress = {
+          line1: othersForm.fullAddress,
+          landmark: othersForm.landmark || '',
+          city: 'Hassan',
+          state: 'Karnataka',
+          country: 'India',
+          zip: '573201',
+          lat: 15.3173,
+          lng: 75.7139,
+          phone: othersForm.recipientPhone,
+          recipientName: othersForm.recipientName
+        };
+      }
+
       const orderPayload = {
-        items: items,
-        total: totalAmount,
+        items: items.map((item: any) => {
+          // Map frontend id to backend _id using MOCK_PRODUCTS
+          const product = MOCK_PRODUCTS.find(p => String(p.id) === String(item.id));
+          const productId = product?._id;
+          console.log("Item mapping:", item.id, "->", productId, "Product found:", !!product);
+          
+          if (!productId) {
+            throw new Error(`Product ${item.id} not found in catalog or missing _id`);
+          }
+          
+          return {
+            productId: productId,
+            qty: item.quantity || item.qty || 1
+          };
+        }),
+        deliveryAddress: deliveryAddress,
+        paymentMode: "COD",
         orderType: orderMode,
-        addressId: orderMode === 'self' ? selectedId : null,
-        recipientDetails: orderMode === 'others' ? othersForm : null,
+        total: totalAmount,
         timestamp: new Date().toISOString()
       };
 
+      console.log("ORDER PAYLOAD TO SEND:", orderPayload);
+      
       const result: any = await createOrder(orderPayload);
       
       if (result.success) {
-        // Navigate with state for the Success Page to pick up
         navigate('/success', { 
           state: { 
             orderId: result.orderId,
             total: totalAmount 
           } 
         });
+      } else {
+        alert(`Order failed: ${result.error || 'Unknown error'}`);
+        console.error("Order creation failed:", result.error);
       }
     } catch (error) {
       console.error("Order Creation Error:", error);
+      alert("An error occurred while creating your order");
     } finally {
       setIsSubmitting(false);
     }

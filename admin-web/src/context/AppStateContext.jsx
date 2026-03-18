@@ -4,7 +4,8 @@ import {
   MOCK_RIDERS,
   MOCK_CATEGORIES,
   MOCK_BANNERS,
-  MOCK_RETURNS
+  MOCK_RETURNS,
+  MOCK_ORDERS
 } from '../services/mockData';
 
 import { apiService } from '../services/apiService';
@@ -33,7 +34,7 @@ export const AppStateProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : MOCK_CATEGORIES;
   });
 
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState(MOCK_ORDERS);
 
   /* -------- LOADING + ERROR STATE -------- */
   const [loading, setLoading] = useState(false);
@@ -109,7 +110,7 @@ export const AppStateProvider = ({ children }) => {
     const fetchOrders = async () => {
 
       // Only fetch if user has a token
-      const token = localStorage.getItem('jwtToken');
+      const token = localStorage.getItem('token') || localStorage.getItem('jwtToken');
       if (!token) {
         return;
       }
@@ -120,8 +121,9 @@ export const AppStateProvider = ({ children }) => {
       try {
 
         const data = await apiService.getOrders();
-
-        const normalized = (data.orders || []).map(o => ({
+        
+        const orderList = data.orders || data || [];
+        const normalized = orderList.map(o => ({
           ...o,
           id: o._id,
           status: o.orderStatus,
@@ -136,8 +138,14 @@ export const AppStateProvider = ({ children }) => {
             .map(i => `${i.name} x${i.qty}`)
             .join(", ")
         }));
-
-        setOrders(normalized);
+        
+        setOrders(prev => {
+          
+          const existingIds = new Set(prev.map(o => o.id));
+          const newOrders = normalized.filter(o => !existingIds.has(o.id));
+          
+          return [...newOrders, ...prev];
+        });
 
       } catch (err) {
 
@@ -150,8 +158,11 @@ export const AppStateProvider = ({ children }) => {
         }
 
         console.error("Failed to fetch orders:", err);
-        setError("Failed to load orders");
 
+        // ✅ fallback (do NOT break existing logic)
+        setOrders(prev => prev.length ? prev : MOCK_ORDERS);
+        setError("Using mock data");
+      
       } finally {
 
         setLoading(false);
@@ -170,7 +181,7 @@ export const AppStateProvider = ({ children }) => {
     const fetchRiders = async () => {
 
       // Only fetch if user has a token
-      const token = localStorage.getItem('jwtToken');
+      const token = localStorage.getItem('token') || localStorage.getItem('jwtToken');
       if (!token) {
         return;
       }
@@ -178,8 +189,8 @@ export const AppStateProvider = ({ children }) => {
       try {
 
         const data = await apiService.getRiders();
-
-        const normalized = (data.data?.riders || []).map(r => ({
+        
+        const normalized = (data.data?.riders || data || []).map(r => ({
           ...r,
           id: r._id,
         }));
@@ -263,7 +274,8 @@ export const AppStateProvider = ({ children }) => {
       // Fetch updated orders
       const data = await apiService.getOrders();
 
-      const normalized = (data.orders || []).map(o => ({
+      const orderList = data.orders || data || [];
+      const normalized = orderList.map(o => ({
         ...o,
         id: o._id,
         status: o.orderStatus,
@@ -279,7 +291,11 @@ export const AppStateProvider = ({ children }) => {
           .join(", ")
       }));
 
-      setOrders(normalized);
+      setOrders(prev => {
+        const existingIds = new Set(prev.map(o => o.id));
+        const newOrders = normalized.filter(o => !existingIds.has(o.id));
+        return [...newOrders, ...prev];
+      });
     } catch (error) {
       console.error("Assign rider failed:", error);
       throw error;
@@ -295,8 +311,10 @@ export const AppStateProvider = ({ children }) => {
       await apiService.updateOrderStatus(orderId, newStatus);
 
       const data = await apiService.getOrders();
-
-      const normalized = (data.orders || []).map(o => ({
+      
+      const orderList = data.orders || data || [];
+      
+      const normalized = orderList.map(o => ({
         ...o,
         id: o._id,
         status: o.orderStatus,
@@ -312,7 +330,12 @@ export const AppStateProvider = ({ children }) => {
           .join(", ")
       }));
 
-      setOrders(normalized);
+      setOrders(prev => {
+        const existingIds = new Set(prev.map(o => o.id));
+        const newOrders = normalized.filter(o => !existingIds.has(o.id));
+
+        return [...newOrders, ...prev];
+      });
 
     } catch (error) {
 

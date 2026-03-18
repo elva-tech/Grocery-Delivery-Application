@@ -43,7 +43,7 @@ const dashboardApi = axios.create({
 
 dashboardApi.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('jwtToken');
+    const token = localStorage.getItem('token') || localStorage.getItem('jwtToken');
     
     if (token) {
       // Add Authorization header

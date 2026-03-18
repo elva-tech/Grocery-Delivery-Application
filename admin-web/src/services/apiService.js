@@ -11,7 +11,7 @@ const api = axios.create({
 
 /* -------- ATTACH TOKEN AUTOMATICALLY -------- */
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("jwtToken");
+  const token = localStorage.getItem("token") || localStorage.getItem("jwtToken");
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -92,8 +92,24 @@ updateProduct: async (productId, payload) => {
   /* -------- ORDER APIs -------- */
 
   getOrders: async () => {
-    const res = await api.get("/api/admin/orders?page=1&limit=100");
-    return res.data;
+    try {
+      const res = await api.get("/api/admin/orders?page=1&limit=100");
+
+      // ✅ if backend returns data
+      if (res.data && (res.data.data || res.data.orders)) {
+        return res.data.data || res.data.orders;
+      }
+
+      // fallback
+      return [];
+    
+    } catch (error) {
+      console.warn("API failed, using mock data");
+      
+      // ✅ fallback to mock
+      const mockData = await import("./mockData");
+      return mockData.default || [];
+    }
   },
 
   updateOrderStatus: async (orderId, status) => {

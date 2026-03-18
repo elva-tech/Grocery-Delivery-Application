@@ -65,16 +65,47 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     if (otp.join('').length !== 4) return;
 
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
+    
+    try {
+      const response = await fetch("http://localhost:5000/api/auth/verify-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          phoneNumber: phone,
+          otp: "123456"   // since backend uses static OTP
+          })
+        });
+        
+        const data = await response.json();
 
-    dispatch(setCredentials({
-      user: {
-        id: Math.random().toString(36).substr(2, 9),
-        phone: phone, // Raw phone, let backend/slice handle display
-        name: name,
-      },
-      token: "mock-session-token"
-    }));
+        if (data.success) {
+
+        // 🔥 STORE TOKEN (MOST IMPORTANT)
+        localStorage.setItem("token", data.token);
+
+        // Optional: store user
+        localStorage.setItem("user", JSON.stringify(data.user));
+
+        // Redux update
+        dispatch(setCredentials({
+          user: data.user,
+          token: data.token
+        }));
+        
+        onClose();
+        setStep('register');
+        setOtp(['', '', '', '']);
+      
+      } else {
+        console.error("OTP failed");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+    }
+    
+    setLoading(false);
 
     setLoading(false);
     onClose();

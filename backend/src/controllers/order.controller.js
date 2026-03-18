@@ -98,40 +98,42 @@ exports.placeCustomerOrder = async (req, res) => {
   }
 };
 
-/**
- * CUSTOMER ORDER HISTORY (ONLY DELIVERED)
- */
-exports.getCustomerOrderHistory = async (req, res) => {
+exports.getCustomerOrderById = async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const tenantId = req.user.tenantId;
+    const { id } = req.params;
+    const { userId, tenantId } = req.user;
 
-    const orders = await Order.find({
-      userId,
-      tenantId,
-      orderStatus: "DELIVERED",
-    })
-      .sort({ createdAt: -1 })
-      .select("totalAmount orderStatus paymentStatus createdAt");
+    const order = await Order.findOne({ _id: id, tenantId, userId });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const formattedOrder = {
+      id: order._id,
+      status: order.orderStatus,
+      createdAt: order.createdAt,
+      totalAmount: order.totalAmount,
+      address: order.deliveryAddress?.line1 || "No Address",
+
+      items: order.items.map(item => ({
+        name: item.name,
+        quantity: item.qty,
+        price: item.price,
+        unit: "pcs",
+        image: "https://via.placeholder.com/60"
+      }))
+    };
 
     res.status(200).json({
-      message: "Delivered orders fetched successfully",
-      orders: orders.map(order => ({
-        orderId: order._id,
-        totalAmount: order.totalAmount,
-        orderStatus: order.orderStatus,
-        paymentStatus: order.paymentStatus,
-        createdAt: order.createdAt,
-      })),
+      message: "Order fetched successfully",
+      order: formattedOrder
     });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Something went wrong. Please try again later.",
-    });
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
-
 /**
  * MARK ORDER DELIVERED
  */
@@ -169,86 +171,46 @@ exports.markOrderDelivered = async (req, res) => {
   }
 };
 
-exports.getCustomerOrderById = async (req, res) => {
+exports.getCustomerOrderHistory = async (req, res) => {
   try {
-    const orderId = req.params.id;
-    const userId = req.user.userId;
-    const tenantId = req.user.tenantId;
+    const { userId, tenantId } = req.user;
+    const { status } = req.query;
 
-    if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid order ID format"
-      });
+    const filter = { userId, tenantId };
+
+    if (status) {
+      filter.orderStatus = status;
     }
 
-    const user = await User.findById(userId).select("isBlocked");
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found"
-      });
-    }
+    const orders = await Order.find(filter)
+      .sort({ createdAt: -1 });
 
-    if (user.isBlocked) {
-      return res.status(403).json({
-        success: false,
-        message: "User is blocked"
-      });
-    }
+    // 🔥 Transform response
+    const formattedOrders = orders.map(order => ({
+      id: order._id,
+      status: order.orderStatus,
+      createdAt: order.createdAt,
+      totalAmount: order.totalAmount,
+      address: order.deliveryAddress?.line1 || "No Address",
 
-    const order = await Order.findOne({
-      _id: orderId,
-      tenantId
-    }).lean();
+      items: order.items.map(item => ({
+        name: item.name,
+        quantity: item.qty,
+        price: item.price,
+        unit: "pcs", // default (you can improve later)
+        image: "https://via.placeholder.com/60" // placeholder
+      }))
+    }));
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found"
-      });
-    }
-
-    if (order.userId.toString() !== req.user.userId.toString())
- {
-      return res.status(403).json({
-        success: false,
-        message: "You cannot access this order"
-      });
-    }
-
-    const safeItems = Array.isArray(order.items)
-      ? order.items.map(item => ({
-          productId: item.productId,
-          name: item.name,
-          qty: item.qty,
-          price: item.price
-        }))
-      : [];
-
-    return res.status(200).json({
-      success: true,
-      order: {
-        id: order._id,
-        items: safeItems,
-        totalAmount: order.totalAmount,
-        paymentMode: order.paymentMode,
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
-        deliveryAddress: order.deliveryAddress,
-        createdAt: order.createdAt
-      }
+    res.status(200).json({
+      message: "Orders fetched successfully",
+      orders: formattedOrders
     });
 
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong. Please try again later."
-    });
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
-
 /**
  * ADMIN - GET ALL ORDERS (FOR REVENUE + EXPORT)
  */
