@@ -6,7 +6,7 @@ const Inventory = require("../models/Inventory.model");
 
 const addProduct = async (req, res) => {
   try {
-    const { name, category, price, unit, stocks, stock, imageUrl } = req.body;
+    const { name, category, price, unit, stocks, stock, imageUrl, description } = req.body;
 
     if (req.user.role !== "ADMIN") {
       return res.status(403).json({ message: "Access denied. Admin only." });
@@ -20,7 +20,9 @@ const addProduct = async (req, res) => {
 
     const missingFields = [];
     if (!name) missingFields.push("name");
-    if (!category) missingFields.push("category");
+    if (!category || !mongoose.Types.ObjectId.isValid(category)) {
+      missingFields.push("valid category ID");
+    }
     if (price === undefined) missingFields.push("price");
     if (!unit) missingFields.push("unit");
 
@@ -42,10 +44,11 @@ const addProduct = async (req, res) => {
     const product = await Product.create({
       tenantId,
       name,
-      category,
+      category: new mongoose.Types.ObjectId(category), // ✅ FIX
       price: finalPrice,
       unit,
       imageUrl,
+      description,
       isAvailable: finalStocks > 0
     });
 
@@ -83,12 +86,23 @@ const updateProductFromAdmin = async (req, res) => {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    const allowedFields = ["name", "price", "category", "unit", "imageUrl"];
+    const allowedFields = ["name", "price", "category", "unit", "imageUrl", "description"];
     const updateData = {};
 
-    allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updateData[field] = req.body[field];
-    });
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+
+        if (field === "category") {
+          if (!mongoose.Types.ObjectId.isValid(req.body[field])) {
+            return res.status(400).json({ message: "Invalid category ID" });
+          }
+          updateData[field] = new mongoose.Types.ObjectId(req.body[field]); // ✅ FIX
+        } else {
+          updateData[field] = req.body[field];
+        }
+
+      }
+    }
 
     if (updateData.price !== undefined) {
       const priceNum = Number(updateData.price);
@@ -137,9 +151,6 @@ const updateProductFromAdmin = async (req, res) => {
 
 /* ================= GET AVAILABLE PRODUCTS ================= */
 
-const escapeRegex = (str) =>
-  str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 const getAvailableProducts = async (req, res) => {
   try {
     const category = req.query?.category?.trim();
@@ -155,12 +166,9 @@ const getAvailableProducts = async (req, res) => {
       $or: [{ isActive: true }, { isActive: { $exists: false } }]
     };
 
-    if (category) {
-      const safeCategory = escapeRegex(category);
-      matchStage.category = {
-        $regex: `^${safeCategory}$`,
-        $options: "i"
-      };
+    // ✅ FIX: use ObjectId instead of regex
+    if (category && mongoose.Types.ObjectId.isValid(category)) {
+      matchStage.category = new mongoose.Types.ObjectId(category);
     }
 
     const products = await Product.aggregate([
@@ -184,6 +192,7 @@ const getAvailableProducts = async (req, res) => {
           price: 1,
           unit: 1,
           imageUrl: 1,
+          description: 1,
           availableQty: "$inventory.availableQty"
         }
       },
@@ -231,9 +240,11 @@ const deleteProductFromAdmin = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+/* ================= GET INVENTORY ================= */
+
 const getInventory = async (req, res) => {
   try {
-    // 🔐 Admin check
     if (!req.user || req.user.role !== "ADMIN") {
       return res.status(403).json({
         success: false,
@@ -243,11 +254,8 @@ const getInventory = async (req, res) => {
 
     const tenantId = req.user.tenantId;
 
-    // Fetch inventory with product details
     const inventory = await Inventory.aggregate([
-      {
-        $match: { tenantId }
-      },
+      { $match: { tenantId } },
       {
         $lookup: {
           from: "products",
@@ -272,10 +280,10 @@ const getInventory = async (req, res) => {
       { $sort: { name: 1 } }
     ]);
 
-     return res.status(200).json({
-  success: true,
-  data: inventory
-});
+    return res.status(200).json({
+      success: true,
+      data: inventory
+    });
 
   } catch (error) {
     console.error("Error in getInventory:", error);
@@ -296,4 +304,3 @@ module.exports = {
   deleteProductFromAdmin,
   getInventory
 };
-

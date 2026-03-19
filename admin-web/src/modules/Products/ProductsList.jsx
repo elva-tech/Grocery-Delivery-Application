@@ -180,7 +180,8 @@ const ProductList = () => {
                 price: Number(v.price),
                 unit: v.unit,
                 stocks: Number(v.stock),
-                imageUrl: ""
+                imageUrl: "",
+                description : v.description
               };
 
               if (editingItem) {
@@ -192,7 +193,6 @@ const ProductList = () => {
 
                 await apiService.updateProduct(productId, payload);
 
-                // important: pass editingItem.id to context
                 updateProduct(editingItem.id, {
 
                   ...editingItem,
@@ -269,9 +269,27 @@ const ProductList = () => {
               </button>
 
               <button
-                onClick={() =>
-                  deleteProduct(row.id)
-                }
+             onClick={async () => {
+
+  const productId =
+    row.productId ||
+    row._id;
+  deleteProduct(productId);
+
+  try {
+
+    await apiService.deleteProduct(productId);
+    const fresh = await apiService.getProducts();
+
+    setProducts(fresh.products || fresh);
+
+  } catch (error) {
+
+    console.error("Delete error:", error);
+
+  }
+
+}}
                 className="p-2 text-slate-400 hover:text-red-500 transition-colors"
               >
                 <Trash2 size={18} />

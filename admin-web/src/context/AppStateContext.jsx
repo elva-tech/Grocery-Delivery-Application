@@ -55,7 +55,6 @@ export const AppStateProvider = ({ children }) => {
         const token = localStorage.getItem('jwtToken');
         if (!token) return;
         const data = await apiService.getAllReturns();
-        // Normalize for frontend usage
         const normalized = (data.data || []).map(r => ({
           id: r._id,
           orderId: r.orderId?._id || r.orderId,
@@ -75,7 +74,8 @@ export const AppStateProvider = ({ children }) => {
     };
     fetchReturns();
   }, []);
-  // Process return request (approve/reject)
+
+  // Process return request
   const processReturnRequest = async (id, decision, resolutionNote) => {
     try {
       if (decision === 'APPROVE') {
@@ -83,7 +83,7 @@ export const AppStateProvider = ({ children }) => {
       } else if (decision === 'REJECT') {
         await apiService.rejectReturn(id, resolutionNote);
       }
-      // Refresh returns after action
+
       const data = await apiService.getAllReturns();
       const normalized = (data.data || []).map(r => ({
         id: r._id,
@@ -97,6 +97,7 @@ export const AppStateProvider = ({ children }) => {
         adminComment: r.resolutionNote,
         evidence: r.evidence || '',
       }));
+
       setReturns(normalized);
     } catch (err) {
       alert('Failed to process return request.');
@@ -105,20 +106,14 @@ export const AppStateProvider = ({ children }) => {
 
   /* ---------- FETCH ORDERS ---------- */
   useEffect(() => {
-
     const fetchOrders = async () => {
-
-      // Only fetch if user has a token
       const token = localStorage.getItem('jwtToken');
-      if (!token) {
-        return;
-      }
+      if (!token) return;
 
       setLoading(true);
       setError(null);
 
       try {
-
         const data = await apiService.getOrders();
 
         const normalized = (data.orders || []).map(o => ({
@@ -140,8 +135,6 @@ export const AppStateProvider = ({ children }) => {
         setOrders(normalized);
 
       } catch (err) {
-
-        // Handle 401 - redirect to login
         if (err.response?.status === 401) {
           localStorage.removeItem('jwtToken');
           localStorage.removeItem('freshroot_user');
@@ -153,30 +146,20 @@ export const AppStateProvider = ({ children }) => {
         setError("Failed to load orders");
 
       } finally {
-
         setLoading(false);
-
       }
-
     };
 
     fetchOrders();
-
   }, []);
 
   /* ---------- FETCH RIDERS ---------- */
   useEffect(() => {
-
     const fetchRiders = async () => {
-
-      // Only fetch if user has a token
       const token = localStorage.getItem('jwtToken');
-      if (!token) {
-        return;
-      }
+      if (!token) return;
 
       try {
-
         const data = await apiService.getRiders();
 
         const normalized = (data.data?.riders || []).map(r => ({
@@ -187,8 +170,6 @@ export const AppStateProvider = ({ children }) => {
         setRiders(normalized);
 
       } catch (err) {
-
-        // Handle 401 - redirect to login
         if (err.response?.status === 401) {
           localStorage.removeItem('jwtToken');
           localStorage.removeItem('freshroot_user');
@@ -197,13 +178,10 @@ export const AppStateProvider = ({ children }) => {
         }
 
         console.error("Failed to fetch riders:", err);
-
       }
-
     };
 
     fetchRiders();
-
   }, []);
 
   /* ---------- SAVE STATE ---------- */
@@ -215,115 +193,9 @@ export const AppStateProvider = ({ children }) => {
     sessionStorage.setItem('app_banners', JSON.stringify(banners));
   }, [products, categories, banners, returns, appSettings]);
 
-  /* ---------- RIDER FUNCTIONS ---------- */
-
-  const addRider = async (riderData) => {
-    try {
-      // Call API to create rider
-      await apiService.createRider(riderData);
-      
-      // Fetch updated riders list
-      const data = await apiService.getRiders();
-      const normalized = (data.data?.riders || []).map(r => ({
-        ...r,
-        id: r._id,
-      }));
-      
-      setRiders(normalized);
-    } catch (error) {
-      console.error("Add rider failed:", error);
-      throw error;
-    }
-  };
-
-  const toggleRiderStatus = async (id, newStatus) => {
-    try {
-      // Call API to update rider status
-      await apiService.updateRiderStatus(id, newStatus);
-      
-      // Update local state
-      setRiders(prev =>
-        prev.map(r =>
-          r.id === id || r._id === id
-            ? { ...r, status: newStatus }
-            : r
-        )
-      );
-    } catch (error) {
-      console.error("Toggle rider status failed:", error);
-      throw error;
-    }
-  };
-
-  const assignRider = async (orderId, riderId, riderName) => {
-    try {
-      // Call API to assign rider
-      await apiService.assignRiderToOrder(riderId, orderId);
-
-      // Fetch updated orders
-      const data = await apiService.getOrders();
-
-      const normalized = (data.orders || []).map(o => ({
-        ...o,
-        id: o._id,
-        status: o.orderStatus,
-        total: o.totalAmount,
-        date: o.createdAt,
-        assignment: o.riderId?.name || o.riderName || "Pending",
-        customer: o.userId?.name || "Guest User",
-        address: {
-          full: o.deliveryAddress?.line1 || "No Address"
-        },
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
-      }));
-
-      setOrders(normalized);
-    } catch (error) {
-      console.error("Assign rider failed:", error);
-      throw error;
-    }
-  };
-
-  /* ---------- UPDATE ORDER STATUS ---------- */
-
-  const updateOrderStatus = async (orderId, newStatus) => {
-
-    try {
-
-      await apiService.updateOrderStatus(orderId, newStatus);
-
-      const data = await apiService.getOrders();
-
-      const normalized = (data.orders || []).map(o => ({
-        ...o,
-        id: o._id,
-        status: o.orderStatus,
-        total: o.totalAmount,
-        date: o.createdAt,
-        assignment: o.riderName || "Pending",
-        customer: o.userId?.name || "Guest User",
-        address: {
-          full: o.deliveryAddress?.line1 || "No Address"
-        },
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
-      }));
-
-      setOrders(normalized);
-
-    } catch (error) {
-
-      console.error("Update order failed:", error);
-
-    }
-
-  };
-
   return (
     <AppStateContext.Provider value={{
+
       appSettings,
       loading,
       error,
@@ -356,16 +228,6 @@ export const AppStateProvider = ({ children }) => {
       deleteCategory: id =>
         setCategories(prev => prev.filter(c => c.id !== id)),
 
-      updateOrderStatus,
-      addRider,
-      toggleRiderStatus,
-      assignRider,
-
-      addBanner: b =>
-        setBanners(prev => [...prev, { ...b, id: Date.now().toString() }]),
-
-      deleteBanner: id =>
-        setBanners(prev => prev.filter(b => b.id !== id)),
     }}>
       {children}
     </AppStateContext.Provider>
@@ -373,7 +235,6 @@ export const AppStateProvider = ({ children }) => {
 };
 
 export function useAppState() {
-
   const context = useContext(AppStateContext);
 
   if (!context) {
@@ -381,5 +242,4 @@ export function useAppState() {
   }
 
   return context;
-
 }
