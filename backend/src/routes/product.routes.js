@@ -9,17 +9,17 @@ const {
 const {
   addProduct,
   updateProductFromAdmin,
-  getAvailableProducts
- 
+  getAvailableProducts,
+  deleteProductFromAdmin
 } = require("../controllers/product.controller");
 
 /**
- * Customer API
+ * PUBLIC API
  */
 router.get("/", getAvailableProducts);
 
 /**
- * Admin APIs
+ * ADMIN APIs
  */
 router.post(
   "/admin/products",
@@ -33,6 +33,13 @@ router.put(
   authMiddleware,
   adminOnly,
   updateProductFromAdmin
+);
+
+router.delete(
+  "/admin/products/:id",
+  authMiddleware,
+  adminOnly,
+  deleteProductFromAdmin
 );
 
 module.exports = router;

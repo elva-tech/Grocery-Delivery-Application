@@ -58,8 +58,19 @@ updateProduct: async (productId, payload) => {
 
   return res.data;
 },
+deleteProduct: async (productId) => {
 
+  const res = await api.delete(
+    `/api/admin/products/${productId}`,
+    {
+      headers: {
+        "x-tenant-id": "demo-tenant"   // ⭐ ADD THIS
+      }
+    }
+  );
 
+  return res.data;
+},
   /* -------- GET ALL RETURN REQUESTS -------- */
 
   getAllReturns: async () => {
