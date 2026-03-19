@@ -11,7 +11,7 @@ export interface AppSettings {
 
 export interface Product {
   id: string;
-  parentCategoryId: string;
+  parentCategoryId: string | null;
   subCategoryId: string;
   name: string;
   price: number;
@@ -65,24 +65,43 @@ export const apiSlice = createApi({
         url: '/api/products',
         method: 'GET'
       }),
+
       transformResponse: (response: any) => {
 
         const apiProducts = response?.products || [];
 
-        const mappedProducts = apiProducts.map((p: any) => ({
-          id: p.productId || p._id,
-          parentCategoryId: p.category,
-          subCategoryId: p.category,
-          name: p.name,
-          price: p.price,
-          unit: p.unit,
-          image: p.imageUrl ? [p.imageUrl] : [],
-          stock: p.availableQty,
-          description: p.description || ""
-        }));
+        const mappedProducts = apiProducts.map((p: any) => {
+
+          const subCategoryId = String(p.category);
+
+          // ⭐ FIND matching subcategory from mock categories
+          const subCategory = MOCK_CATEGORIES.find(
+            (c: any) => String(c.id) === subCategoryId
+          );
+
+          return {
+            id: p.productId || p._id,
+
+            // ✅ FIXED CATEGORY MAPPING
+            subCategoryId: subCategoryId,
+            parentCategoryId: subCategory?.parentId || null,
+
+            name: p.name,
+            price: p.price,
+            unit: p.unit,
+            image: p.imageUrl ? [p.imageUrl] : [],
+            stock: p.availableQty,
+            description: p.description || ""
+          };
+        });
 
         /* combine API + mock products */
-        return [...mappedProducts, ...MOCK_PRODUCTS];
+        return [
+          ...mappedProducts,
+          ...MOCK_PRODUCTS.filter(
+            m => !mappedProducts.some(p => String(p.id) === String(m.id))
+          )
+        ];
       }
     }),
 
@@ -110,12 +129,16 @@ export const apiSlice = createApi({
     }, any[]>({
       queryFn: async (items) => {
         try {
-          const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+          const subtotal = items.reduce(
+            (acc, item) => acc + (item.price * item.quantity),
+            0
+          );
 
           const freeDeliveryThreshold = 500;
           const isFree = subtotal >= freeDeliveryThreshold;
 
-          const deliveryCharge = (subtotal === 0 || isFree) ? 0 : 40;
+          const deliveryCharge =
+            (subtotal === 0 || isFree) ? 0 : 40;
 
           return {
             data: {
@@ -127,14 +150,12 @@ export const apiSlice = createApi({
           };
 
         } catch (error) {
-
           return {
             error: {
               status: 500,
               data: 'Calculation Error'
             }
           };
-
         }
       },
     }),
