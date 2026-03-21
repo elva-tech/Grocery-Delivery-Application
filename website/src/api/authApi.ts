@@ -2,7 +2,11 @@
  * Backend API configuration and authentication endpoints
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+if (!import.meta.env.VITE_API_URL) {
+  throw new Error('API URL not configured. Please set VITE_API_URL environment variable.');
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export interface SendOtpResponse {
   success: boolean;
@@ -29,6 +33,7 @@ export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-platform': 'web',
       },
       body: JSON.stringify({ phoneNumber }),
     });
@@ -60,6 +65,7 @@ export const verifyOtp = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-platform': 'web',
       },
       body: JSON.stringify({ phoneNumber, otp, mode, ...(name && { name }) }),
     });

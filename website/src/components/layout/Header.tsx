@@ -52,6 +52,8 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
   };
 
   const confirmLogout = () => {
+    // Clear token from localStorage
+    localStorage.removeItem('token');
     dispatch(logout());
     setShowLogoutConfirm(false);
   };

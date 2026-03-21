@@ -107,6 +107,9 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     try {
       const response = await verifyOtp(phone, otpCode, mode === 'signup' ? name : undefined, mode);
       if (response.success && response.token) {
+        // Store token in localStorage for persistence
+        localStorage.setItem('token', response.token);
+        
         dispatch(setCredentials({
           user: {
             id: response.user?.id || Math.random().toString(36).substr(2, 9),
@@ -126,13 +129,30 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
         // Clear OTP fields on invalid OTP for fresh entry
         setOtp(['', '', '', '', '', '']);
         otpInputs.current[0]?.focus();
-        setError('Invalid OTP. Please try again.');
+        const errorMessage = response.message || 'Invalid OTP. Please try again.';
+        setError(errorMessage);
+        
+        // Auto-switch to login if trying to signup with existing account
+        if (mode === 'signup' && errorMessage.includes('already exists')) {
+          setTimeout(() => switchMode('login'), 1500);
+        }
+        
+        // Auto-switch to signup if trying to login with non-existent account
+        if (mode === 'login' && errorMessage.includes("doesn't have an account")) {
+          setTimeout(() => switchMode('signup'), 1500);
+        }
       }
     } catch (err) {
       // Clear OTP fields on error for fresh entry
       setOtp(['', '', '', '', '', '']);
       otpInputs.current[0]?.focus();
-      setError(err instanceof Error ? err.message : 'Failed to verify OTP. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to verify OTP. Please try again.';
+      setError(errorMessage);
+      
+      // Auto-switch to signup if trying to login with non-existent account
+      if (mode === 'login' && errorMessage.includes("doesn't have an account")) {
+        setTimeout(() => switchMode('signup'), 1500);
+      }
     } finally {
       setLoading(false);
     }
