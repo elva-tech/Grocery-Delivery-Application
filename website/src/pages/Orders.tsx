@@ -48,31 +48,35 @@ const Orders = () => {
   }, [isAuthenticated]);
 
 const loadOrders = async () => {
-    setLoading(true);
-    const apiData = await getUserOrders(user?.id || 'user-123');
-    const localIds = new Set(apiData.map((o: any) => o.id));
-    const uniqueMocks = MOCK_ORDERS.filter(mock => !localIds.has(mock.id));
-    
-    const combinedData = [...apiData, ...uniqueMocks].sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  setLoading(true);
 
-    setOrders(combinedData);
-    
-    if (selectedOrder) {
-      const updatedSelected = combinedData.find((o: any) => o.id === selectedOrder.id);
-      if (updatedSelected) setSelectedOrder(updatedSelected);
-    } else if (location.state?.fromCheckout && combinedData.length > 0) {
-      setSelectedOrder(combinedData[0]);
-    }
-    
-    setLoading(false);
-  };
+  const apiData = await getUserOrders();
 
-  const handleReorder = (items: any[]) => {
-    items.forEach(item => dispatch(addToCart(item)));
-    navigate('/cart');
-  };
+  setOrders(apiData);
+
+  if (selectedOrder) {
+    const updatedSelected = apiData.find((o: any) => o.id === selectedOrder.id);
+    if (updatedSelected) setSelectedOrder(updatedSelected);
+  } else if (location.state?.fromCheckout && apiData.length > 0) {
+    setSelectedOrder(apiData[0]);
+  }
+
+  setLoading(false);
+};
+
+ const handleReorder = (items: any[]) => {
+  items.forEach(item => {
+    dispatch(addToCart({
+      id: item.id,                  // ✅ REQUIRED
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      image: item.image,
+    }));
+  });
+
+  navigate('/cart');
+};
 
   const handleCancelOrder = async () => {
     if (!selectedOrder) return;
