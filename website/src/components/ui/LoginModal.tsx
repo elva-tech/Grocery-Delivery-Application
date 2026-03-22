@@ -107,15 +107,18 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     try {
       const response = await verifyOtp(phone, otpCode, mode === 'signup' ? name : undefined, mode);
       if (response.success && response.token) {
-        // Store token in localStorage for persistence
+        const userData = {
+          id: response.user?.id || Math.random().toString(36).substr(2, 9),
+          phone: phone,
+          name: response.user?.name || 'User',
+        };
+        
+        // Store token and user data in localStorage for persistence
         localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(userData));
         
         dispatch(setCredentials({
-          user: {
-            id: response.user?.id || Math.random().toString(36).substr(2, 9),
-            phone: phone,
-            name: response.user?.name || name || 'User',
-          },
+          user: userData,
           token: response.token,
         }));
 
@@ -133,12 +136,12 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
         setError(errorMessage);
         
         // Auto-switch to login if trying to signup with existing account
-        if (mode === 'signup' && errorMessage.includes('already exists')) {
+        if (mode === 'signup' && errorMessage.includes('already registered')) {
           setTimeout(() => switchMode('login'), 1500);
         }
         
         // Auto-switch to signup if trying to login with non-existent account
-        if (mode === 'login' && errorMessage.includes("doesn't have an account")) {
+        if (mode === 'login' && errorMessage.includes('not registered')) {
           setTimeout(() => switchMode('signup'), 1500);
         }
       }
@@ -202,13 +205,22 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                 <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-red-700">{error}</p>
-                  {mode === 'login' && error.includes("doesn't have an account") && (
+                  {mode === 'login' && error.includes('not registered') && (
                     <button
                       type="button"
                       onClick={() => switchMode('signup')}
                       className="mt-2 text-xs font-black text-red-600 hover:text-red-800 underline"
                     >
                       → Create New Account
+                    </button>
+                  )}
+                  {mode === 'signup' && error.includes('already registered') && (
+                    <button
+                      type="button"
+                      onClick={() => switchMode('login')}
+                      className="mt-2 text-xs font-black text-red-600 hover:text-red-800 underline"
+                    >
+                      → Login with Existing Account
                     </button>
                   )}
                 </div>
@@ -305,7 +317,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
           )}
 
           {step === 'otp' && (
-            <div className="mt-8 text-center">
+            <div className="mt-8 space-y-4 text-center">
               <button 
                 type="button"
                 disabled={timer > 0 || loading}
@@ -314,6 +326,15 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
               >
                 {timer > 0 ? `Resend code in ${timer}s` : "Resend Code Now"}
               </button>
+              <div className="border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={() => switchMode(mode === 'signup' ? 'login' : 'signup')}
+                  className="text-[#4b6f9e] hover:text-[#1e293b] font-black text-xs uppercase tracking-widest transition-colors"
+                >
+                  {mode === 'signup' ? '← Back to Login' : '← Back to Sign Up'}
+                </button>
+              </div>
             </div>
           )}
         </div>

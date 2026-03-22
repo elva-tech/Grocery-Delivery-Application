@@ -65,7 +65,7 @@ const sendOtp = async (req, res) => {
 ================================ */
 const verifyOtp = async (req, res) => {
   try {
-    const { phoneNumber, otp } = req.body;
+    const { phoneNumber, otp, name, mode } = req.body;
 
     // Phone validation
     const phoneError = validatePhone(phoneNumber);
@@ -96,13 +96,37 @@ const verifyOtp = async (req, res) => {
 
     let user = await User.findOne({ tenantId, phoneNumber: phone });
 
-    if (!user) {
+    // Handle signup vs login
+    if (mode === "signup") {
+      if (user) {
+        // User already exists, cannot signup with same phone
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already registered. Please login instead.",
+        });
+      }
+      // Create new user during signup
+      if (!name || name.trim().length < 2) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide a valid name",
+        });
+      }
       user = await User.create({
         tenantId,
         phoneNumber: phone,
+        name: name.trim(),
         role: "CUSTOMER",
         isActive: true,
       });
+    } else {
+      // Login mode
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Phone number not registered. Please create an account first.",
+        });
+      }
     }
 
     if (!user.isActive) {
@@ -131,6 +155,7 @@ const verifyOtp = async (req, res) => {
       user: {
         id: user._id,
         phoneNumber: user.phoneNumber,
+        name: user.name || "User",
         role: user.role,
         tenantId: user.tenantId,
       },

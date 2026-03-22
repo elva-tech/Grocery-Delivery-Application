@@ -6,11 +6,29 @@ interface AuthState {
   isAuthenticated: boolean;
 }
 
-const initialState: AuthState = {
-  user: null,
-  token: null,
-  isAuthenticated: false,
+// Load persisted data from localStorage
+const loadPersistedAuth = () => {
+  try {
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+    if (token && user) {
+      return {
+        user: JSON.parse(user),
+        token,
+        isAuthenticated: true,
+      };
+    }
+  } catch (error) {
+    console.error('Error loading persisted auth:', error);
+  }
+  return {
+    user: null,
+    token: null,
+    isAuthenticated: false,
+  };
 };
+
+const initialState: AuthState = loadPersistedAuth();
 
 const authSlice = createSlice({
   name: 'auth',
@@ -25,6 +43,9 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
+      // Clear localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
     },
   },
 });
