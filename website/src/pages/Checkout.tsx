@@ -44,7 +44,7 @@ const handlePlaceOrder = async () => {
 
   try {
     const orderPayload = {
-      userId: user?.id || 'user-123',
+      userId: user?.id,
       items: [...items],
       totalAmount: bill.grandTotal,
       address: address?.full || 'Default Address',
@@ -52,6 +52,12 @@ const handlePlaceOrder = async () => {
     };
 
     const response = await saveNewOrder(orderPayload);
+
+    if (!response?.success) {
+      console.error("Order creation failed:", response?.error);
+      setIsProcessing(false);
+      return;
+    }
 
     const orderId =
       response?.order?._id ||

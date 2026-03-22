@@ -72,27 +72,35 @@ const Addresses = ({ items, onSelect }: any) => {
         
         deliveryAddress = {
           line1: selected.full || selected.address || '',
-          city: 'Hassan',
-          state: 'Karnataka',
-          country: 'India',
-          zip: '573201',
-          lat: selected.coordinates?.lat || 15.3173,
-          lng: selected.coordinates?.lng || 75.7139,
+          city: selected.city || '',
+          state: selected.state || '',
+          country: selected.country || 'India',
+          zip: selected.zip || '',
+          lat: typeof selected.coordinates?.lat === 'number' ? selected.coordinates.lat : 15.3173,
+          lng: typeof selected.coordinates?.lng === 'number' ? selected.coordinates.lng : 75.7139,
           phone: selected.phone || ''
         };
       } else {
         deliveryAddress = {
           line1: othersForm.fullAddress,
           landmark: othersForm.landmark || '',
-          city: 'Hassan',
-          state: 'Karnataka',
-          country: 'India',
-          zip: '573201',
+          city: othersForm.city || '',
+          state: othersForm.state || '',
+          country: othersForm.country || 'India',
+          zip: othersForm.zip || '',
           lat: 15.3173,
           lng: 75.7139,
           phone: othersForm.recipientPhone,
           recipientName: othersForm.recipientName
         };
+      }
+
+      // Validate all items have valid products
+      for (const item of items) {
+        const product = MOCK_PRODUCTS.find(p => String(p.id) === String(item.id));
+        if (!product?._id) {
+          throw new Error(`Product ${item.id} not found in catalog or missing _id`);
+        }
       }
 
       const orderPayload = {
@@ -101,10 +109,6 @@ const Addresses = ({ items, onSelect }: any) => {
           const product = MOCK_PRODUCTS.find(p => String(p.id) === String(item.id));
           const productId = product?._id;
           console.log("Item mapping:", item.id, "->", productId, "Product found:", !!product);
-          
-          if (!productId) {
-            throw new Error(`Product ${item.id} not found in catalog or missing _id`);
-          }
           
           return {
             productId: productId,
