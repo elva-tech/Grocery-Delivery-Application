@@ -48,26 +48,41 @@ const Orders = () => {
   }, [isAuthenticated]);
 
 const loadOrders = async () => {
-  setLoading(true);
+  try {
+    setLoading(true);
 
-  const apiData = await getUserOrders();
+    const apiData = await getUserOrders();
 
-  setOrders(apiData);
+    if (!apiData || !Array.isArray(apiData)) {
+      throw new Error("Invalid order data");
+    }
 
-  if (selectedOrder) {
-    const updatedSelected = apiData.find((o: any) => o.id === selectedOrder.id);
-    if (updatedSelected) setSelectedOrder(updatedSelected);
-  } else if (location.state?.fromCheckout && apiData.length > 0) {
-    setSelectedOrder(apiData[0]);
+    setOrders(apiData);
+
+    if (selectedOrder) {
+      const updatedSelected = apiData.find((o: any) => o.id === selectedOrder.id);
+      if (updatedSelected) setSelectedOrder(updatedSelected);
+    } else if (location.state?.fromCheckout && apiData.length > 0) {
+      setSelectedOrder(apiData[0]);
+    }
+
+  } catch (error) {
+    console.error("Failed to load orders:", error);
+
+    // ✅ SHOW USER ERROR
+    alert("Failed to load orders. Please try again.");
+
+    setOrders([]); // safe fallback
+  } finally {
+    setLoading(false);
   }
-
-  setLoading(false);
 };
 
  const handleReorder = (items: any[]) => {
   items.forEach(item => {
     dispatch(addToCart({
-      id: item.id,                  // ✅ REQUIRED
+      id: item.productId,          // ✅ FIX (cart id)
+      productId: item.productId,   // ✅ IMPORTANT (backend use)
       name: item.name,
       price: item.price,
       quantity: item.quantity,
@@ -78,13 +93,21 @@ const loadOrders = async () => {
   navigate('/cart');
 };
 
-  const handleCancelOrder = async () => {
-    if (!selectedOrder) return;
-    await cancelOrderApi(selectedOrder.id);
-    await loadOrders();
-    setIsCancelModalOpen(false);
-  };
+ const handleCancelOrder = async () => {
+  if (!selectedOrder) return;
 
+  const res = await cancelOrderApi(selectedOrder.id);
+
+  if (!res.success) {
+    alert(res.message || "Cancel failed");
+    return;
+  }
+
+  alert("Order cancelled successfully");
+
+  await loadOrders();        // ✅ reload
+  setIsCancelModalOpen(false); // ✅ close modal
+};
   const handleReportSuccess = async () => {
     await loadOrders();
     setIsReportModalOpen(false);

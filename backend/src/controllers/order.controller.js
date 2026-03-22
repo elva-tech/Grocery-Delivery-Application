@@ -272,35 +272,79 @@ exports.getCustomerOrderById = async (req, res) => {
 };
 // CANCEL ORDER
 exports.cancelOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { orderId } = req.params;
-    const tenantId = req.user.tenantId;
+    const { tenantId, userId } = req.user;
 
-    const order = await Order.findOne({ _id: orderId, tenantId });
+   const order = await Order.findOne({
+  _id: orderId,
+  tenantId,
+  userId   // ✅ ADD THIS
+}).session(session);
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found" });
+      await session.abortTransaction();
+      return res.status(404).json({
+        message: "Order not found or access denied"
+      });
     }
 
-    // Only allow cancel before delivery
     if (!["PLACED", "CONFIRMED"].includes(order.orderStatus)) {
+      await session.abortTransaction();
       return res.status(400).json({
         message: "Order cannot be cancelled at this stage"
       });
     }
 
-    order.orderStatus = "CANCELLED";
-    await order.save();
+    // ✅ Restore inventory safely
+    for (const item of order.items) {
+      await Inventory.findOneAndUpdate(
+        {
+          productId: item.productId,
+          tenantId
+        },
+        {
+          $inc: { availableQty: item.qty }
+        },
+        { session }
+      );
+    }
 
-    res.status(200).json({
-      message: "Order cancelled successfully",
-      orderId: order._id,
-      orderStatus: order.orderStatus
-    });
+    // ✅ Payment handling
+    let refundStatus = "NOT_APPLICABLE";
+
+    if (order.paymentMode === "ONLINE" && order.paymentStatus === "PAID") {
+      refundStatus = "INITIATED";
+      order.paymentStatus = "REFUND_INITIATED";
+    }
+
+    // ✅ Update order
+    order.orderStatus = "CANCELLED";
+    order.cancelledAt = new Date();
+
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(200).json({
+  success: true,
+  message: "Order cancelled successfully",
+  orderId: order._id,
+  orderStatus: order.orderStatus,
+  paymentStatus: order.paymentStatus,
+  refundStatus
+});
 
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
     console.error(error);
-    res.status(500).json({
+    return res.status(500).json({
       message: "Something went wrong"
     });
   }
