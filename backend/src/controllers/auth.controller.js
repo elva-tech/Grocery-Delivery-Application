@@ -27,7 +27,7 @@ const validatePhone = (phoneNumber) => {
 };
 
 /* ===============================
-   SEND OTP
+   SEND OTP to demo
 ================================ */
 const sendOtp = async (req, res) => {
   try {

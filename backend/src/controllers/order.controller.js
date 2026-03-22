@@ -51,11 +51,13 @@ exports.placeCustomerOrder = async (req, res) => {
       }
 
       orderItems.push({
-        productId: inventory.productId._id,
-        name: inventory.productId.name,
-        qty: item.qty,
-        price: inventory.productId.price,
-      });
+  productId: inventory.productId._id,
+  name: inventory.productId.name,
+  qty: item.qty,
+  price: inventory.productId.price,
+  unit: inventory.productId.unit || "pcs",          // ✅ ADD
+  image: inventory.productId.image || "/placeholder.png" // ✅ ADD
+});
 
       totalAmount += inventory.productId.price * item.qty;
     }
@@ -105,25 +107,45 @@ exports.getCustomerOrderHistory = async (req, res) => {
   try {
     const userId = req.user.userId;
     const tenantId = req.user.tenantId;
+    const { status } = req.query;
 
-    const orders = await Order.find({
-      userId,
-      tenantId,
-      orderStatus: "DELIVERED",
-    })
-      .sort({ createdAt: -1 })
-      .select("totalAmount orderStatus paymentStatus createdAt");
+    const filter = { userId, tenantId };
+
+    if (status) {
+      filter.orderStatus = status;
+    }
+
+    const orders = await Order.find(filter)
+      .sort({ createdAt: -1 });
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id,                          // ✅ IMPORTANT (frontend expects id)
+      status: order.orderStatus,              // ✅ rename
+      totalAmount: order.totalAmount,
+      paymentStatus: order.paymentStatus,
+      createdAt: order.createdAt,
+
+      // ✅ ADD THESE (you already store them)
+      address: order.deliveryAddress?.line1 || "No address",
+      deliverySlot: order.deliverySlot || "Standard Delivery",
+
+      // ✅ SEND ITEMS PROPERLY
+     items: order.items.map(item => ({
+  productId: item.productId,
+  id: item.productId,              // ✅ IMPORTANT for frontend reorder
+  name: item.name,
+  quantity: item.qty,
+  price: item.price,
+  unit: item.unit || "pcs",
+  image: item.image || "/placeholder.png"
+}))
+    }));
 
     res.status(200).json({
-      message: "Delivered orders fetched successfully",
-      orders: orders.map(order => ({
-        orderId: order._id,
-        totalAmount: order.totalAmount,
-        orderStatus: order.orderStatus,
-        paymentStatus: order.paymentStatus,
-        createdAt: order.createdAt,
-      })),
+      message: "Orders fetched successfully",
+      orders: formattedOrders
     });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({
@@ -248,7 +270,85 @@ exports.getCustomerOrderById = async (req, res) => {
     });
   }
 };
+// CANCEL ORDER
+exports.cancelOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
+  try {
+    const { orderId } = req.params;
+    const { tenantId, userId } = req.user;
+
+   const order = await Order.findOne({
+  _id: orderId,
+  tenantId,
+  userId   // ✅ ADD THIS
+}).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        message: "Order not found or access denied"
+      });
+    }
+
+    if (!["PLACED", "CONFIRMED"].includes(order.orderStatus)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        message: "Order cannot be cancelled at this stage"
+      });
+    }
+
+    // ✅ Restore inventory safely
+    for (const item of order.items) {
+      await Inventory.findOneAndUpdate(
+        {
+          productId: item.productId,
+          tenantId
+        },
+        {
+          $inc: { availableQty: item.qty }
+        },
+        { session }
+      );
+    }
+
+    // ✅ Payment handling
+    let refundStatus = "NOT_APPLICABLE";
+
+    if (order.paymentMode === "ONLINE" && order.paymentStatus === "PAID") {
+      refundStatus = "INITIATED";
+      order.paymentStatus = "REFUND_INITIATED";
+    }
+
+    // ✅ Update order
+    order.orderStatus = "CANCELLED";
+    order.cancelledAt = new Date();
+
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(200).json({
+  success: true,
+  message: "Order cancelled successfully",
+  orderId: order._id,
+  orderStatus: order.orderStatus,
+  paymentStatus: order.paymentStatus,
+  refundStatus
+});
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error(error);
+    return res.status(500).json({
+      message: "Something went wrong"
+    });
+  }
+};
 /**
  * ADMIN - GET ALL ORDERS (FOR REVENUE + EXPORT)
  */
