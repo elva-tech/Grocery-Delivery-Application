@@ -109,8 +109,14 @@ exports.getCustomerOrderHistory = async (req, res) => {
     const tenantId = req.user.tenantId;
     const { status } = req.query;
 
-    const filter = { userId, tenantId };
-
+    const filter = {
+      userId,
+      $or: [
+        { tenantId: tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null }
+      ]
+    };
     if (status) {
       filter.orderStatus = status;
     }
