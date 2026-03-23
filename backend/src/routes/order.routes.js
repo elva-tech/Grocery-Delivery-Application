@@ -9,6 +9,7 @@ const {
   markOrderDelivered,
   getCustomerOrderById,
   getAllOrders,
+  cancelOrder,
   getRevenue
 } = require("../controllers/order.controller");
 
@@ -23,5 +24,5 @@ router.get("/my", authMiddleware, getCustomerOrderHistory);
 router.get("/:id", authMiddleware, getCustomerOrderById);
 
 router.patch("/:orderId/deliver", authMiddleware, markOrderDelivered);
-
+router.patch("/:orderId/cancel", authMiddleware, cancelOrder);
 module.exports = router;

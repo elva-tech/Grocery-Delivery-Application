@@ -55,10 +55,9 @@ exports.placeCustomerOrder = async (req, res) => {
         name: inventory.productId.name,
         qty: item.qty,
         price: inventory.productId.price,
-        unit: inventory.productId.unit || "pcs",
-        image: inventory.productId.image || "/placeholder.png"
-      });
-
+        unit: inventory.productId.unit || "pcs",          // ✅ ADD
+        image: inventory.productId.image || "/placeholder.png" // ✅ ADD
+      });        
       totalAmount += inventory.productId.price * item.qty;
     }
 
@@ -91,6 +90,97 @@ exports.placeCustomerOrder = async (req, res) => {
       orderStatus: order.orderStatus,
       paymentStatus: order.paymentStatus,
       createdAt: order.createdAt,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
+  }
+};
+
+/**
+ * CUSTOMER ORDER HISTORY (ONLY DELIVERED)
+ */
+exports.getCustomerOrderHistory = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const tenantId = req.user.tenantId;
+    const { status } = req.query;
+
+    const filter = { userId, tenantId };
+
+    if (status) {
+      filter.orderStatus = status;
+    }
+
+    const orders = await Order.find(filter)
+      .sort({ createdAt: -1 });
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id,                          // ✅ IMPORTANT (frontend expects id)
+      status: order.orderStatus,              // ✅ rename
+      totalAmount: order.totalAmount,
+      paymentStatus: order.paymentStatus,
+      createdAt: order.createdAt,
+
+      // ✅ ADD THESE (you already store them)
+      address: order.deliveryAddress?.line1 || "No address",
+      deliverySlot: order.deliverySlot || "Standard Delivery",
+
+      // ✅ SEND ITEMS PROPERLY
+     items: order.items.map(item => ({
+  productId: item.productId,
+  id: item.productId,              // ✅ IMPORTANT for frontend reorder
+  name: item.name,
+  quantity: item.qty,
+  price: item.price,
+  unit: item.unit || "pcs",
+  image: item.image || "/placeholder.png"
+}))
+    }));
+
+    res.status(200).json({
+      message: "Orders fetched successfully",
+      orders: formattedOrders
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Something went wrong. Please try again later.",
+    });
+  }
+};
+
+/**
+ * MARK ORDER DELIVERED
+ */
+exports.markOrderDelivered = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const tenantId = req.user.tenantId;
+
+    const order = await Order.findOne({ _id: orderId, tenantId });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (order.orderStatus === "DELIVERED") {
+      return res.status(400).json({ message: "Order already delivered" });
+    }
+
+    order.orderStatus = "DELIVERED";
+    order.paymentStatus = "PAID";
+
+    await order.save();
+
+    res.status(200).json({
+      message: "Order delivered successfully",
+      orderId: order._id,
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
     });
   } catch (error) {
     console.error(error);
@@ -189,11 +279,11 @@ exports.cancelOrder = async (req, res) => {
     const { orderId } = req.params;
     const { tenantId, userId } = req.user;
 
-    const order = await Order.findOne({
-      _id: orderId,
-      tenantId,
-      userId
-    }).session(session);
+   const order = await Order.findOne({
+  _id: orderId,
+  tenantId,
+  userId   // ✅ ADD THIS
+}).session(session);
 
     if (!order) {
       await session.abortTransaction();
@@ -209,6 +299,7 @@ exports.cancelOrder = async (req, res) => {
       });
     }
 
+    // ✅ Restore inventory safely
     for (const item of order.items) {
       await Inventory.findOneAndUpdate(
         {
@@ -222,6 +313,7 @@ exports.cancelOrder = async (req, res) => {
       );
     }
 
+    // ✅ Payment handling
     let refundStatus = "NOT_APPLICABLE";
 
     if (order.paymentMode === "ONLINE" && order.paymentStatus === "PAID") {
@@ -229,6 +321,7 @@ exports.cancelOrder = async (req, res) => {
       order.paymentStatus = "REFUND_INITIATED";
     }
 
+    // ✅ Update order
     order.orderStatus = "CANCELLED";
     order.cancelledAt = new Date();
 
@@ -238,12 +331,13 @@ exports.cancelOrder = async (req, res) => {
     session.endSession();
 
     return res.status(200).json({
-      message: "Order cancelled successfully",
-      orderId: order._id,
-      orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus,
-      refundStatus
-    });
+  success: true,
+  message: "Order cancelled successfully",
+  orderId: order._id,
+  orderStatus: order.orderStatus,
+  paymentStatus: order.paymentStatus,
+  refundStatus
+});
 
   } catch (error) {
     await session.abortTransaction();
@@ -252,92 +346,6 @@ exports.cancelOrder = async (req, res) => {
     console.error(error);
     return res.status(500).json({
       message: "Something went wrong"
-    });
-  }
-};
-/**
- * MARK ORDER DELIVERED
- */
-exports.markOrderDelivered = async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const tenantId = req.user.tenantId;
-
-    const order = await Order.findOne({ _id: orderId, tenantId });
-
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    if (order.orderStatus === "DELIVERED") {
-      return res.status(400).json({ message: "Order already delivered" });
-    }
-
-    order.orderStatus = "DELIVERED";
-    order.paymentStatus = "PAID";
-
-    await order.save();
-
-    res.status(200).json({
-      message: "Order delivered successfully",
-      orderId: order._id,
-      orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Something went wrong. Please try again later.",
-    });
-  }
-};
-
-/**
- * CUSTOMER ORDER HISTORY (ONLY DELIVERED)
- */
-exports.getCustomerOrderHistory = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const tenantId = req.user.tenantId;
-    const { status } = req.query;
-
-    const filter = { userId, tenantId };
-
-    if (status) {
-      filter.orderStatus = status;
-    }
-
-    const orders = await Order.find(filter)
-      .sort({ createdAt: -1 });
-
-    const formattedOrders = orders.map(order => ({
-      id: order._id,
-      status: order.orderStatus,
-      totalAmount: order.totalAmount,
-      paymentStatus: order.paymentStatus,
-      createdAt: order.createdAt,
-      address: order.deliveryAddress?.line1 || "No address",
-      deliverySlot: order.deliverySlot || "Standard Delivery",
-      items: order.items.map(item => ({
-        productId: item.productId,
-        id: item.productId,
-        name: item.name,
-        quantity: item.qty,
-        price: item.price,
-        unit: item.unit || "pcs",
-        image: item.image || "/placeholder.png"
-      }))
-    }));
-
-    res.status(200).json({
-      message: "Orders fetched successfully",
-      orders: formattedOrders
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Something went wrong. Please try again later."
     });
   }
 };

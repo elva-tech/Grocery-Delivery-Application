@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { X, Phone, User, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
+import { X, Phone, User, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { setCredentials } from '../../store/slices/authSlice';
-import { requestOtp } from '../../api/addresses';
+import { sendOtp, verifyOtp } from '../../api/authApi';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -11,12 +11,14 @@ interface LoginModalProps {
 
 const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const dispatch = useDispatch();
-  const [step, setStep] = useState<'register' | 'otp'>('register');
+  const [mode, setMode] = useState<'signup' | 'login'>('signup');
+  const [step, setStep] = useState<'auth' | 'otp'>('auth');
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(30);
+  const [error, setError] = useState('');
 
   const otpInputs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -32,21 +34,52 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    
     const indiaPhoneRegex = /^[6-9]\d{9}$/;
-    if (!indiaPhoneRegex.test(phone) || name.length < 2) return;
+    
+    // Validate based on mode
+    if (mode === 'signup' && name.length < 2) {
+      setError('Please enter a valid name');
+      return;
+    }
+    
+    if (!indiaPhoneRegex.test(phone)) {
+      setError('Please enter a valid 10-digit Indian phone number');
+      return;
+    }
     
     setLoading(true);
-    await requestOtp(phone); 
-    setLoading(false);
-    setStep('otp');
+    try {
+      const response = await sendOtp(phone);
+      if (response.success) {
+        setStep('otp');
+      } else {
+        setError(response.message || 'Failed to send OTP');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResendOtp = async () => {
+    setError('');
     setLoading(true);
-    await requestOtp(phone);
-    setTimer(30);
-    setOtp(['', '', '', '']);
-    setLoading(false);
+    try {
+      const response = await sendOtp(phone);
+      if (response.success) {
+        setTimer(30);
+        setOtp(['', '', '', '', '', '']);
+      } else {
+        setError(response.message || 'Failed to resend OTP');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend OTP');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOtpChange = (val: string, index: number) => {
@@ -55,63 +88,89 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     newOtp[index] = numericValue.slice(-1);
     setOtp(newOtp);
 
-    if (numericValue && index < 3) {
+    if (numericValue && index < 5) {
       otpInputs.current[index + 1]?.focus();
     }
   };
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.join('').length !== 4) return;
+    setError('');
+    
+    const otpCode = otp.join('');
+    if (otpCode.length !== 6) {
+      setError('Please enter a valid 6-digit OTP');
+      return;
+    }
 
     setLoading(true);
-    
     try {
-      const response = await fetch("http://localhost:5000/api/auth/verify-otp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          phoneNumber: phone,
-          otp: "123456"   // since backend uses static OTP
-          })
-        });
+      const response = await verifyOtp(phone, otpCode, mode === 'signup' ? name : undefined, mode);
+      if (response.success && response.token) {
+        const userData = {
+          id: response.user?.id || Math.random().toString(36).substr(2, 9),
+          phone: phone,
+          name: response.user?.name || 'User',
+        };
         
-        const data = await response.json();
-
-        if (data.success) {
-
-        // 🔥 STORE TOKEN (MOST IMPORTANT)
-        localStorage.setItem("token", data.token);
-
-        // Optional: store user
-        localStorage.setItem("user", JSON.stringify(data.user));
-
-        // Redux update
+        // Store token and user data in localStorage for persistence
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
         dispatch(setCredentials({
-          user: data.user,
-          token: data.token
+          user: userData,
+          token: response.token,
         }));
-        
-        onClose();
-        setStep('register');
-        setOtp(['', '', '', '']);
-      
-      } else {
-        console.error("OTP failed");
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-    }
-    
-    setLoading(false);
 
-    setLoading(false);
-    onClose();
-    setStep('register');
-    setOtp(['', '', '', '']);
+        onClose();
+        setMode('signup');
+        setStep('auth');
+        setOtp(['', '', '', '', '', '']);
+        setName('');
+        setPhone('');
+      } else {
+        // Clear OTP fields on invalid OTP for fresh entry
+        setOtp(['', '', '', '', '', '']);
+        otpInputs.current[0]?.focus();
+        const errorMessage = response.message || 'Invalid OTP. Please try again.';
+        setError(errorMessage);
+        
+        // Auto-switch to login if trying to signup with existing account
+        if (mode === 'signup' && errorMessage.includes('already registered')) {
+          setTimeout(() => switchMode('login'), 1500);
+        }
+        
+        // Auto-switch to signup if trying to login with non-existent account
+        if (mode === 'login' && errorMessage.includes('not registered')) {
+          setTimeout(() => switchMode('signup'), 1500);
+        }
+      }
+    } catch (err) {
+      // Clear OTP fields on error for fresh entry
+      setOtp(['', '', '', '', '', '']);
+      otpInputs.current[0]?.focus();
+      const errorMessage = err instanceof Error ? err.message : 'Failed to verify OTP. Please try again.';
+      setError(errorMessage);
+      
+      // Auto-switch to signup if trying to login with non-existent account
+      if (mode === 'login' && errorMessage.includes("doesn't have an account")) {
+        setTimeout(() => switchMode('signup'), 1500);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const switchMode = (newMode: 'signup' | 'login') => {
+    setMode(newMode);
+    setStep('auth');
+    setName('');
+    setPhone('');
+    setOtp(['', '', '', '', '', '']);
+    setError('');
+    setTimer(30);
+  };
+
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -124,37 +183,68 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
 
         <div className="p-8 pt-12">
           <div className="w-20 h-20 bg-blue-50 text-[#4b6f9e] rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-inner">
-            {step === 'register' ? <User size={36} strokeWidth={1.5} /> : <ShieldCheck size={36} strokeWidth={1.5} />}
+            {step === 'auth' ? <User size={36} strokeWidth={1.5} /> : <ShieldCheck size={36} strokeWidth={1.5} />}
           </div>
 
           <div className="text-center mb-10">
             <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">
-              {step === 'register' ? 'Create Account' : 'Verification'}
+              {step === 'auth' 
+                ? (mode === 'signup' ? 'Create Account' : 'Welcome Back')
+                : 'Verification'}
             </h2>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-              {step === 'register' 
-                ? 'Join us to start shopping' 
+              {step === 'auth'
+                ? (mode === 'signup' ? 'Join us to start shopping' : 'Login to your account')
                 : `Enter code sent to ${phone}`}
             </p>
           </div>
 
-          <form onSubmit={step === 'register' ? handleSendOtp : handleVerify} className="space-y-5">
-            {step === 'register' ? (
-              <>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Full Name</label>
-                  <div className="relative">
-                    <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input 
-                      type="text"
-                      placeholder="John Doe"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full h-16 bg-slate-50 border-2 border-slate-200 focus:border-[#4b6f9e] focus:bg-white rounded-2xl pl-12 pr-4 font-bold outline-none transition-all"
-                      required
-                    />
-                  </div>
+          <form onSubmit={step === 'auth' ? handleSendOtp : handleVerify} className="space-y-5">
+            {error && (
+              <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex gap-3">
+                <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-700">{error}</p>
+                  {mode === 'login' && error.includes('not registered') && (
+                    <button
+                      type="button"
+                      onClick={() => switchMode('signup')}
+                      className="mt-2 text-xs font-black text-red-600 hover:text-red-800 underline"
+                    >
+                      → Create New Account
+                    </button>
+                  )}
+                  {mode === 'signup' && error.includes('already registered') && (
+                    <button
+                      type="button"
+                      onClick={() => switchMode('login')}
+                      className="mt-2 text-xs font-black text-red-600 hover:text-red-800 underline"
+                    >
+                      → Login with Existing Account
+                    </button>
+                  )}
                 </div>
+              </div>
+            )}
+            
+            {step === 'auth' ? (
+              <>
+                {mode === 'signup' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Full Name</label>
+                    <div className="relative">
+                      <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                      <input 
+                        type="text"
+                        placeholder="John Doe"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full h-16 bg-slate-50 border-2 border-slate-200 focus:border-[#4b6f9e] focus:bg-white rounded-2xl pl-12 pr-4 font-bold outline-none transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Mobile Number</label>
@@ -172,7 +262,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                 </div>
               </>
             ) : (
-              <div className="flex justify-between gap-3 py-4">
+              <div className="flex justify-center gap-2 py-4">
                 {otp.map((digit, idx) => (
                   <input
                     key={idx}
@@ -186,29 +276,48 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                         otpInputs.current[idx - 1]?.focus();
                       }
                     }}
-                    className="w-16 h-20 bg-white border-2 border-slate-300 focus:border-[#4b6f9e] focus:ring-4 focus:ring-blue-50 rounded-2xl text-center text-3xl font-black outline-none transition-all shadow-sm text-slate-800"
+                    className="w-12 h-16 bg-white border-2 border-slate-300 focus:border-[#4b6f9e] focus:ring-4 focus:ring-blue-50 rounded-xl text-center text-2xl font-black outline-none transition-all shadow-sm text-slate-800"
                   />
                 ))}
               </div>
             )}
 
             <button 
-              disabled={loading || (step === 'register' && (phone.length !== 10 || name.length < 2))}
+              disabled={loading || (step === 'auth' && (phone.length !== 10 || (mode === 'signup' && name.length < 2)))}
               className="w-full h-16 bg-[#4b6f9e] hover:bg-[#1e293b] disabled:bg-slate-200 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-900/20 transition-all active:scale-95 mt-4"
             >
               {loading ? (
                 <Loader2 size={24} className="animate-spin" />
               ) : (
                 <>
-                  {step === 'register' ? 'Continue' : 'Verify & Login'}
+                  {step === 'auth' 
+                    ? (mode === 'signup' ? 'Create & Continue' : 'Send OTP')
+                    : 'Verify & Login'}
                   <ArrowRight size={20} />
                 </>
               )}
             </button>
           </form>
 
+          {step === 'auth' && (
+            <div className="mt-6 text-center">
+              <p className="text-xs text-slate-600 font-semibold mb-3">
+                {mode === 'signup' 
+                  ? 'Already have an account?'
+                  : 'New user?'}
+              </p>
+              <button
+                type="button"
+                onClick={() => switchMode(mode === 'signup' ? 'login' : 'signup')}
+                className="text-[#4b6f9e] hover:text-[#1e293b] font-black text-sm uppercase tracking-widest transition-colors"
+              >
+                {mode === 'signup' ? 'Login Here' : 'Sign Up Here'}
+              </button>
+            </div>
+          )}
+
           {step === 'otp' && (
-            <div className="mt-8 text-center">
+            <div className="mt-8 space-y-4 text-center">
               <button 
                 type="button"
                 disabled={timer > 0 || loading}
@@ -217,6 +326,15 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
               >
                 {timer > 0 ? `Resend code in ${timer}s` : "Resend Code Now"}
               </button>
+              <div className="border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={() => switchMode(mode === 'signup' ? 'login' : 'signup')}
+                  className="text-[#4b6f9e] hover:text-[#1e293b] font-black text-xs uppercase tracking-widest transition-colors"
+                >
+                  {mode === 'signup' ? '← Back to Login' : '← Back to Sign Up'}
+                </button>
+              </div>
             </div>
           )}
         </div>

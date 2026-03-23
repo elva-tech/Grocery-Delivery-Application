@@ -1,4 +1,8 @@
 import { MOCK_ORDERS } from './mockdata';
+import axios from "axios";
+import { API_BASE_URL } from "../config";
+
+const API_URL = `${API_BASE_URL}/orders`;
 
 const ORDERS_KEY = '@enandi_orders_v1';
 const ORDER_COUNTER_KEY = '@enandi_order_counter';
@@ -39,33 +43,7 @@ export const generateBackendOrderId = async (): Promise<string> => {
   return `ORD${newCounter.toString().padStart(6, '0')}`;
 };
 
-export const getUserOrders = async (userId: string) => {
-  try {
-    const savedOrdersStr = storage.getItem(ORDERS_KEY);
-    const savedOrders = savedOrdersStr ? JSON.parse(savedOrdersStr) : [];
-    
-    // Filter MOCK_ORDERS but allow local overrides (like CANCELLED status) to take precedence
-    const filteredMocks = MOCK_ORDERS.filter(
-      (mock) => !savedOrders.some((saved: any) => saved.id === mock.id)
-    );
 
-    const allOrders = [...savedOrders, ...filteredMocks];
-
-    return allOrders
-      .filter((order: any) => order.userId === userId)
-      .map((order: any) => ({
-        ...order,
-        items: order.items.map((i: any) => ({
-          ...i,
-          image: Array.isArray(i.image) ? i.image[0] : i.image
-        }))
-      }))
-      .sort((a: any) => (a.status === 'OUT_FOR_DELIVERY' ? -1 : 1)) // Priority sort
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  } catch (error) {
-    return MOCK_ORDERS.filter(order => order.userId === userId);
-  }
-};
 
 export const saveNewOrder = async (orderData: any) => {
   const orderId = await generateBackendOrderId();
@@ -87,22 +65,70 @@ export const saveNewOrder = async (orderData: any) => {
   return newOrder;
 };
 
-export const cancelOrderApi = async (orderId: string) => {
-  const existingOrdersStr = storage.getItem(ORDERS_KEY);
-  let orders = existingOrdersStr ? JSON.parse(existingOrdersStr) : [];
-  
-  const orderExistsLocally = orders.find((o: any) => o.id === orderId);
-  
-  if (orderExistsLocally) {
-    orders = orders.map((o: any) => o.id === orderId ? { ...o, status: 'CANCELLED' } : o);
-  } else {
-    // If it's a mock order being cancelled for the first time
-    const mockOrder = MOCK_ORDERS.find(o => o.id === orderId);
-    if (mockOrder) orders.push({ ...mockOrder, status: 'CANCELLED' });
+export const getUserOrders = async () => {
+  try {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      throw new Error("Unauthorized"); // ✅ FIX
+    }
+
+    const res = await axios.get(`${API_URL}/my`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (!res.data?.orders) {
+      throw new Error("Invalid response");
+    }
+
+    return res.data.orders.map((order: any) => ({
+      id: order.id,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      createdAt: order.createdAt,
+      address: order.address,
+      deliverySlot: order.deliverySlot,
+      items: order.items || []
+    }));
+
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    throw error; // ✅ IMPORTANT (don't silently return [])
   }
-  
-  storage.setItem(ORDERS_KEY, JSON.stringify(orders));
-  return { success: true };
+};
+// ✅ CANCEL ORDER (CALL BACKEND)
+export const cancelOrderApi = async (orderId: string) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      throw new Error("Unauthorized"); // ✅ FIX
+    }
+
+    const res = await axios.patch(
+      `${API_URL}/${orderId}/cancel`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+
+    if (!res.data?.success) {
+      return { success: false, message: res.data?.message };
+    }
+
+    return res.data;
+
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error?.message || "Cancel failed"
+    };
+  }
 };
 export const processAdminRefundApi = async (orderId: string, decision: 'APPROVE' | 'REJECT', adminNote: string) => {
   const existingOrders = localStorage.getItem(ORDERS_KEY);
