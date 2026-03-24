@@ -34,13 +34,18 @@ export interface Category {
 
 export const apiSlice = createApi({
   reducerPath: 'api',
+
   baseQuery: fetchBaseQuery({
     baseUrl: import.meta.env.VITE_API_URL,
     prepareHeaders: (headers) => {
-      headers.set('x-tenant-id', 'demo-tenant');
+      const tenantId = import.meta.env.VITE_TENANT_ID;
+      if (tenantId) {
+        headers.set('x-tenant-id', tenantId);
+      }
       return headers;
     }
   }),
+
   endpoints: (builder) => ({
 
     /* ----------- SETTINGS ----------- */
@@ -67,41 +72,28 @@ export const apiSlice = createApi({
       }),
 
       transformResponse: (response: any) => {
-
         const apiProducts = response?.products || [];
 
-        const mappedProducts = apiProducts.map((p: any) => {
+        const mappedProducts = apiProducts.map((p: any) => ({
+          id: p.productId || p._id,
+          subCategoryId: String(p.category),
+          parentCategoryId: p.parentCategory
+            ? String(p.parentCategory)
+            : null,
+          name: p.name,
+          price: p.price,
+          unit: p.unit,
+          image: p.imageUrl ? [p.imageUrl] : [],
+          stock: p.availableQty,
+          description: p.description || ""
+        }));
 
-          const subCategoryId = String(p.category);
+        // fallback only if API empty
+        if (mappedProducts.length === 0) {
+          return MOCK_PRODUCTS as Product[];
+        }
 
-          // ⭐ FIND matching subcategory from mock categories
-          const subCategory = MOCK_CATEGORIES.find(
-            (c: any) => String(c.id) === subCategoryId
-          );
-
-          return {
-            id: p.productId || p._id,
-
-            // ✅ FIXED CATEGORY MAPPING
-            subCategoryId: subCategoryId,
-            parentCategoryId: subCategory?.parentId || null,
-
-            name: p.name,
-            price: p.price,
-            unit: p.unit,
-            image: p.imageUrl ? [p.imageUrl] : [],
-            stock: p.availableQty,
-            description: p.description || ""
-          };
-        });
-
-        /* combine API + mock products */
-        return [
-          ...mappedProducts,
-          ...MOCK_PRODUCTS.filter(
-            m => !mappedProducts.some(p => String(p.id) === String(m.id))
-          )
-        ];
+        return mappedProducts;
       }
     }),
 

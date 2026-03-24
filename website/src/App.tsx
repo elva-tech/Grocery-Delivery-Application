@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
 import PromoBanners from './components/home/PromoBanners';
@@ -15,14 +15,13 @@ import OrderSuccess from './pages/OrderSuccess';
 import Addresses from './pages/Addresses';
 import LoginModal from './components/ui/LoginModal'; 
 import { getCartCalculation } from './api/mockdata';
-import { useGetProductsQuery } from './api/apiSlice';
+import { useGetProductsQuery, useGetCategoriesQuery } from './api/apiSlice';
 import type { RootState } from './store/store';
 import { ChevronRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import Footer from './components/layout/Footer';
 import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
-import { useGetCategoriesQuery } from './api/apiSlice';
 
 const App = () => {
   const navigate = useNavigate();
@@ -53,34 +52,68 @@ const App = () => {
     }
   }, [location.pathname]);
 
- const filteredProducts = useMemo(() => {
-  if (!products || products.length === 0) return [];
+  // FREE DELIVERY LOGIC (restored)
+  useEffect(() => {
+    const handleMilestone = async () => {
+      if (items.length === 0) {
+        setWasFree(false);
+        setShowFreeToast(false);
+        return;
+      }
 
-  return products.filter(p => {
+      const data = await getCartCalculation(items);
 
-    const matchesSearch = p.name
-      ?.toLowerCase()
-      .includes(searchQuery.toLowerCase());
+      if (data.isFreeDelivery) {
+        if (!wasFree) {
+          const duration = 3000;
+          const animationEnd = Date.now() + duration;
+          const interval: any = setInterval(() => {
+            const timeLeft = animationEnd - Date.now();
+            if (timeLeft <= 0) return clearInterval(interval);
 
-    let matchesCategory = true;
+            confetti({
+              particleCount: 50 * (timeLeft / duration),
+              spread: 360,
+              origin: { x: Math.random(), y: Math.random() - 0.2 }
+            });
+          }, 250);
 
-    // ✅ SUBCATEGORY CLICK
-    if (selectedSubId) {
-      matchesCategory =
-        String(p.subCategoryId) === String(selectedSubId);
-    }
+          setWasFree(true);
+        }
 
-    // ✅ PARENT CATEGORY CLICK
-    else if (selectedParentId) {
-      matchesCategory =
-        String(p.parentCategoryId) === String(selectedParentId);
-    }
+        setShowFreeToast(true);
 
-    return matchesSearch && matchesCategory;
-  });
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setShowFreeToast(false), 5000);
 
-}, [searchQuery, selectedParentId, selectedSubId, products]);
-  // ⭐⭐⭐⭐⭐ END FIX ⭐⭐⭐⭐⭐
+      } else {
+        setWasFree(false);
+        setShowFreeToast(false);
+      }
+    };
+
+    handleMilestone();
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [items, wasFree]);
+
+  const filteredProducts = useMemo(() => {
+    if (!products || products.length === 0) return [];
+
+    return products.filter(p => {
+      const matchesSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      let matchesCategory = true;
+
+      if (selectedSubId) {
+        matchesCategory = String(p.subCategoryId) === String(selectedSubId);
+      } else if (selectedParentId) {
+        matchesCategory = String(p.parentCategoryId) === String(selectedParentId);
+      }
+
+      return matchesSearch && matchesCategory;
+    });
+
+  }, [searchQuery, selectedParentId, selectedSubId, products]);
 
   const handleBack = () => {
     setSearchQuery('');
@@ -89,8 +122,30 @@ const App = () => {
     navigate('/');
   };
 
+  // RESTORED CHECKOUT FLOW
+  const handleProceed = () => {
+    setIsCartOpen(false);
+    if (!isAuthenticated) {
+      setIsLoginOpen(true);
+    } else {
+      navigate('/addresses');
+    }
+  };
+
   const isBrowseMode = location.pathname === '/browse';
   const isCheckoutFlow = ['/checkout', '/addresses', '/success'].includes(location.pathname);
+
+  // PROTECTED ROUTES LOGIC
+  useEffect(() => {
+    if (location.pathname === '/checkout' && !selectedAddress) {
+      navigate('/addresses', { replace: true });
+    }
+
+    const protectedRoutes = ['/checkout', '/addresses'];
+    if (protectedRoutes.includes(location.pathname) && items.length === 0) {
+      navigate('/', { replace: true });
+    }
+  }, [location.pathname, selectedAddress, items.length, navigate]);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc] text-[#1e293b] font-sans">
@@ -131,7 +186,6 @@ const App = () => {
                   onSelectSub={setSelectedSubId}
                   onSeeAll={() => navigate('/browse')}
                 />
-
                 <ProductGrid products={filteredProducts} />
               </div>
             } />
@@ -142,10 +196,55 @@ const App = () => {
 
             <Route path="/product/:productId" element={<ProductDetail />} />
 
+            {/* RESTORED ROUTES */}
+            <Route path="/addresses" element={<Addresses items={items} onSelect={setSelectedAddress} />} />
+            <Route path="/checkout" element={<Checkout address={selectedAddress} />} />
+            <Route path="/success" element={<OrderSuccess />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/about" element={<LegalPage />} />
+            <Route path="/contact" element={<LegalPage />} />
+            <Route path="/faqs" element={<LegalPage />} />
+            <Route path="/privacy" element={<LegalPage />} />
+            <Route path="/terms" element={<LegalPage />} />
+            <Route path="/refund" element={<LegalPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+
           </Routes>
 
         </main>
       </div>
+
+      {/* RESTORED UI */}
+      <FreeDeliveryToast
+        show={showFreeToast}
+        onClick={() => {
+          setIsCartOpen(true);
+          setShowFreeToast(false);
+        }}
+      />
+
+      <CartDrawer
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        onProceed={handleProceed}
+      />
+
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+      />
+
+      {!isCheckoutFlow && (
+        <Footer
+          onCategoryClick={(id) => {
+            setSelectedParentId(id);
+            setSelectedSubId(null);
+            setSearchQuery('');
+            navigate('/browse');
+          }}
+        />
+      )}
+
     </div>
   );
 };
