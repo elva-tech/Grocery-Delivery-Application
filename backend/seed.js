@@ -1,14 +1,14 @@
 // Script to seed dummy data for users, products, and inventory
-require('dotenv').config();
-const mongoose = require('mongoose');
-const connectDB = require('./src/config/db');
-const User = require('./src/models/User.model');
-const Product = require('./src/models/Product.model');
-const Inventory = require('./src/models/Inventory.model');
+require("dotenv").config();
+const mongoose = require("mongoose");
+const connectDB = require("./src/config/db");
+const User = require("./src/models/User.model");
+const Product = require("./src/models/Product.model");
+const Inventory = require("./src/models/Inventory.model");
 
 async function seed() {
   await connectDB();
-  const tenantId = 'demo-tenant';
+  const tenantId = "demo-tenant";
 
   // Clear existing data
   await User.deleteMany({ tenantId });
@@ -16,36 +16,41 @@ async function seed() {
   await Inventory.deleteMany({ tenantId });
 
   // Users
-  const users = await User.insertMany([
-    { tenantId, phoneNumber: '1111111111', name: 'Alice', role: 'CUSTOMER', isActive: true },
-    { tenantId, phoneNumber: '2222222222', name: 'Bob', role: 'ADMIN', isActive: true },
-    { tenantId, phoneNumber: '3333333333', name: 'Charlie', role: 'OPS', isActive: true },
-    { tenantId, phoneNumber: '4444444444', name: 'David', role: 'CUSTOMER', isActive: true },
-    { tenantId, phoneNumber: '5555555555', name: 'Eve', role: 'CUSTOMER', isActive: false },
+  await User.insertMany([
+    { tenantId, phoneNumber: "1111111111", name: "Alice", role: "CUSTOMER", isActive: true },
+    { tenantId, phoneNumber: "2222222222", name: "Bob", role: "ADMIN", isActive: true }, // ✅ ADMIN USER
+    { tenantId, phoneNumber: "3333333333", name: "Charlie", role: "OPS", isActive: true },
+    { tenantId, phoneNumber: "4444444444", name: "David", role: "CUSTOMER", isActive: true },
+    { tenantId, phoneNumber: "5555555555", name: "Eve", role: "CUSTOMER", isActive: false },
   ]);
 
   // Products
   const products = await Product.insertMany([
-    { tenantId, name: 'Apple', category: 'Fruits', price: 2.5, unit: 'kg', isAvailable: true },
-    { tenantId, name: 'Banana', category: 'Fruits', price: 1.2, unit: 'kg', isAvailable: true },
-    { tenantId, name: 'Carrot', category: 'Vegetables', price: 0.8, unit: 'kg', isAvailable: true },
-    { tenantId, name: 'Milk', category: 'Dairy', price: 1.5, unit: 'liter', isAvailable: true },
-    { tenantId, name: 'Bread', category: 'Bakery', price: 2.0, unit: 'loaf', isAvailable: false },
+    { tenantId, name: "Apple", category: "Fruits", price: 2.5, unit: "kg", isAvailable: true },
+    { tenantId, name: "Banana", category: "Fruits", price: 1.2, unit: "kg", isAvailable: true },
+    { tenantId, name: "Carrot", category: "Vegetables", price: 0.8, unit: "kg", isAvailable: true },
+    { tenantId, name: "Milk", category: "Dairy", price: 1.5, unit: "liter", isAvailable: true },
+    { tenantId, name: "Bread", category: "Bakery", price: 2.0, unit: "loaf", isAvailable: false },
   ]);
 
   // Inventory (one per product)
-  const inventory = await Inventory.insertMany(products.map((product, i) => ({
-    tenantId,
-    productId: product._id,
-    availableQty: 100 - i * 10,
-    thresholdQty: 10 + i * 2,
-  })));
+  await Inventory.insertMany(
+    products.map((product, i) => ({
+      tenantId,
+      productId: product._id,
+      availableQty: 100 - i * 10,
+      thresholdQty: 10 + i * 2,
+    }))
+  );
 
-  console.log('Dummy data seeded successfully!');
+  console.log("✅ Dummy data seeded successfully!");
+  console.log("👉 ADMIN LOGIN PHONE: 2222222222");
+  console.log("👉 OTP: 123456");
+
   mongoose.connection.close();
 }
 
 seed().catch(err => {
-  console.error('Seeding error:', err);
+  console.error("Seeding error:", err);
   mongoose.connection.close();
 });

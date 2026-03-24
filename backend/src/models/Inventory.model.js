@@ -12,7 +12,6 @@ const inventorySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
       required: true,
-      unique: true,
     },
 
     availableQty: {
@@ -28,5 +27,8 @@ const inventorySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Compound unique index for multi-tenant support
+inventorySchema.index({ tenantId: 1, productId: 1 }, { unique: true });
 
 module.exports = mongoose.model("Inventory", inventorySchema);
