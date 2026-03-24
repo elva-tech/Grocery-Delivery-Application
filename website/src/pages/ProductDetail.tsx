@@ -65,7 +65,7 @@ const ProductDetail = () => {
   }
 
   const images = Array.isArray(product.image) ? product.image : [product.image];
-
+console.log("ProductDetail Rendered with product:", product);
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-24">
       
@@ -104,7 +104,8 @@ const ProductDetail = () => {
               <h4 className="text-xs font-black uppercase text-slate-400 mb-2">
                 Product Description
               </h4>
-              <p className="text-slate-600">
+              <p className="text-slate-600"> 
+
                 {product.description || "No description available"}
               </p>
             </div>

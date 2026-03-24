@@ -1,35 +1,36 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   MOCK_PRODUCTS,
   MOCK_RIDERS,
   MOCK_CATEGORIES,
   MOCK_BANNERS,
-  MOCK_RETURNS
-} from '../services/mockData';
+  MOCK_RETURNS,
+} from "../services/mockData";
 
-import { apiService } from '../services/apiService';
+import { apiService } from "../services/apiService";
 
 const AppStateContext = createContext();
 
 export const AppStateProvider = ({ children }) => {
-
   /* ---------- SETTINGS ---------- */
   const [appSettings, setAppSettings] = useState(() => {
-    const saved = sessionStorage.getItem('app_settings');
-    return saved ? JSON.parse(saved) : {
-      allowRefunds: true,
-      allowReportIssue: true,
-      allowOrderCancellation: true
-    };
+    const saved = sessionStorage.getItem("app_settings");
+    return saved
+      ? JSON.parse(saved)
+      : {
+          allowRefunds: true,
+          allowReportIssue: true,
+          allowOrderCancellation: true,
+        };
   });
 
   const [products, setProducts] = useState(() => {
-    const saved = sessionStorage.getItem('app_products');
+    const saved = sessionStorage.getItem("app_products");
     return saved ? JSON.parse(saved) : MOCK_PRODUCTS;
   });
 
   const [categories, setCategories] = useState(() => {
-    const saved = sessionStorage.getItem('app_categories');
+    const saved = sessionStorage.getItem("app_categories");
     return saved ? JSON.parse(saved) : MOCK_CATEGORIES;
   });
 
@@ -42,7 +43,7 @@ export const AppStateProvider = ({ children }) => {
   const [riders, setRiders] = useState([]);
 
   const [banners, setBanners] = useState(() => {
-    const saved = sessionStorage.getItem('app_banners');
+    const saved = sessionStorage.getItem("app_banners");
     return saved ? JSON.parse(saved) : MOCK_BANNERS;
   });
 
@@ -52,21 +53,21 @@ export const AppStateProvider = ({ children }) => {
   useEffect(() => {
     const fetchReturns = async () => {
       try {
-        const token = localStorage.getItem('jwtToken');
+        const token = localStorage.getItem("jwtToken");
         if (!token) return;
         const data = await apiService.getAllReturns();
         // Normalize for frontend usage
-        const normalized = (data.data || []).map(r => ({
+        const normalized = (data.data || []).map((r) => ({
           id: r._id,
           orderId: r.orderId?._id || r.orderId,
-          customerName: r.userId?.name || 'Unknown',
+          customerName: r.userId?.name || "Unknown",
           date: r.createdAt,
-          status: (r.status || '').toUpperCase(),
+          status: (r.status || "").toUpperCase(),
           reason: r.reason,
           amount: r.refundAmount,
           comment: r.customerComment,
           adminComment: r.resolutionNote,
-          evidence: r.evidence || '',
+          evidence: r.evidence || "",
         }));
         setReturns(normalized);
       } catch (err) {
@@ -78,38 +79,36 @@ export const AppStateProvider = ({ children }) => {
   // Process return request (approve/reject)
   const processReturnRequest = async (id, decision, resolutionNote) => {
     try {
-      if (decision === 'APPROVE') {
+      if (decision === "APPROVE") {
         await apiService.approveReturn(id, resolutionNote);
-      } else if (decision === 'REJECT') {
+      } else if (decision === "REJECT") {
         await apiService.rejectReturn(id, resolutionNote);
       }
       // Refresh returns after action
       const data = await apiService.getAllReturns();
-      const normalized = (data.data || []).map(r => ({
+      const normalized = (data.data || []).map((r) => ({
         id: r._id,
         orderId: r.orderId?._id || r.orderId,
-        customerName: r.userId?.name || 'Unknown',
+        customerName: r.userId?.name || "Unknown",
         date: r.createdAt,
-        status: (r.status || '').toUpperCase(),
+        status: (r.status || "").toUpperCase(),
         reason: r.reason,
         amount: r.refundAmount,
         comment: r.customerComment,
         adminComment: r.resolutionNote,
-        evidence: r.evidence || '',
+        evidence: r.evidence || "",
       }));
       setReturns(normalized);
     } catch (err) {
-      alert('Failed to process return request.');
+      alert("Failed to process return request.");
     }
   };
 
   /* ---------- FETCH ORDERS ---------- */
   useEffect(() => {
-
     const fetchOrders = async () => {
-
       // Only fetch if user has a token
-      const token = localStorage.getItem('jwtToken');
+      const token = localStorage.getItem("jwtToken");
       if (!token) {
         return;
       }
@@ -118,10 +117,9 @@ export const AppStateProvider = ({ children }) => {
       setError(null);
 
       try {
-
         const data = await apiService.getOrders();
 
-        const normalized = (data.orders || []).map(o => ({
+        const normalized = (data.orders || []).map((o) => ({
           ...o,
           id: o._id,
           status: o.orderStatus,
@@ -130,89 +128,74 @@ export const AppStateProvider = ({ children }) => {
           assignment: o.riderId?.name || o.riderName || "Pending",
           customer: o.userId?.name || "Guest User",
           address: {
-            full: o.deliveryAddress?.line1 || "No Address"
+            full: o.deliveryAddress?.line1 || "No Address",
           },
           itemsText: (o.items || [])
-            .map(i => `${i.name} x${i.qty}`)
-            .join(", ")
+            .map((i) => `${i.name} x${i.qty}`)
+            .join(", "),
         }));
 
         setOrders(normalized);
-
       } catch (err) {
-
         // Handle 401 - redirect to login
         if (err.response?.status === 401) {
-          localStorage.removeItem('jwtToken');
-          localStorage.removeItem('freshroot_user');
-          window.location.href = '/login';
+          localStorage.removeItem("jwtToken");
+          localStorage.removeItem("freshroot_user");
+          window.location.href = "/login";
           return;
         }
 
         console.error("Failed to fetch orders:", err);
         setError("Failed to load orders");
-
       } finally {
-
         setLoading(false);
-
       }
-
     };
 
     fetchOrders();
-
   }, []);
 
   /* ---------- FETCH RIDERS ---------- */
   useEffect(() => {
-
     const fetchRiders = async () => {
-
       // Only fetch if user has a token
-      const token = localStorage.getItem('jwtToken');
+      const token = localStorage.getItem("jwtToken");
       if (!token) {
         return;
       }
 
       try {
-
         const data = await apiService.getRiders();
 
-        const normalized = (data.data?.riders || []).map(r => ({
+        const normalized = (data.data?.riders || []).map((r) => ({
           ...r,
           id: r._id,
         }));
 
         setRiders(normalized);
-
       } catch (err) {
-
         // Handle 401 - redirect to login
         if (err.response?.status === 401) {
-          localStorage.removeItem('jwtToken');
-          localStorage.removeItem('freshroot_user');
-          window.location.href = '/login';
+          localStorage.removeItem("jwtToken");
+          localStorage.removeItem("freshroot_user");
+          window.location.href = "/login";
           return;
         }
 
         console.error("Failed to fetch riders:", err);
-
       }
-
     };
 
     fetchRiders();
-
   }, []);
 
   /* ---------- SAVE STATE ---------- */
   useEffect(() => {
-    sessionStorage.setItem('app_settings', JSON.stringify(appSettings));
-    sessionStorage.setItem('app_products', JSON.stringify(products));
-    sessionStorage.setItem('app_categories', JSON.stringify(categories));
-    sessionStorage.setItem('app_returns', JSON.stringify(returns));
-    sessionStorage.setItem('app_banners', JSON.stringify(banners));
+    sessionStorage.setItem("app_settings", JSON.stringify(appSettings));
+    sessionStorage.setItem("app_products", JSON.stringify(products));
+    sessionStorage.setItem("app_categories", JSON.stringify(categories));
+    sessionStorage.setItem("app_returns", JSON.stringify(returns));
+    sessionStorage.setItem("app_banners", JSON.stringify(banners));
   }, [products, categories, banners, returns, appSettings]);
 
   /* ---------- RIDER FUNCTIONS ---------- */
@@ -221,14 +204,14 @@ export const AppStateProvider = ({ children }) => {
     try {
       // Call API to create rider
       await apiService.createRider(riderData);
-      
+
       // Fetch updated riders list
       const data = await apiService.getRiders();
-      const normalized = (data.data?.riders || []).map(r => ({
+      const normalized = (data.data?.riders || []).map((r) => ({
         ...r,
         id: r._id,
       }));
-      
+
       setRiders(normalized);
     } catch (error) {
       console.error("Add rider failed:", error);
@@ -240,14 +223,12 @@ export const AppStateProvider = ({ children }) => {
     try {
       // Call API to update rider status
       await apiService.updateRiderStatus(id, newStatus);
-      
+
       // Update local state
-      setRiders(prev =>
-        prev.map(r =>
-          r.id === id || r._id === id
-            ? { ...r, status: newStatus }
-            : r
-        )
+      setRiders((prev) =>
+        prev.map((r) =>
+          r.id === id || r._id === id ? { ...r, status: newStatus } : r,
+        ),
       );
     } catch (error) {
       console.error("Toggle rider status failed:", error);
@@ -263,7 +244,7 @@ export const AppStateProvider = ({ children }) => {
       // Fetch updated orders
       const data = await apiService.getOrders();
 
-      const normalized = (data.orders || []).map(o => ({
+      const normalized = (data.orders || []).map((o) => ({
         ...o,
         id: o._id,
         status: o.orderStatus,
@@ -272,11 +253,9 @@ export const AppStateProvider = ({ children }) => {
         assignment: o.riderId?.name || o.riderName || "Pending",
         customer: o.userId?.name || "Guest User",
         address: {
-          full: o.deliveryAddress?.line1 || "No Address"
+          full: o.deliveryAddress?.line1 || "No Address",
         },
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
+        itemsText: (o.items || []).map((i) => `${i.name} x${i.qty}`).join(", "),
       }));
 
       setOrders(normalized);
@@ -289,14 +268,12 @@ export const AppStateProvider = ({ children }) => {
   /* ---------- UPDATE ORDER STATUS ---------- */
 
   const updateOrderStatus = async (orderId, newStatus) => {
-
     try {
-
       await apiService.updateOrderStatus(orderId, newStatus);
 
       const data = await apiService.getOrders();
 
-      const normalized = (data.orders || []).map(o => ({
+      const normalized = (data.orders || []).map((o) => ({
         ...o,
         id: o._id,
         status: o.orderStatus,
@@ -305,81 +282,82 @@ export const AppStateProvider = ({ children }) => {
         assignment: o.riderName || "Pending",
         customer: o.userId?.name || "Guest User",
         address: {
-          full: o.deliveryAddress?.line1 || "No Address"
+          full: o.deliveryAddress?.line1 || "No Address",
         },
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
+        itemsText: (o.items || []).map((i) => `${i.name} x${i.qty}`).join(", "),
       }));
 
       setOrders(normalized);
-
     } catch (error) {
-
       console.error("Update order failed:", error);
-
     }
-
   };
 
   return (
-    <AppStateContext.Provider value={{
-      appSettings,
-      loading,
-      error,
-      updateSettings: (newSettings) =>
-        setAppSettings(prev => ({ ...prev, ...newSettings })),
+    <AppStateContext.Provider
+      value={{
+        appSettings,
+        loading,
+        error,
+        updateSettings: (newSettings) =>
+          setAppSettings((prev) => ({ ...prev, ...newSettings })),
 
-      products,
-      categories,
-      orders,
-      riders,
-      banners,
-      returns,
-      processReturnRequest,
+        products,
+        categories,
+        orders,
+        riders,
+        banners,
+        returns,
+        processReturnRequest,
 
-      addProduct: p =>
-        setProducts(prev => [...prev, { ...p, id: `p${Date.now()}` }]),
+        addProduct: (p) =>
+          setProducts((prev) => [...prev, { ...p, id: `p${Date.now()}` }]),
 
-      updateProduct: (id, up) =>
-        setProducts(prev => prev.map(p => p.id === id ? { ...p, ...up } : p)),
+        updateProduct: (id, up) =>
+          setProducts((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, ...up } : p)),
+          ),
 
-      deleteProduct: id =>
-        setProducts(prev => prev.filter(p => p.id !== id)),
+        deleteProduct: (id) =>
+          setProducts((prev) =>
+            prev.filter(
+              (p) => p.productId !== id && p._id !== id && p.id !== id,
+            ),
+          ),
+        addCategory: (c) =>
+          setCategories((prev) => [...prev, { ...c, id: `cat${Date.now()}` }]),
 
-      addCategory: c =>
-        setCategories(prev => [...prev, { ...c, id: `cat${Date.now()}` }]),
+        updateCategory: (id, up) =>
+          setCategories((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, ...up } : c)),
+          ),
 
-      updateCategory: (id, up) =>
-        setCategories(prev => prev.map(c => c.id === id ? { ...c, ...up } : c)),
+        deleteCategory: (id) =>
+          setCategories((prev) => prev.filter((c) => c.id !== id)),
 
-      deleteCategory: id =>
-        setCategories(prev => prev.filter(c => c.id !== id)),
+        updateOrderStatus,
+        addRider,
+        toggleRiderStatus,
+        assignRider,
 
-      updateOrderStatus,
-      addRider,
-      toggleRiderStatus,
-      assignRider,
+        addBanner: (b) =>
+          setBanners((prev) => [...prev, { ...b, id: Date.now().toString() }]),
 
-      addBanner: b =>
-        setBanners(prev => [...prev, { ...b, id: Date.now().toString() }]),
-
-      deleteBanner: id =>
-        setBanners(prev => prev.filter(b => b.id !== id)),
-    }}>
+        deleteBanner: (id) =>
+          setBanners((prev) => prev.filter((b) => b.id !== id)),
+      }}
+    >
       {children}
     </AppStateContext.Provider>
   );
 };
 
 export function useAppState() {
-
   const context = useContext(AppStateContext);
 
   if (!context) {
-    throw new Error('useAppState must be used within an AppStateProvider');
+    throw new Error("useAppState must be used within an AppStateProvider");
   }
 
   return context;
-
 }

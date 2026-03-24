@@ -45,6 +45,11 @@ export const apiService = {
     const res = await api.post("/api/products/admin/products", payload);
     return res.data;
   },
+  
+  deleteProduct: async (productId) => {
+  const res = await api.delete(`/api/products/admin/products/${productId}`);
+  return res.data;
+},
 updateProduct: async (productId, payload) => {
 
   if (!productId) {
