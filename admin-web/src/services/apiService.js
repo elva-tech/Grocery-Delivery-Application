@@ -5,6 +5,7 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
   headers: {
     "Content-Type": "application/json",
+    "x-tenant-id": import.meta.env.VITE_TENTANT_ID,
   },
   timeout: 10000,
 });
@@ -16,7 +17,7 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-
+  config.headers["x-tenant-id"] = import.meta.env.VITE_TENTANT_ID;
   return config;
 });
 
@@ -54,6 +55,18 @@ updateProduct: async (productId, payload) => {
   const res = await api.put(
     `/api/products/admin/products/${productId}`,
     payload
+  );
+
+  return res.data;
+},
+
+deleteProduct: async (productId) => {
+  if (!productId) {
+    throw new Error("Invalid product ID");
+  }
+
+  const res = await api.delete(
+    `/api/products/admin/products/${productId}`
   );
 
   return res.data;

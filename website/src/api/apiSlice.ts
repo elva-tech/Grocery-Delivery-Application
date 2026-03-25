@@ -1,6 +1,6 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { MOCK_PRODUCTS, MOCK_CATEGORIES } from './mockdata';
-
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { MOCK_CATEGORIES } from "./mockdata";
+import { desc } from "framer-motion/client";
 /* ---------------- TYPES ---------------- */
 
 export interface AppSettings {
@@ -33,18 +33,30 @@ export interface Category {
 /* ---------------- API SLICE ---------------- */
 
 export const apiSlice = createApi({
-  reducerPath: 'api',
-  baseQuery: fetchBaseQuery({ baseUrl: '/' }),
-  endpoints: (builder) => ({
+  reducerPath: "api",
+  baseQuery: fetchBaseQuery({
+    baseUrl: import.meta.env.VITE_API_URL,
+    prepareHeaders: (headers) => {
+      const token = localStorage.getItem("token");
 
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+
+      headers.set("x-tenant-id", import.meta.env.VITE_TENTANT_ID);
+
+      return headers;
+    },
+  }),
+  endpoints: (builder) => ({
     /* ----------- SETTINGS (Remote Config) ----------- */
     getAppSettings: builder.query<AppSettings, void>({
-      queryFn: () => ({ 
-        data: { 
-          allowRefunds: true, 
+      queryFn: () => ({
+        data: {
+          allowRefunds: true,
           allowReportIssue: false,
-          allowOrderCancellation: true 
-        } 
+          allowOrderCancellation: true,
+        },
       }),
     }),
 
@@ -55,58 +67,86 @@ export const apiSlice = createApi({
 
     /* ----------- PRODUCTS ----------- */
     getProducts: builder.query<Product[], void>({
-      queryFn: () => ({ data: MOCK_PRODUCTS as Product[] }),
+      query: () => "/api/products",
+      transformResponse: (response: any) =>
+        (response.products || []).map((p: any) => {
+          const subCat = MOCK_CATEGORIES.find((c) => c.id === p.category);
+
+          return {
+            id: p.productId,
+            name: p.name,
+            price: p.price,
+            unit: p.unit,
+            image: p.imageUrl ? [p.imageUrl] : [],
+            description: p.description || "",
+            stock: p.availableQty,
+            parentCategoryId: subCat?.parentId || null,
+            subCategoryId: p.category,
+          };
+        }),
     }),
-    
     getFeaturedProducts: builder.query<Product[], void>({
-      queryFn: () => ({ data: MOCK_PRODUCTS.slice(0, 4) as Product[] }),
+      query: () => "products/featured",
     }),
 
     getProductsByCategory: builder.query<Product[], string>({
-      queryFn: (catId) => ({ 
-        data: MOCK_PRODUCTS.filter(p => 
-          String(p.parentCategoryId) === String(catId) || 
-          String(p.subCategoryId) === String(catId)
-        ) as Product[]
-      }),
+      query: () => "/api/products",
+      transformResponse: (response: any) =>
+        (response.products || []).map((p: any) => ({
+          id: p.productId,
+          name: p.name,
+          price: p.price,
+          unit: p.unit,
+          image: p.imageUrl ? [p.imageUrl] : [],
+          description: p.description || "",
+          stock: p.availableQty,
+          parentCategoryId:
+            MOCK_CATEGORIES.find((c) => c.id === p.category)?.parentId || null,
+          subCategoryId: p.category,
+        })),
     }),
 
     /* ----------- CART & BILLING ----------- */
-    calculateCart: builder.mutation<{
-      subtotal: number;
-      deliveryCharge: number;
-      grandTotal: number;
-      isFreeDelivery: boolean;
-    }, any[]>({
+    calculateCart: builder.mutation<
+      {
+        subtotal: number;
+        deliveryCharge: number;
+        grandTotal: number;
+        isFreeDelivery: boolean;
+      },
+      any[]
+    >({
       queryFn: async (items) => {
         try {
-          const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+          const subtotal = items.reduce(
+            (acc, item) => acc + item.price * item.quantity,
+            0,
+          );
           const freeDeliveryThreshold = 500;
           const isFree = subtotal >= freeDeliveryThreshold;
-          const deliveryCharge = (subtotal === 0 || isFree) ? 0 : 40;
+          const deliveryCharge = subtotal === 0 || isFree ? 0 : 40;
 
-          return { 
+          return {
             data: {
               subtotal,
               deliveryCharge,
               grandTotal: subtotal + deliveryCharge,
-              isFreeDelivery: isFree
-            } 
+              isFreeDelivery: isFree,
+            },
           };
         } catch (error) {
-          return { error: { status: 500, data: 'Calculation Error' } };
+          return { error: { status: 500, data: "Calculation Error" } };
         }
       },
     }),
-
   }),
 });
 
-export const { 
-  useGetCategoriesQuery, 
+export const {
+  useGetCategoriesQuery,
   useGetProductsQuery,
-  useGetFeaturedProductsQuery, 
+  useGetFeaturedProductsQuery,
   useGetProductsByCategoryQuery,
   useCalculateCartMutation,
-  useGetAppSettingsQuery // Exported new hook
+  useGetAppSettingsQuery, // Exported new hook
 } = apiSlice;

@@ -9,7 +9,8 @@ const {
 const {
   addProduct,
   updateProductFromAdmin,
-  getAvailableProducts
+  getAvailableProducts,
+  deleteProductFromAdmin
  
 } = require("../controllers/product.controller");
 
@@ -33,6 +34,13 @@ router.put(
   authMiddleware,
   adminOnly,
   updateProductFromAdmin
+);
+
+router.delete(
+  "/admin/products/:id",
+  authMiddleware,
+  adminOnly,
+  deleteProductFromAdmin
 );
 
 module.exports = router;

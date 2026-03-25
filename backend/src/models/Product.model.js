@@ -29,10 +29,15 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    
+
     imageUrl: {
       type: String,
-      default: ""
+      default: "",
+    },
+    
+    description: {
+      type: String,
+      default: "",
     },
 
     isAvailable: {
@@ -40,7 +45,7 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // 🔍 Indexes

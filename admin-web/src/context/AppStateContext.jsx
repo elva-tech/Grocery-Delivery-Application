@@ -164,6 +164,10 @@ export const AppStateProvider = ({ children }) => {
 
   }, []);
 
+  const replaceProducts = (productsArray) => {
+  setProducts(productsArray);
+};
+
   /* ---------- FETCH RIDERS ---------- */
   useEffect(() => {
 
@@ -360,6 +364,7 @@ export const AppStateProvider = ({ children }) => {
       addRider,
       toggleRiderStatus,
       assignRider,
+      replaceProducts,
 
       addBanner: b =>
         setBanners(prev => [...prev, { ...b, id: Date.now().toString() }]),

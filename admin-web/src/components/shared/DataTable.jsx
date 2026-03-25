@@ -23,7 +23,7 @@ const DataTable = ({ columns, data, actions }) => {
         </thead>
         <tbody className="divide-y divide-gray-100">
           {data.map((row, rowIndex) => {
-            const rowKey = row.id || `row-${rowIndex}`;
+          const rowKey = `${row.id}-${rowIndex}`;
             
             return (
               <tr key={rowKey} className="hover:bg-gray-50 transition-colors">

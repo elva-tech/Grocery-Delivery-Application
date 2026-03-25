@@ -1,34 +1,39 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import Header from './components/layout/Header';
-import PromoBanners from './components/home/PromoBanners';
-import CategoryStrip from './components/home/CategoryStrip';
-import CategorySidebar from './components/category/CategorySidebar';
-import LeafBanner from './components/home/LeafBanner';
-import CartDrawer from './components/ui/cartDrawer';
-import ProductGrid from './components/products/ProductGrid';
-import { FreeDeliveryToast } from './components/ui/FreeDeliveryToast';
-import ProductDetail from './pages/ProductDetail';
-import Checkout from './pages/Checkout';
-import OrderSuccess from './pages/OrderSuccess';
-import Addresses from './pages/Addresses';
-import LoginModal from './components/ui/LoginModal'; 
-import { getCartCalculation } from './api/mockdata';
-import { useGetProductsQuery } from './api/apiSlice';
-import type { RootState } from './store/store';
-import { ChevronRight } from 'lucide-react';
-import confetti from 'canvas-confetti';
-import Footer from './components/layout/Footer';
-import Orders from './pages/Orders';
-import LegalPage from './pages/LegalPage';
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useSelector } from "react-redux";
+import {
+  Routes,
+  Route,
+  useLocation,
+  useNavigate,
+  Navigate,
+} from "react-router-dom";
+import Header from "./components/layout/Header";
+import PromoBanners from "./components/home/PromoBanners";
+import CategoryStrip from "./components/home/CategoryStrip";
+import CategorySidebar from "./components/category/CategorySidebar";
+import LeafBanner from "./components/home/LeafBanner";
+import CartDrawer from "./components/ui/cartDrawer";
+import ProductGrid from "./components/products/ProductGrid";
+import { FreeDeliveryToast } from "./components/ui/FreeDeliveryToast";
+import ProductDetail from "./pages/ProductDetail";
+import Checkout from "./pages/Checkout";
+import OrderSuccess from "./pages/OrderSuccess";
+import Addresses from "./pages/Addresses";
+import LoginModal from "./components/ui/LoginModal";
+import { getCartCalculation } from "./api/mockdata";
+import { useGetProductsQuery, useGetCategoriesQuery } from "./api/apiSlice";
+import type { RootState } from "./store/store";
+import { ChevronRight } from "lucide-react";
+import confetti from "canvas-confetti";
+import Footer from "./components/layout/Footer";
+import Orders from "./pages/Orders";
+import LegalPage from "./pages/LegalPage";
 
 const App = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  // UPDATED STATES FOR NESTED CATEGORIES
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
 
@@ -36,25 +41,24 @@ const App = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showFreeToast, setShowFreeToast] = useState(false);
   const [wasFree, setWasFree] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false); 
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const { data: products = [] } = useGetProductsQuery();
   const { items } = useSelector((state: RootState) => state.cart);
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth); 
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const timerRef = useRef<any>(null);
+  const { data: categories = [] } = useGetCategoriesQuery();
 
-  // RESET LOGIC: Clears filters when switching between Home and Browse
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    
-    // Only reset if moving between these specific paths to avoid "ghosting"
-    if (location.pathname === '/' || location.pathname === '/browse') {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    if (location.pathname === "/" || location.pathname === "/browse") {
       setSelectedParentId(null);
       setSelectedSubId(null);
-      setSearchQuery('');
+      setSearchQuery("");
     }
   }, [location.pathname]);
 
+  // FREE DELIVERY LOGIC (restored)
   useEffect(() => {
     const handleMilestone = async () => {
       if (items.length === 0) {
@@ -62,21 +66,29 @@ const App = () => {
         setShowFreeToast(false);
         return;
       }
+
       const data = await getCartCalculation(items);
+
       if (data.isFreeDelivery) {
         if (!wasFree) {
-          const duration = 3 * 1000;
+          const duration = 3000;
           const animationEnd = Date.now() + duration;
-          const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
-          const interval: any = setInterval(function () {
+          const interval: any = setInterval(() => {
             const timeLeft = animationEnd - Date.now();
             if (timeLeft <= 0) return clearInterval(interval);
-            const particleCount = 50 * (timeLeft / duration);
-            confetti({ ...defaults, particleCount, origin: { x: Math.random(), y: Math.random() - 0.2 }, colors: ['#4b6f9e', '#22c55e', '#ffffff'] });
+
+            confetti({
+              particleCount: 50 * (timeLeft / duration),
+              spread: 360,
+              origin: { x: Math.random(), y: Math.random() - 0.2 },
+            });
           }, 250);
+
           setWasFree(true);
         }
+
         setShowFreeToast(true);
+
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => setShowFreeToast(false), 5000);
       } else {
@@ -84,49 +96,65 @@ const App = () => {
         setShowFreeToast(false);
       }
     };
+
     handleMilestone();
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [items, wasFree]);
 
-  // UPDATED FILTERING FOR NESTED CATEGORIES
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedSubId 
-        ? String(p.subCategoryId) === String(selectedSubId)
-        : selectedParentId 
-          ? String(p.parentCategoryId) === String(selectedParentId)
-          : true;
+    if (!products || !Array.isArray(products)) return [];
+    return products.filter((p) => {
+      const matchesSearch = p.name
+        ?.toLowerCase()
+        .includes(searchQuery.toLowerCase());
+
+      let matchesCategory = true;
+
+      if (selectedSubId) {
+        matchesCategory = String(p.subCategoryId) === String(selectedSubId);
+      } else if (selectedParentId) {
+        matchesCategory =
+          String(p.parentCategoryId) === String(selectedParentId) ||
+          String(p.subCategoryId) === String(selectedParentId);
+      }
+
       return matchesSearch && matchesCategory;
     });
   }, [searchQuery, selectedParentId, selectedSubId, products]);
 
   const handleBack = () => {
-    setSearchQuery('');
+    setSearchQuery("");
     setSelectedParentId(null);
     setSelectedSubId(null);
-    navigate('/');
+    navigate("/");
   };
 
-  const isBrowseMode = location.pathname === '/browse';
-  const isCheckoutFlow = ['/checkout', '/addresses', '/success'].includes(location.pathname);
-
+  // RESTORED CHECKOUT FLOW
   const handleProceed = () => {
     setIsCartOpen(false);
     if (!isAuthenticated) {
       setIsLoginOpen(true);
     } else {
-      navigate('/addresses');
+      navigate("/addresses");
     }
   };
 
+  const isBrowseMode = location.pathname === "/browse";
+  const isCheckoutFlow = ["/checkout", "/addresses", "/success"].includes(
+    location.pathname,
+  );
+
+  // PROTECTED ROUTES LOGIC
   useEffect(() => {
-    if (location.pathname === '/checkout' && !selectedAddress) {
-      navigate('/addresses', { replace: true });
+    if (location.pathname === "/checkout" && !selectedAddress) {
+      navigate("/addresses", { replace: true });
     }
-    const protectedRoutes = ['/checkout', '/addresses'];
+
+    const protectedRoutes = ["/checkout", "/addresses"];
     if (protectedRoutes.includes(location.pathname) && items.length === 0) {
-      navigate('/', { replace: true });
+      navigate("/", { replace: true });
     }
   }, [location.pathname, selectedAddress, items.length, navigate]);
 
@@ -136,7 +164,7 @@ const App = () => {
         searchValue={searchQuery}
         onSearchChange={(val) => {
           setSearchQuery(val);
-          if (val && location.pathname !== '/browse') navigate('/browse');
+          if (val && location.pathname !== "/browse") navigate("/browse");
         }}
         onCartClick={() => setIsCartOpen(true)}
         onLoginClick={() => setIsLoginOpen(true)}
@@ -144,60 +172,52 @@ const App = () => {
 
       <div className="flex-grow flex max-w-7xl mx-auto w-full min-h-[calc(100vh-80px)]">
         {isBrowseMode && (
-          <CategorySidebar 
-            selectedParentId={selectedParentId} 
+          <CategorySidebar
+            selectedParentId={selectedParentId}
             selectedSubId={selectedSubId}
-            onSelectParent={setSelectedParentId} 
-            onSelectSub={setSelectedSubId} 
+            onSelectParent={setSelectedParentId}
+            onSelectSub={setSelectedSubId}
           />
         )}
 
         <main className="flex-1 px-4 py-6 overflow-hidden">
           <Routes>
-            <Route path="/" element={
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <PromoBanners />
-                <LeafBanner />
-                <CategoryStrip
-                  selectedId={selectedParentId}
-                  selectedSubId={selectedSubId}
-                  onSelect={setSelectedParentId}
-                  onSelectSub={setSelectedSubId}
-                  onSeeAll={() => {
-                    setSelectedParentId(null);
-                    setSelectedSubId(null);
-                    navigate('/browse');
-                  }}
-                />
-                <div className="flex items-center gap-2 mb-6">
-                  <div className="h-8 w-1.5 bg-[#4b6f9e] rounded-full"></div>
-                  <h3 className="font-black text-xl tracking-tight uppercase text-slate-800">
-                    {selectedSubId || selectedParentId ? 'Filtered Products' : 'Trending Now'}
-                  </h3>
+            <Route
+              path="/"
+              element={
+                <div>
+                  <PromoBanners />
+                  <LeafBanner />
+                  <CategoryStrip
+                    selectedId={selectedParentId}
+                    selectedSubId={selectedSubId}
+                    onSelect={setSelectedParentId}
+                    onSelectSub={setSelectedSubId}
+                    onSeeAll={() => navigate("/browse")}
+                  />
+                  <ProductGrid products={filteredProducts} />
                 </div>
-                <ProductGrid products={filteredProducts} />
-              </div>
-            } />
+              }
+            />
 
-            <Route path="/browse" element={
-              <div className="animate-in fade-in duration-500">
-                <div className="flex items-center justify-between mb-8">
-                  <button onClick={handleBack} className="group flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-100 text-[#4b6f9e] font-black text-xs uppercase tracking-widest hover:bg-[#4b6f9e] hover:text-white transition-all shadow-sm">
-                    <ChevronRight size={14} className="rotate-180 group-hover:-translate-x-1 transition-transform" /> Back
-                  </button>
-                  {(searchQuery || selectedParentId) && (
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">
-                      {filteredProducts.length} Results
-                    </p>
-                  )}
-                </div>
-                <ProductGrid products={filteredProducts} />
-              </div>
-            } />
+            <Route
+              path="/browse"
+              element={<ProductGrid products={filteredProducts} />}
+            />
 
             <Route path="/product/:productId" element={<ProductDetail />} />
-            <Route path="/addresses" element={<Addresses items={items} onSelect={(addr: any) => setSelectedAddress(addr)} />} />
-            <Route path="/checkout" element={<Checkout address={selectedAddress} />} />
+
+            {/* RESTORED ROUTES */}
+            <Route
+              path="/addresses"
+              element={
+                <Addresses items={items} onSelect={setSelectedAddress} />
+              }
+            />
+            <Route
+              path="/checkout"
+              element={<Checkout address={selectedAddress} />}
+            />
             <Route path="/success" element={<OrderSuccess />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/about" element={<LegalPage />} />
@@ -211,23 +231,32 @@ const App = () => {
         </main>
       </div>
 
-      <FreeDeliveryToast show={showFreeToast} onClick={() => { setIsCartOpen(true); setShowFreeToast(false); }} />
+      {/* RESTORED UI */}
+      <FreeDeliveryToast
+        show={showFreeToast}
+        onClick={() => {
+          setIsCartOpen(true);
+          setShowFreeToast(false);
+        }}
+      />
 
       <CartDrawer
         isOpen={isCartOpen}
-         onClose={() => setIsCartOpen(false)}
+        onClose={() => setIsCartOpen(false)}
         onProceed={handleProceed}
       />
 
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
 
       {!isCheckoutFlow && (
-        <Footer onCategoryClick={(id) => {
-          setSelectedParentId(id);
-          setSelectedSubId(null);
-          setSearchQuery('');
-          navigate('/browse');
-        }} />
+        <Footer
+          onCategoryClick={(id) => {
+            setSelectedParentId(id);
+            setSelectedSubId(null);
+            setSearchQuery("");
+            navigate("/browse");
+          }}
+        />
       )}
     </div>
   );

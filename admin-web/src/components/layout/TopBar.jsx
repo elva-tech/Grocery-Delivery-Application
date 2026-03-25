@@ -56,7 +56,7 @@ const GlobalNotification = () => {
                 <div className="space-y-1">
                   {newOrders.map(order => (
                     <div 
-                      key={order.id} 
+                      key={`${order.id}-${index}`} 
                       onClick={() => handleAlertClick('/orders')}
                       className="flex items-center gap-3 p-3 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors"
                     >
@@ -70,7 +70,7 @@ const GlobalNotification = () => {
                   
                   {lowStockItems.map(item => (
                     <div 
-                      key={item.id} 
+                     key={`${item.id}-${index}`}
                       onClick={() => handleAlertClick('/products')}
                       className="flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl cursor-pointer transition-colors"
                     >

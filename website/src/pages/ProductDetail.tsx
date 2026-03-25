@@ -8,12 +8,12 @@ import {
 } from 'lucide-react';
 
 import { addToCart, removeFromCart } from '../store/slices/cartSlice';
-import { MOCK_PRODUCTS } from '../api/mockdata';
 import type { RootState } from '../store/store';
 import ProductCard from '../components/products/ProductCard';
+import { useGetProductsQuery } from '../api/apiSlice';
 
 const ProductDetail = () => {
-  const { productId } = useParams();
+ const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [activeImg, setActiveImg] = useState(0);
@@ -25,16 +25,16 @@ const ProductDetail = () => {
     setActiveImg(0);
   }, [productId]);
 
-  // 1. Logic: Find Current Product
-  const product = useMemo(() => MOCK_PRODUCTS.find(p => p.id === productId), [productId]);
+ const { data: products = [] } = useGetProductsQuery();
+ const product = useMemo(() => products.find(p => String(p.id) === String(productId)), [products, productId]);
 
   // 2. Logic: Dynamic Related Products (Using categoryId from your MockData)
-  const relatedProducts = useMemo(() => {
-    if (!product) return [];
-    return MOCK_PRODUCTS
-      .filter(p => p.categoryId === product.categoryId && p.id !== productId)
-      .slice(0, 4);
-  }, [product, productId]);
+ const relatedProducts = useMemo(() => {
+  if (!product) return [];
+  return products
+    .filter(p => p.parentCategoryId === product.parentCategoryId && String(p.id) !== String(productId))
+    .slice(0, 4);
+}, [products, product, productId]);
 
   const cartItem = useSelector((state: RootState) => 
     state.cart.items.find(item => item.id === productId)

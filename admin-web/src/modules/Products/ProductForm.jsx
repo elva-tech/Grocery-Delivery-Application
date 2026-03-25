@@ -3,38 +3,34 @@
  * @description Admin form to manage products with backend-ready description and image handling.
  */
 
-import React, { useRef } from 'react';
-import { Formik, Form, Field } from 'formik';
-import * as Yup from 'yup';
-import { X, Plus } from 'lucide-react';
-import { useAppState } from '../../context/AppStateContext';
+import React, { useRef } from "react";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+import { X, Plus } from "lucide-react";
+import { useAppState } from "../../context/AppStateContext";
 
 // VALIDATION SCHEMA
 const ProductSchema = Yup.object().shape({
-  name: Yup.string().required('Required'),
-  description: Yup.string().required('Required'),
-  price: Yup.number().min(1, 'Price must be positive').required('Required'),
-  stock: Yup.number().min(0, 'No negative stock').required('Required'),
-  parentCategoryId: Yup.string().required('Required'),
-  subCategoryId: Yup.string().required('Required'),
-  unit: Yup.string().required('Required')
+  name: Yup.string().required("Required"),
+  description: Yup.string().required("Required"),
+  price: Yup.number().min(1, "Price must be positive").required("Required"),
+  stock: Yup.number().min(0, "No negative stock").required("Required"),
+  parentCategoryId: Yup.string().required("Required"),
+  subCategoryId: Yup.string().required("Required"),
+  unit: Yup.string().required("Required"),
 });
 
 const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
-
   const fileInputRef = useRef(null);
   const { categories } = useAppState();
 
-  const mainCategories = categories.filter(c => !c.parentId);
+  const mainCategories = categories.filter((c) => !c.parentId);
 
   return (
-
     <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100 max-w-2xl mx-auto">
-
       <div className="flex justify-between items-center mb-6">
-
         <h2 className="text-xl font-bold text-slate-800">
-          {initialValues?.productId ? 'Edit Product' : 'Add New Product'}
+          {initialValues?.productId ? "Edit Product" : "Add New Product"}
         </h2>
 
         <button
@@ -43,114 +39,79 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
         >
           <X size={20} />
         </button>
-
       </div>
 
       <Formik
-
         initialValues={{
-          name: initialValues?.name || '',
-          description: initialValues?.description || '',
-          price: initialValues?.price || '',
-          stock: initialValues?.stock || '',
-          unit: initialValues?.unit || '',
+          name: initialValues?.name || "",
+          description: initialValues?.description || "",
+          price: initialValues?.price || "",
+          stock: initialValues?.stock || "",
+          unit: initialValues?.unit || "",
           parentCategoryId:
-            initialValues?.parentCategoryId ||
-            (mainCategories[0]?.id || ''),
-          subCategoryId: initialValues?.subCategoryId || '',
-          image: initialValues?.image || initialValues?.images || []
+            initialValues?.parentCategoryId || mainCategories[0]?.id || "",
+          subCategoryId: initialValues?.subCategoryId || "",
+          image: initialValues?.image || initialValues?.images || [],
         }}
-
         validationSchema={ProductSchema}
-
         onSubmit={(values) => {
-
           const submission = {
-
-            ...values,
-
+            name: values.name,
+            category: values.subCategoryId,
             price: Math.abs(Number(values.price)),
-
-            stock: Math.max(
-              0,
-              Math.floor(Number(values.stock))
-            ),
-
-            images: values.image
-
+            unit: values.unit,
+            stock: Math.max(0, Math.floor(Number(values.stock))),
+            imageUrl: values.image?.[0] || "",
+            description: values.description,
           };
 
           onSubmit(submission);
-
         }}
-
       >
-
         {({ setFieldValue, values }) => {
-
           const subCats = categories.filter(
-            c => c.parentId === values.parentCategoryId
+            (c) => c.parentId === values.parentCategoryId,
           );
 
           return (
-
             <Form className="space-y-6">
-
               <div className="flex flex-col md:flex-row gap-6">
-
                 {/* LEFT IMAGE UPLOADER */}
 
                 <div className="flex-1 space-y-4">
-
                   <label className="block text-sm font-bold text-gray-700">
                     Product Images
                   </label>
 
                   <div className="grid grid-cols-2 gap-2">
-
                     {values.image.map((img, i) => (
-
                       <div
                         key={i}
                         className="relative aspect-square border rounded-lg overflow-hidden"
                       >
-
-                        <img
-                          src={img}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={img} className="w-full h-full object-cover" />
 
                         <button
                           type="button"
                           onClick={() =>
                             setFieldValue(
-                              'image',
-                              values.image.filter(
-                                (_, idx) => idx !== i
-                              )
+                              "image",
+                              values.image.filter((_, idx) => idx !== i),
                             )
                           }
                           className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
                         >
-
                           <X size={10} />
-
                         </button>
-
                       </div>
-
                     ))}
 
                     <button
                       type="button"
-                      onClick={() =>
-                        fileInputRef.current.click()
-                      }
+                      onClick={() => fileInputRef.current.click()}
                       className="aspect-square border-2 border-dashed border-emerald-200 rounded-lg flex items-center justify-center bg-emerald-50/30 text-emerald-600"
                     >
-
                       <Plus size={20} />
-
                     </button>
 
                     <input
@@ -159,30 +120,22 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                       hidden
                       multiple
                       onChange={(e) =>
-                        setFieldValue(
-                          'image',
-                          [
-                            ...values.image,
-                            ...Array.from(e.target.files).map(
-                              f => URL.createObjectURL(f)
-                            )
-                          ]
-                        )
+                        setFieldValue("image", [
+                          ...values.image,
+                          ...Array.from(e.target.files).map((f) =>
+                            URL.createObjectURL(f),
+                          ),
+                        ])
                       }
                     />
-
                   </div>
-
                 </div>
 
                 {/* RIGHT PRODUCT DETAILS */}
 
                 <div className="flex-1 space-y-4">
-
                   <div className="grid grid-cols-2 gap-2">
-
                     <div>
-
                       <label className="text-[10px] font-bold text-gray-400 uppercase">
                         Main Category
                       </label>
@@ -192,22 +145,15 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                         name="parentCategoryId"
                         className="w-full border p-3 rounded-xl bg-white mt-1"
                       >
-
-                        {mainCategories.map(c => (
-                          <option
-                            key={c.id}
-                            value={c.id}
-                          >
+                        {mainCategories.map((c) => (
+                          <option key={c.id} value={c.id}>
                             {c.name}
                           </option>
                         ))}
-
                       </Field>
-
                     </div>
 
                     <div>
-
                       <label className="text-[10px] font-bold text-gray-400 uppercase">
                         Sub Category
                       </label>
@@ -217,24 +163,15 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                         name="subCategoryId"
                         className="w-full border p-3 rounded-xl bg-white mt-1"
                       >
+                        <option value="">Select Sub</option>
 
-                        <option value="">
-                          Select Sub
-                        </option>
-
-                        {subCats.map(c => (
-                          <option
-                            key={c.id}
-                            value={c.id}
-                          >
+                        {subCats.map((c) => (
+                          <option key={c.id} value={c.id}>
                             {c.name}
                           </option>
                         ))}
-
                       </Field>
-
                     </div>
-
                   </div>
 
                   <Field
@@ -246,7 +183,6 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                   {/* DESCRIPTION */}
 
                   <div>
-
                     <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
                       Product Description
                     </label>
@@ -257,7 +193,6 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                       placeholder="Enter detailed product info for the app..."
                       className="w-full border p-3 rounded-xl mt-1 h-24 resize-none focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                     />
-
                   </div>
 
                   <Field
@@ -267,7 +202,6 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                   />
 
                   <div className="grid grid-cols-2 gap-4">
-
                     <Field
                       name="price"
                       type="number"
@@ -283,34 +217,22 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                       placeholder="Stock"
                       className="w-full border p-3 rounded-xl"
                     />
-
                   </div>
 
                   <button
                     type="submit"
                     className="w-full bg-[#1A4D2E] text-white py-4 rounded-xl font-bold shadow-md hover:bg-[#143d24] transition-colors"
                   >
-
                     Save Product
-
                   </button>
-
                 </div>
-
               </div>
-
             </Form>
-
           );
-
         }}
-
       </Formik>
-
     </div>
-
   );
-
 };
 
 export default ProductForm;

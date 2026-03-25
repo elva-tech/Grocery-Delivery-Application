@@ -5,8 +5,9 @@ const Inventory = require("../models/Inventory.model");
 /* ================= ADD PRODUCT ================= */
 
 const addProduct = async (req, res) => {
+  console.log("BODY:", req.body);
   try {
-    const { name, category, price, unit, stocks, stock, imageUrl } = req.body;
+    const { name, category, price, unit, stocks, stock, imageUrl,description } = req.body;
 
     if (req.user.role !== "ADMIN") {
       return res.status(403).json({ message: "Access denied. Admin only." });
@@ -46,6 +47,7 @@ const addProduct = async (req, res) => {
       price: finalPrice,
       unit,
       imageUrl,
+      description,
       isAvailable: finalStocks > 0
     });
 
@@ -83,7 +85,7 @@ const updateProductFromAdmin = async (req, res) => {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    const allowedFields = ["name", "price", "category", "unit", "imageUrl"];
+    const allowedFields = ["name", "price", "category", "unit", "imageUrl","description"];
     const updateData = {};
 
     allowedFields.forEach((field) => {
@@ -184,6 +186,7 @@ const getAvailableProducts = async (req, res) => {
           price: 1,
           unit: 1,
           imageUrl: 1,
+          description: 1, 
           availableQty: "$inventory.availableQty"
         }
       },
