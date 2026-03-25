@@ -3,7 +3,6 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2 } from 'lucide-react';
 import type { RootState } from '../store/store';
-import { clearCart } from '../store/slices/cartSlice';
 import { logout } from '../store/slices/authSlice';
 import { useCalculateCartMutation } from '../api/apiSlice';
 import { placeOrderApi } from '../api/ordersApi';
@@ -49,7 +48,8 @@ const handlePlaceOrder = async () => {
         lng: typeof address?.lng === 'number' ? address.lng : 0,
       },
     });
-    dispatch(clearCart());
+    // clearCart is handled by OrderSuccess on mount — don't dispatch here
+    // to avoid the App.tsx guard (items.length===0 at /checkout → redirect to /)
     navigate('/success', { state: { fromCheckout: true, orderId: result.orderId, orderItems: items } });
   } catch (error: any) {
     console.error('Order placement failed:', error);
