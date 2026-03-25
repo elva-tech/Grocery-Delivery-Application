@@ -20,10 +20,7 @@ router.post(
 /**
  * GET BANNERS FOR MOBILE APP
  */
-router.get(
-  "/get-banners",
-  bannerController.getBanners
-);
+router.get("/", bannerController.getBanners);
 
 router.delete(
   "/delete-banner/:id",

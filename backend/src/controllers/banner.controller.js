@@ -18,11 +18,11 @@ exports.createBanner = async (req, res) => {
     const user = await User.findById(req.user.userId);
 
     const banner = new Banner({
-      title,
-      image,
-      tenantId,
-      userId
-    });
+  title,
+  image: `/uploads/banners/${req.file.filename}`, // ✅ FIXED (no Windows path)
+  tenantId,
+  userId
+});
 
     await banner.save();
 
@@ -45,14 +45,20 @@ exports.createBanner = async (req, res) => {
  * GET ALL BANNERS
  */
 exports.getBanners = async (req, res) => {
-
   try {
+    // ✅ Support both cases (with auth OR without auth)
+    const tenantId = req.user?.tenantId || req.headers['x-tenant-id'];
 
-    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant ID is required"
+      });
+    }
 
-    const banners = await Banner.find({ 
-      tenantId: req.user.tenantId,
-      isActive: true 
+    const banners = await Banner.find({
+      tenantId,
+      isActive: true
     });
 
     res.json({
@@ -61,14 +67,11 @@ exports.getBanners = async (req, res) => {
     });
 
   } catch (error) {
-
     res.status(500).json({
       success: false,
       message: error.message
     });
-
   }
-
 };
 
 exports.deleteBanner = async (req, res) => {
