@@ -1,13 +1,51 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  MOCK_PRODUCTS,
   MOCK_RIDERS,
-  MOCK_CATEGORIES,
   MOCK_BANNERS,
   MOCK_RETURNS
 } from '../services/mockData';
 
 import { apiService } from '../services/apiService';
+
+// ── helpers to normalise backend category/subcategory strings into stable IDs ──
+const toCatId = s =>
+  'cat_' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const toSubId = s =>
+  'sub_' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+const normaliseProduct = p => ({
+  id:               String(p.productId || p._id || ''),
+  productId:        String(p.productId || p._id || ''),
+  name:             p.name,
+  description:      p.description || '',
+  price:            p.price,
+  unit:             p.unit,
+  imageUrl:         p.imageUrl || '',
+  images:           p.imageUrl ? [p.imageUrl] : [],
+  stock:            p.availableQty ?? 0,
+  availableQty:     p.availableQty ?? 0,
+  status:           'Active',
+  category:         p.category,
+  subcategory:      p.subcategory,
+  parentCategoryId: toCatId(p.category || 'uncategorized'),
+  subCategoryId:    p.subcategory ? toSubId(p.subcategory) : toCatId(p.category || 'uncategorized'),
+});
+
+const buildCategories = items => {
+  const parents = new Map();
+  const subs    = new Map();
+  items.forEach(p => {
+    const catId = toCatId(p.category || 'uncategorized');
+    if (!parents.has(catId))
+      parents.set(catId, { id: catId, name: p.category || 'Uncategorized', parentId: null, icon: 'grid-outline', image: [] });
+    if (p.subcategory) {
+      const subId = toSubId(p.subcategory);
+      if (!subs.has(subId))
+        subs.set(subId, { id: subId, name: p.subcategory, parentId: catId, icon: 'pricetag-outline', image: [] });
+    }
+  });
+  return [...parents.values(), ...subs.values()];
+};
 
 const AppStateContext = createContext();
 
@@ -23,15 +61,9 @@ export const AppStateProvider = ({ children }) => {
     };
   });
 
-  const [products, setProducts] = useState(() => {
-    const saved = sessionStorage.getItem('app_products');
-    return saved ? JSON.parse(saved) : MOCK_PRODUCTS;
-  });
-
-  const [categories, setCategories] = useState(() => {
-    const saved = sessionStorage.getItem('app_categories');
-    return saved ? JSON.parse(saved) : MOCK_CATEGORIES;
-  });
+  // Initialise empty — populated by fetchProductsFromAPI on mount
+  const [products,   setProducts]   = useState([]);
+  const [categories, setCategories] = useState([]);
 
   const [orders, setOrders] = useState([]);
 
@@ -47,6 +79,25 @@ export const AppStateProvider = ({ children }) => {
   });
 
   const [returns, setReturns] = useState([]);
+
+  /* ---------- FETCH PRODUCTS FROM BACKEND ---------- */
+  const fetchProductsFromAPI = useCallback(async () => {
+    const token = localStorage.getItem('jwtToken');
+    if (!token) return;
+    try {
+      const data = await apiService.getInventory();
+      const items = data.data || [];
+      setProducts(items.map(normaliseProduct));
+      setCategories(buildCategories(items));
+      // Remove stale cached data so re-mounts always show fresh backend data
+      sessionStorage.removeItem('app_products');
+      sessionStorage.removeItem('app_categories');
+    } catch (err) {
+      console.error('Failed to fetch products:', err);
+    }
+  }, []);
+
+  useEffect(() => { fetchProductsFromAPI(); }, [fetchProductsFromAPI]);
 
   // Fetch returns from backend
   useEffect(() => {
@@ -209,11 +260,8 @@ export const AppStateProvider = ({ children }) => {
   /* ---------- SAVE STATE ---------- */
   useEffect(() => {
     sessionStorage.setItem('app_settings', JSON.stringify(appSettings));
-    sessionStorage.setItem('app_products', JSON.stringify(products));
-    sessionStorage.setItem('app_categories', JSON.stringify(categories));
-    sessionStorage.setItem('app_returns', JSON.stringify(returns));
-    sessionStorage.setItem('app_banners', JSON.stringify(banners));
-  }, [products, categories, banners, returns, appSettings]);
+    sessionStorage.setItem('app_banners',  JSON.stringify(banners));
+  }, [banners, appSettings]);
 
   /* ---------- RIDER FUNCTIONS ---------- */
 
@@ -338,14 +386,19 @@ export const AppStateProvider = ({ children }) => {
       returns,
       processReturnRequest,
 
-      addProduct: p =>
-        setProducts(prev => [...prev, { ...p, id: `p${Date.now()}` }]),
-
-      updateProduct: (id, up) =>
-        setProducts(prev => prev.map(p => p.id === id ? { ...p, ...up } : p)),
-
-      deleteProduct: id =>
-        setProducts(prev => prev.filter(p => p.id !== id)),
+      // Product CRUD — all trigger a backend refetch so the list stays in sync
+      addProduct:    async () => { await fetchProductsFromAPI(); },
+      updateProduct: async () => { await fetchProductsFromAPI(); },
+      deleteProduct: async (id) => {
+        try {
+          await apiService.deleteProduct(id);
+          await fetchProductsFromAPI();
+        } catch (err) {
+          console.error('Delete product failed:', err);
+          alert(err?.response?.data?.message || 'Failed to delete product');
+        }
+      },
+      refreshProducts: fetchProductsFromAPI,
 
       addCategory: c =>
         setCategories(prev => [...prev, { ...c, id: `cat${Date.now()}` }]),

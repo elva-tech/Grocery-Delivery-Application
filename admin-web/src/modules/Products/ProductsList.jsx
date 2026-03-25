@@ -10,7 +10,7 @@ import { apiService } from '../../services/apiService';
 
 const ProductList = () => {
 
-  const { products, categories, addProduct, updateProduct, deleteProduct } = useAppState();
+  const { products, categories, addProduct, updateProduct, deleteProduct, refreshProducts } = useAppState();
 
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -174,13 +174,18 @@ const ProductList = () => {
 
             try {
 
+              const catObj    = categories.find(c => c.id === v.parentCategoryId);
+              const subCatObj = categories.find(c => c.id === v.subCategoryId);
+
               const payload = {
-                name: v.name,
-                category: v.subCategoryId,
-                price: Number(v.price),
-                unit: v.unit,
-                stocks: Number(v.stock),
-                imageUrl: ""
+                name:        v.name,
+                description: v.description || '',
+                category:    catObj?.name    || v.parentCategoryId,
+                subcategory: subCatObj?.name || v.subCategoryId,
+                price:       Number(v.price),
+                unit:        v.unit,
+                stocks:      Number(v.stock),
+                imageUrl:    Array.isArray(v.image) ? (v.image[0] || '') : (v.image || '')
               };
 
               if (editingItem) {
@@ -191,45 +196,12 @@ const ProductList = () => {
                   editingItem.id;
 
                 await apiService.updateProduct(productId, payload);
-
-                // important: pass editingItem.id to context
-                updateProduct(editingItem.id, {
-
-                  ...editingItem,
-
-                  name: v.name,
-                  price: Number(v.price),
-                  stock: Number(v.stock),
-                  description: v.description,
-
-                  parentCategoryId: v.parentCategoryId,
-                  subCategoryId: v.subCategoryId
-
-                });
+                await updateProduct();
 
               } else {
 
-                const response =
-                  await apiService.addProduct(payload);
-
-                const newProduct =
-                  response.product || response;
-
-                addProduct({
-
-                  ...newProduct,
-
-                  name: v.name,
-                  price: Number(v.price),
-                  stock: Number(v.stock),
-                  description: v.description,
-
-                  unit: v.unit,
-
-                  parentCategoryId: v.parentCategoryId,
-                  subCategoryId: v.subCategoryId
-
-                });
+                await apiService.addProduct(payload);
+                await addProduct();
 
               }
 

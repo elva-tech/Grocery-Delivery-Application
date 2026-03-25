@@ -14,6 +14,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await apiService.verifyOtp(phoneNumber, otp);
       
+
       if (response.success && response.token) {
         const userData = {
           id: response.user.id,
@@ -25,6 +26,8 @@ export const AuthProvider = ({ children }) => {
         setUser(userData);
         localStorage.setItem('freshroot_user', JSON.stringify(userData));
         localStorage.setItem('jwtToken', response.token);
+        // Remove any old 'token' key to avoid confusion
+        localStorage.removeItem('token');
 
         return { success: true, user: userData };
       }
@@ -42,6 +45,8 @@ export const AuthProvider = ({ children }) => {
 
     localStorage.removeItem('freshroot_user');
     localStorage.removeItem('jwtToken');
+    // Remove any 'token' key to avoid confusion
+    localStorage.removeItem('token');
 
     window.location.href = '/login';
   };

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { X, Phone, User, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { X, User, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { setCredentials } from '../../store/slices/authSlice';
 import { sendOtp, verifyOtp } from '../../api/authApi';
 
@@ -20,19 +20,21 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const [timer, setTimer] = useState(30);
   const [error, setError] = useState('');
 
-  const otpInputs = useRef<(HTMLInputElement | null)[]>([]);
+  const otpInputs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
-    let interval: any;
+    let interval: NodeJS.Timeout | undefined;
     if (step === 'otp' && timer > 0) {
-      interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
+      interval = setInterval(() => setTimer((prev: number) => prev - 1), 1000);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [step, timer]);
 
   if (!isOpen) return null;
 
-  const handleSendOtp = async (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     
@@ -93,7 +95,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     }
   };
 
-  const handleVerify = async (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     
@@ -112,11 +114,11 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
           phone: phone,
           name: response.user?.name || 'User',
         };
-        
         // Store token and user data in localStorage for persistence
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(userData));
-        
+        // Remove any old 'jwtToken' key to avoid confusion
+        localStorage.removeItem('jwtToken');
         dispatch(setCredentials({
           user: userData,
           token: response.token,
@@ -238,7 +240,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                         type="text"
                         placeholder="John Doe"
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                         className="w-full h-16 bg-slate-50 border-2 border-slate-200 focus:border-[#4b6f9e] focus:bg-white rounded-2xl pl-12 pr-4 font-bold outline-none transition-all"
                         required
                       />
@@ -252,7 +254,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                     type="tel"
                     placeholder="Enter 10 digit number"
                     value={phone}
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const val = e.target.value.replace(/\D/g, '');
                       if (val.length <= 10) setPhone(val);
                     }}
@@ -263,15 +265,15 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
               </>
             ) : (
               <div className="flex justify-center gap-2 py-4">
-                {otp.map((digit, idx) => (
+                {otp.map((digit: string, idx: number) => (
                   <input
                     key={idx}
-                    ref={(el) => (otpInputs.current[idx] = el)}
+                    ref={(el: HTMLInputElement | null) => (otpInputs.current[idx] = el)}
                     type="text"
                     maxLength={1}
                     value={digit}
-                    onChange={(e) => handleOtpChange(e.target.value, idx)}
-                    onKeyDown={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleOtpChange(e.target.value, idx)}
+                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                       if (e.key === 'Backspace' && !otp[idx] && idx > 0) {
                         otpInputs.current[idx - 1]?.focus();
                       }

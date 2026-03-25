@@ -14,7 +14,7 @@ import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
 import Addresses from './pages/Addresses';
 import LoginModal from './components/ui/LoginModal'; 
-import { getCartCalculation } from './api/mockdata';
+import { getCartCalculation } from './api/ordersApi';
 import { useGetProductsQuery } from './api/apiSlice';
 import type { RootState } from './store/store';
 import { ChevronRight } from 'lucide-react';
