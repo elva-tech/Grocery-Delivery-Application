@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 import { addToCart, removeFromCart } from '../store/slices/cartSlice';
-import { MOCK_PRODUCTS } from '../api/mockdata';
+import { useGetProductsQuery } from '../api/apiSlice';
 import type { RootState } from '../store/store';
 import ProductCard from '../components/products/ProductCard';
 
@@ -19,6 +19,8 @@ const ProductDetail = () => {
   const [activeImg, setActiveImg] = useState(0);
   const [showNutrients, setShowNutrients] = useState(false);
 
+  const { data: allProducts = [] } = useGetProductsQuery();
+
   // Auto-scroll to top when product changes
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -26,15 +28,15 @@ const ProductDetail = () => {
   }, [productId]);
 
   // 1. Logic: Find Current Product
-  const product = useMemo(() => MOCK_PRODUCTS.find(p => p.id === productId), [productId]);
+  const product = useMemo(() => allProducts.find(p => p.id === productId), [productId, allProducts]);
 
-  // 2. Logic: Dynamic Related Products (Using categoryId from your MockData)
+  // 2. Logic: Dynamic Related Products (same parent category)
   const relatedProducts = useMemo(() => {
     if (!product) return [];
-    return MOCK_PRODUCTS
-      .filter(p => p.categoryId === product.categoryId && p.id !== productId)
+    return allProducts
+      .filter(p => p.parentCategoryId === product.parentCategoryId && p.id !== productId)
       .slice(0, 4);
-  }, [product, productId]);
+  }, [product, productId, allProducts]);
 
   const cartItem = useSelector((state: RootState) => 
     state.cart.items.find(item => item.id === productId)
@@ -208,7 +210,7 @@ const ProductDetail = () => {
           <section className="border-t border-slate-100 pt-16">
             <div className="mb-10">
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">You Might Also Like</h3>
-              <p className="text-sm text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-1">Similar items in {product.categoryId === '1' ? 'Fresh Milk' : 'this category'}</p>
+              <p className="text-sm text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-1">Similar items in {product.subcategory || product.category}</p>
             </div>
             
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">

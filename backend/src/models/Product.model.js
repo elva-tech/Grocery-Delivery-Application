@@ -20,6 +20,12 @@ const productSchema = new mongoose.Schema(
       index: true,
     },
 
+    subcategory: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
     price: {
       type: Number,
       required: true,
@@ -31,6 +37,11 @@ const productSchema = new mongoose.Schema(
     },
     
     imageUrl: {
+      type: String,
+      default: ""
+    },
+
+    description: {
       type: String,
       default: ""
     },

@@ -2,7 +2,7 @@ import { MOCK_ORDERS } from './mockdata';
 import axios from "axios";
 import { API_BASE_URL } from "../config";
 
-const API_URL = `${API_BASE_URL}/orders`;
+const API_URL = `${API_BASE_URL}/api/orders`;
 
 const ORDERS_KEY = '@enandi_orders_v1';
 const ORDER_COUNTER_KEY = '@enandi_order_counter';

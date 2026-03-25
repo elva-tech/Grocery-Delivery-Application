@@ -15,6 +15,12 @@ api.interceptors.request.use((config) => {
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      if (payload.tenantId) {
+        config.headers["x-tenant-id"] = payload.tenantId;
+      }
+    } catch { /* malformed token */ }
   }
 
   return config;
@@ -46,19 +52,16 @@ export const apiService = {
     return res.data;
   },
 updateProduct: async (productId, payload) => {
+    if (!productId) throw new Error("Invalid product ID");
+    const res = await api.put(`/api/products/admin/products/${productId}`, payload);
+    return res.data;
+  },
 
-  if (!productId) {
-    throw new Error("Invalid product ID");
-  }
-
-  const res = await api.put(
-    `/api/products/admin/products/${productId}`,
-    payload
-  );
-
-  return res.data;
-},
-
+  deleteProduct: async (productId) => {
+    if (!productId) throw new Error("Invalid product ID");
+    const res = await api.delete(`/api/admin/products/${productId}`);
+    return res.data;
+  },
 
   /* -------- GET ALL RETURN REQUESTS -------- */
 

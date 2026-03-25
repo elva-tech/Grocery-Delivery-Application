@@ -46,6 +46,8 @@ const authSlice = createSlice({
       // Clear localStorage
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      // Remove any 'jwtToken' key to avoid confusion
+      localStorage.removeItem('jwtToken');
     },
   },
 });
