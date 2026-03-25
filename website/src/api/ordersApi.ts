@@ -150,6 +150,20 @@ export const processAdminRefundApi = async (orderId: string, decision: 'APPROVE'
   }
   return { success: false };
 };
+/* ─── PLACE ORDER (real backend) ──────────────────────────────── */
+export const placeOrderApi = async (payload: {
+  items: { productId: string; qty: number }[];
+  paymentMode: 'COD' | 'ONLINE';
+  deliveryAddress: { line1: string; lat: number; lng: number };
+}) => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Unauthorized');
+  const res = await axios.post(API_URL, payload, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data; // { orderId, totalAmount, orderStatus, ... }
+};
+
 export const reportOrderIssueApi = async (formData: FormData) => {
   const orderId = String(formData.get('orderId'));
   const reason = formData.get('reason');

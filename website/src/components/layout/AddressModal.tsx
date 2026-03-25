@@ -100,7 +100,7 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose }) => {
     
     setLoading(true);
     try {
-      await addAddress(form);
+      await addAddress({ ...form, lat: coords[0], lng: coords[1] });
       setForm({ label: '', full: '', phone: '', altPhone: '', landmark: '' });
       setShowMap(false);
       onClose();

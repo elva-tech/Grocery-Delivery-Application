@@ -1,20 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { clearCart } from '../store/slices/cartSlice';
 import { Check, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const OrderSuccess = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   const [lastId, setLastId] = useState('');
 
   useEffect(() => {
     dispatch(clearCart());
-    
-    const id = localStorage.getItem('@last_order_id');
-    if (id) setLastId(id);
+
+    const id = location.state?.orderId || localStorage.getItem('@last_order_id') || '';
+    if (id) {
+      setLastId(id);
+      localStorage.setItem('@last_order_id', String(id));
+    }
 
     const duration = 5 * 1000;
     const animationEnd = Date.now() + duration;
