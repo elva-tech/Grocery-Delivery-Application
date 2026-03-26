@@ -40,14 +40,13 @@ useEffect(() => {
   fetchInventory();
 }, []);
 
-  // 1. TOTAL REVENUE - FIXED: Now matches Dashboard (only PAID orders, exclude CANCELLED)
+  // 1. TOTAL REVENUE - count DELIVERED or PAID orders, exclude CANCELLED
   const totalRevenue = useMemo(() => {
     return (orders || [])
       .filter(o => {
         const status = o.status?.toUpperCase();
         const paymentStatus = o.paymentStatus?.toUpperCase();
-        // Only count PAID and non-CANCELLED orders (matching Dashboard calculation)
-        return paymentStatus === 'PAID' && status !== 'CANCELLED';
+        return status !== 'CANCELLED' && (paymentStatus === 'PAID' || status === 'DELIVERED');
       })
       .reduce((sum, order) => sum + (Number(order.totalAmount || order.total) || 0), 0);
   }, [orders]);

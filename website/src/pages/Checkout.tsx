@@ -3,9 +3,9 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2 } from 'lucide-react';
 import type { RootState } from '../store/store';
-import { clearCart } from '../store/slices/cartSlice';
+import { logout } from '../store/slices/authSlice';
 import { useCalculateCartMutation } from '../api/apiSlice';
-import { saveNewOrder } from '../api/ordersApi'; // Fixed: Import the API
+import { placeOrderApi } from '../api/ordersApi';
 
 const Checkout = ({ address }: any) => {
   const navigate = useNavigate();
@@ -35,33 +35,32 @@ const Checkout = ({ address }: any) => {
     if (items.length > 0) fetchBill();
   }, [items, getCalculation]);
 
- // ... previous imports
-
 const handlePlaceOrder = async () => {
   if (items.length === 0) return;
-  
   setIsProcessing(true);
   try {
-    const orderPayload = {
-      userId: user?.id || 'user-123',
-      items: [...items], // Clone items
-      totalAmount: bill.grandTotal,
-      address: address?.full || 'Default Address',
-      deliverySlot: '7-10 AM',
-    };
-
-    await saveNewOrder(orderPayload);
-
-    navigate('/success', { state: { fromCheckout: true, orderItems: items } });
-
-    setTimeout(() => {
-      dispatch(clearCart());
+    const result = await placeOrderApi({
+      items: items.map(item => ({ productId: item.id, qty: item.quantity })),
+      paymentMode: 'COD',
+      deliveryAddress: {
+        line1: address?.full || '',
+        lat: typeof address?.lat === 'number' ? address.lat : 0,
+        lng: typeof address?.lng === 'number' ? address.lng : 0,
+      },
+    });
+    // clearCart is handled by OrderSuccess on mount — don't dispatch here
+    // to avoid the App.tsx guard (items.length===0 at /checkout → redirect to /)
+    navigate('/success', { state: { fromCheckout: true, orderId: result.orderId, orderItems: items } });
+  } catch (error: any) {
+    console.error('Order placement failed:', error);
+    if (error?.response?.status === 401) {
+      dispatch(logout());
+      alert('Your session has expired. Please log in again to place your order.');
+      navigate('/', { replace: true });
+    } else {
+      alert(error?.response?.data?.message || 'Failed to place order. Please try again.');
       setIsProcessing(false);
-    }, 100);
-
-  } catch (error) {
-    console.error("Order placement failed", error);
-    setIsProcessing(false);
+    }
   }
 };
 

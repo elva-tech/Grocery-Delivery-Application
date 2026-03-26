@@ -8,7 +8,11 @@ const { authMiddleware } = require("./middleware/auth.middleware");
 const app = express();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'x-platform'],
+}));
 app.use(express.json());
 
 // ✅ Make uploads public

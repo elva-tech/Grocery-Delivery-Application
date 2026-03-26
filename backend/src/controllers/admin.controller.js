@@ -153,6 +153,12 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     order.orderStatus = status;
+
+    // COD orders: mark as PAID when delivered (cash collected on delivery)
+    if (status === "DELIVERED" && order.paymentMode === "COD") {
+      order.paymentStatus = "PAID";
+    }
+
     await order.save();
 
     try {
@@ -362,7 +368,11 @@ exports.getRevenue = async (req, res) => {
       {
         $match: {
           tenantId,
-          paymentStatus: "PAID",
+          $or: [
+            { paymentStatus: "PAID" },
+            { orderStatus: "DELIVERED" }
+          ],
+          orderStatus: { $ne: "CANCELLED" },
           createdAt: {
             $gte: fromDate,
             $lte: toDate
