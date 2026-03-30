@@ -2,11 +2,11 @@
  * Backend API configuration and authentication endpoints
  */
 
-if (!import.meta.env.VITE_API_URL) {
+if (!import.meta.env.VITE_API_BASE_URL) {
   throw new Error('API URL not configured. Please set VITE_API_URL environment variable.');
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export interface SendOtpResponse {
   success: boolean;
