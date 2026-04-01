@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { showToast } from '@/utils/toast';
-import { saveNewOrder } from '@/api/ordersApi';
+import { placeOrderApi } from '@/api/ordersApi';
+import { clearCart } from '@/store/slices/cartSlice';
 
 export default function CheckoutScreen() {
   const { items, totalAmount } = useSelector((state: RootState) => state.cart);
@@ -26,33 +27,26 @@ export default function CheckoutScreen() {
     }
 
     try {
-      const orderItems = items.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        unit: item.unit,
-        image: Array.isArray(item.image) ? item.image[0] : item.image
-      }));
-
-      const orderData = {
-        userId: 'user-123',
-        status: 'PLACED',
-        deliverySlot: '7-10 AM',
-        address: '123, Green Apartments, Bengaluru, 560001',
-        totalAmount: totalAmount,
-        items: orderItems
+      const payload = {
+        items: items.map(item => ({
+          productId: item.id,
+          qty: item.quantity,
+        })),
+        paymentMode: 'COD' as const,
+        deliveryAddress: {
+          line1: '123, Green Apartments, Bengaluru, 560001',
+          lat: 12.9716,
+          lng: 77.5946,
+        },
       };
 
-      await saveNewOrder(orderData);
+      await placeOrderApi(payload);
 
-      showToast('success', 'Order Placed!', 'Your fresh milk will arrive tomorrow morning.');
-
-      // ✅ navigate WITHOUT params
+      dispatch(clearCart());
+      showToast('success', 'Order Placed!', 'Your order has been placed successfully.');
       router.replace('/(tabs)/order-success');
-
-    } catch (error) {
-      showToast('error', 'Order Failed', 'Please try again.');
+    } catch (error: any) {
+      showToast('error', 'Order Failed', error.message || 'Please try again.');
     }
   };
 
