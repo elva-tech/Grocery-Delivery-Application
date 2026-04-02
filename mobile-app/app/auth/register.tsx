@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingVi
 import { useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
 import { Colors, Fonts } from "@/theme/theme";
-import { requestOtp } from "@/api/addresses"; // Import API
+import { sendOtp } from "@/api/authApi";
 
 export default function Register() {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await requestOtp(phone); // Hit Backend
+      await sendOtp(`+91${phone}`);
       router.push({
         pathname: '/auth/otp',
         params: { phone, name }

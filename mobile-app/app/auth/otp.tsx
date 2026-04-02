@@ -4,8 +4,9 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useDispatch } from "react-redux";
 import { setCredentials } from "@/store/slices/authSlice";
 import { Colors, Fonts } from "@/theme/theme";
+import { sendOtp, verifyOtp } from "@/api/authApi";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from "lottie-react-native";
-import { requestOtp } from "@/api/addresses"; // Import API
 
 export default function OTP() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function OTP() {
   const handleResend = async () => {
     setLoading(true);
     try {
-      await requestOtp(phone as string); // Hit Backend again
+      await sendOtp(`+91${phone}`);
       setOtp(["", "", "", ""]);
       setTimer(30);
       inputs.current[0]?.focus();
@@ -56,20 +57,39 @@ export default function OTP() {
   const handleVerify = async () => {
     if (otp.join("").length !== 4) return;
     setLoading(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
 
-    dispatch(setCredentials({
-      user: {
-        id: Math.random().toString(36).substr(2, 9),
-        phone: `+91 ${phone}`, // Store with code
-        name: name as string,
-      },
-      token: "mock-session-token"
-    }));
+    try {
+      const result = await verifyOtp(
+        `+91${phone}`,
+        otp.join(""),
+        name as string,
+        'signup'
+      );
 
-    setLoading(false);
-    router.replace('/(tabs)');
+      if (!result.token || !result.user) throw new Error(result.message || 'Verification failed');
+
+      await AsyncStorage.setItem('token', result.token);
+      await AsyncStorage.setItem('user', JSON.stringify({
+        id: result.user.id,
+        phone: result.user.phoneNumber,
+        name: result.user.name || (name as string),
+      }));
+
+      dispatch(setCredentials({
+        user: {
+          id: result.user.id,
+          phone: result.user.phoneNumber,
+          name: result.user.name || (name as string),
+        },
+        token: result.token,
+      }));
+
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      alert(e.message || "Verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

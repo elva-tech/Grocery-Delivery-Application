@@ -17,11 +17,11 @@ import * as Haptics from 'expo-haptics';
 
 
 // Domain Imports
-import { useGetCategoriesQuery, useGetProductsQuery } from '@/api/apiSlice';
+import { useGetCategoriesQuery, useGetProductsQuery, useGetBannersQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
 import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
-import { PROMO_BANNERS, APP_CONFIG } from '@/api/mockData'; // Added APP_CONFIG
+import { APP_CONFIG } from '@/api/mockData';
 
 // Constants for UI consistency
 const { width } = Dimensions.get('window');
@@ -129,6 +129,7 @@ export default function HomeScreen() {
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
   const { data: allProducts = [] } = useGetProductsQuery();
+  const { data: banners = [] } = useGetBannersQuery();
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -201,7 +202,7 @@ export default function HomeScreen() {
 
       {!searchQuery && (
         <>
-          <StaticBannerCarousel banners={PROMO_BANNERS || []} />
+          <StaticBannerCarousel banners={banners || []} />
 
           <View style={styles.leafBanner}>
             <View style={styles.leafContent}>

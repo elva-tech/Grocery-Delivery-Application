@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { showToast } from '@/utils/toast';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Fonts } from '@/theme/theme'; // Use your primary blue tokens
 
 export default function ProfileScreen() {
@@ -19,8 +20,10 @@ export default function ProfileScreen() {
 
   const [profileImage, setProfileImage] = useState<string | null>(null);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     showToast('info', 'Logout', 'Logging you out...');
+    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem('user');
     setTimeout(() => {
       dispatch(logout());
       dispatch(clearCart());

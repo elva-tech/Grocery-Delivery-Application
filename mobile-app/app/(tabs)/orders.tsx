@@ -65,7 +65,7 @@ export default function OrdersScreen() {
   const fetchOrders = useCallback(async (isQuiet = false) => {
     if (!isQuiet) setLoading(true);
     try {
-      const data = await getUserOrders('user-123');
+      const data = await getUserOrders();
       const normalizedData = data.map((order: any) => ({
         ...order,
         items: typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || [])
