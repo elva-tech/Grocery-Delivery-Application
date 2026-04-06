@@ -70,8 +70,7 @@ exports.placeCustomerOrder = async (req, res) => {
       );
     }
 
-    const paymentStatus =
-      paymentMode === "COD" ? "PENDING" : "PAID";
+    const paymentStatus = "PENDING";
 
     const order = await Order.create({
       tenantId,

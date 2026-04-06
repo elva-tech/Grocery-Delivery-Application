@@ -1,9 +1,11 @@
 const express = require("express");
 const cors = require("cors");
 
-
 // Import auth middleware
 const { authMiddleware } = require("./middleware/auth.middleware");
+
+// Webhook routes (must be imported before express.json())
+const webhookRoutes = require("./routes/webhook.routes");
 
 const app = express();
 
@@ -13,6 +15,10 @@ app.use(cors({
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'x-platform'],
 }));
+
+// Webhook routes registered BEFORE express.json() to preserve raw body for signature verification
+app.use("/api/webhooks", webhookRoutes);
+
 app.use(express.json());
 
 // ✅ Make uploads public
@@ -36,6 +42,7 @@ const orderRoutes = require("./routes/order.routes");
 const riderRoutes = require("./routes/rider.routes");
 const returnRoutes = require("./routes/return.routes");
 const bannerRoutes = require("./routes/banner.routes");
+const paymentRoutes = require("./routes/payment.routes");
 
 
 // Public routes
@@ -50,6 +57,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/riders", riderRoutes);
 app.use("/api/admin",  adminRoutes);
 app.use("/api/returns", returnRoutes);
+app.use("/api/payments", paymentRoutes);
 
 
 module.exports = app;
