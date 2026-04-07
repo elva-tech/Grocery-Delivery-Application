@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Provider, useSelector } from 'react-redux';
+import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState } from '@/store/store';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -10,15 +10,19 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setCredentials } from '@/store/slices/authSlice';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
+  const dispatch = useDispatch();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [mounted, setMounted] = useState(false);
   const [animationFinished, setAnimationFinished] = useState(false);
+  const [authRestored, setAuthRestored] = useState(false);
 
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
@@ -26,6 +30,23 @@ function RootLayoutNav() {
     'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
     'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
   });
+
+  // Restore auth from AsyncStorage on app start
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const userStr = await AsyncStorage.getItem('user');
+        if (token && userStr) {
+          dispatch(setCredentials({ user: JSON.parse(userStr), token }));
+        }
+      } catch (_) {
+        // ignore
+      } finally {
+        setAuthRestored(true);
+      }
+    })();
+  }, []);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -36,7 +57,7 @@ function RootLayoutNav() {
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    if (!mounted || !segments?.length || !fontsLoaded || !animationFinished) return;
+    if (!mounted || !segments?.length || !fontsLoaded || !animationFinished || !authRestored) return;
     
     const rootSegment = segments[0];
     const inAuthFlow = rootSegment === 'auth';

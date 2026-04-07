@@ -22,20 +22,7 @@ const generateBackendOrderId = async (): Promise<string> => {
   }
 };
 
-// Generic Status Update API (Hits local "backend")
-export const updateOrderStatusApi = async (orderId: string, newStatus: string) => {
-  const existingOrders = await AsyncStorage.getItem(ORDERS_KEY);
-  if (existingOrders) {
-    const orders = JSON.parse(existingOrders);
-    const updatedOrders = orders.map((o: any) => 
-      o.id === orderId ? { ...o, status: newStatus } : o
-    );
-    await AsyncStorage.setItem(ORDERS_KEY, JSON.stringify(updatedOrders));
-    return { success: true };
-  }
-  return { success: false };
-};
-
+/* ----------- CANCEL ORDER (real backend) ----------- */
 export const cancelOrderApi = async (orderId: string) => {
   const token = getAuthToken();
   if (!token) return { success: false };
@@ -53,6 +40,7 @@ export const cancelOrderApi = async (orderId: string) => {
   }
 };
 
+/* ----------- GET USER ORDERS ----------- */
 export const getUserOrders = async (_userId?: string) => {
   const token = getAuthToken();
   if (!token) return [];
@@ -80,56 +68,6 @@ export const getUserOrders = async (_userId?: string) => {
   } catch (error) {
     console.error('Order fetch error:', error);
     return [];
-  }
-};
-
-// Add this to ordersApi.ts
-export const processAdminRefundApi = async (orderId: string, decision: 'APPROVE' | 'REJECT', adminNote: string) => {
-  const existingOrders = await AsyncStorage.getItem(ORDERS_KEY);
-  if (existingOrders) {
-    const orders = JSON.parse(existingOrders);
-    const updatedOrders = orders.map((o: any) => {
-      if (o.id === orderId) {
-        return { 
-          ...o, 
-          status: decision === 'APPROVE' ? 'REFUND_APPROVED' : 'REFUND_REJECTED',
-          adminNote: adminNote,
-          resolvedAt: new Date().toISOString()
-        };
-      }
-      return o;
-    });
-    await AsyncStorage.setItem(ORDERS_KEY, JSON.stringify(updatedOrders));
-    return { success: true };
-  }
-  return { success: false };
-};
-
-export const saveNewOrder = async (orderData: any) => {
-  try {
-    const orderId = await generateBackendOrderId();
-    const newOrder = {
-      ...orderData,
-      id: orderId,
-      createdAt: new Date().toISOString(),
-      status: 'PLACED', // Default initial status
-      items: Array.isArray(orderData.items)
-        ? orderData.items.map((i: any) => ({
-            ...i,
-            image: Array.isArray(i.image) ? i.image[0] : i.image
-          }))
-        : []
-    };
-
-    const savedOrders = await AsyncStorage.getItem(ORDERS_KEY);
-    const currentOrders = savedOrders ? JSON.parse(savedOrders) : [];
-    const updatedOrders = [newOrder, ...currentOrders];
-    await AsyncStorage.setItem(ORDERS_KEY, JSON.stringify(updatedOrders));
-    await AsyncStorage.setItem(LAST_ORDER_KEY, orderId);
-    return newOrder;
-  } catch (error) {
-    console.error('Order save error:', error);
-    throw error;
   }
 };
 
@@ -162,14 +100,23 @@ export const getOrderById = async (orderId: string) => {
   }
 };
 
-export const clearUserOrders = async () => {
-  try {
-    await AsyncStorage.removeItem(ORDERS_KEY);
-    await AsyncStorage.removeItem(ORDER_COUNTER_KEY);
-    await AsyncStorage.removeItem(LAST_ORDER_KEY);
-  } catch (error) {
-    console.error('Clear orders error:', error);
-  }
+/* ----------- CART CALCULATION (local) ----------- */
+export const getCartCalculation = async (items: any[]) => {
+  const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const FREE_DELIVERY_THRESHOLD = 500;
+  const SHIPPING_CHARGES = 40;
+  const isFreeDelivery = subtotal >= FREE_DELIVERY_THRESHOLD;
+  const deliveryCharge = isFreeDelivery ? 0 : SHIPPING_CHARGES;
+
+  return {
+    subtotal,
+    isFreeDelivery,
+    amountToFree: isFreeDelivery ? 0 : FREE_DELIVERY_THRESHOLD - subtotal,
+    progress: Math.min(subtotal / FREE_DELIVERY_THRESHOLD, 1),
+    deliveryCharge,
+    grandTotal: subtotal + deliveryCharge,
+    saved: isFreeDelivery ? SHIPPING_CHARGES : 0,
+  };
 };
 
 // ─── REAL BACKEND API FUNCTIONS ──────────────────────────────────────────────

@@ -16,6 +16,8 @@ export interface Product {
   id: string;
   parentCategoryId: string;
   subCategoryId: string;
+  category: string;
+  subcategory: string;
   name: string;
   description?: string;
   price: number;
@@ -39,6 +41,8 @@ const normalizeProduct = (p: any): Product => ({
   name: p.name,
   parentCategoryId: p.category || '',
   subCategoryId: p.subcategory || '',
+  category: p.category || '',
+  subcategory: p.subcategory || '',
   description: p.description || '',
   price: p.price,
   unit: p.unit,
@@ -82,7 +86,7 @@ export const apiSlice = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
   endpoints: (builder) => ({
 
-    /* ----------- SETTINGS (Remote Config) ----------- */
+    /* ----------- SETTINGS ----------- */
     getAppSettings: builder.query<AppSettings, void>({
       queryFn: async () => {
         try {
@@ -117,7 +121,7 @@ export const apiSlice = createApi({
       },
     }),
 
-    /* ----------- ALL PRODUCTS ----------- */
+    /* ----------- PRODUCTS ----------- */
     getProducts: builder.query<Product[], void>({
       queryFn: async () => {
         try {
