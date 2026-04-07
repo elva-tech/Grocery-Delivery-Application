@@ -13,11 +13,8 @@ export const API_BASE_URL = {
   PRODUCTION: 'https://api.egrocery.com',
 };
 
-// Active API URL — change to STAGING or PRODUCTION for deployment
-export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;
-
-// Tenant ID (must match backend tenant config)
 export const TENANT_ID = 'demo-tenant';
+export const RAZORPAY_KEY_ID = 'rzp_test_SaHmJpDs42QvIp';
 
 // ============================================
 // ORDER STATUSES

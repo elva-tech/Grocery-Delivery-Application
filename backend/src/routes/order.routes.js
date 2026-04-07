@@ -10,7 +10,8 @@ const {
   getCustomerOrderById,
   getAllOrders,
   cancelOrder,
-  getRevenue
+  getRevenue,
+  rateOrder,
 } = require("../controllers/order.controller");
 
 router.post("/", authMiddleware, placeCustomerOrder);
@@ -25,4 +26,5 @@ router.get("/:id", authMiddleware, getCustomerOrderById);
 
 router.patch("/:orderId/deliver", authMiddleware, markOrderDelivered);
 router.patch("/:orderId/cancel", authMiddleware, cancelOrder);
+router.post("/:orderId/rate", authMiddleware, rateOrder);
 module.exports = router;

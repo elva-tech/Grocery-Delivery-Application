@@ -1,8 +1,9 @@
 import { MOCK_ORDERS } from './mockdata';
 import axios from "axios";
-import { API_BASE_URL } from "../config";
+import { API_BASE_URL, TENANT_ID } from "../config";
 
 const API_URL = `${API_BASE_URL}/api/orders`;
+const COUPONS_URL = `${API_BASE_URL}/api/coupons`;
 
 const ORDERS_KEY = '@enandi_orders_v1';
 const ORDER_COUNTER_KEY = '@enandi_order_counter';
@@ -13,25 +14,42 @@ const storage = {
   setItem: (key: string, value: string) => localStorage.setItem(key, value),
 };
 export const getCartCalculation = async (items: any[]) => {
-  const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-  const FREE_DELIVERY_THRESHOLD = 500;
-  const SHIPPING_CHARGES = 40;
-  
-  const isFreeDelivery = subtotal >= FREE_DELIVERY_THRESHOLD;
-  const amountToFree = isFreeDelivery ? 0 : FREE_DELIVERY_THRESHOLD - subtotal;
-  const progress = Math.min(subtotal / FREE_DELIVERY_THRESHOLD, 1);
-  const deliveryCharge = isFreeDelivery ? 0 : SHIPPING_CHARGES;
-  const grandTotal = subtotal + deliveryCharge;
+  const subtotal = items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
 
-  // Simulate API delay if needed, or return immediately
+  const settingsRes = await axios.get(`${API_BASE_URL}/api/settings`, {
+    headers: { 'x-tenant-id': TENANT_ID },
+  });
+  const s = settingsRes.data;
+
+  const deliveryCharge: number = s.deliveryCharge;
+  const freeDeliveryAbove: number = s.freeDeliveryAbove;
+  const discountType: string = s.discountType ?? 'NONE';
+  const discountValue: number = s.discountValue ?? 0;
+
+  const isFreeDelivery = subtotal >= freeDeliveryAbove;
+  const finalDelivery = (subtotal === 0 || isFreeDelivery) ? 0 : deliveryCharge;
+  const amountToFree = isFreeDelivery ? 0 : freeDeliveryAbove - subtotal;
+  const progress = Math.min(subtotal / freeDeliveryAbove, 1);
+
+  let discount = 0;
+  if (discountType === 'PERCENTAGE' && discountValue > 0) {
+    discount = Math.round((subtotal * discountValue) / 100);
+  } else if (discountType === 'FLAT' && discountValue > 0) {
+    discount = discountValue;
+  }
+  discount = Math.min(discount, subtotal);
+
+  const grandTotal = subtotal + finalDelivery - discount;
+
   return {
     subtotal,
     isFreeDelivery,
     amountToFree,
     progress,
-    deliveryCharge,
+    deliveryCharge: finalDelivery,
     grandTotal,
-    saved: isFreeDelivery ? SHIPPING_CHARGES : 0
+    discount,
+    saved: (isFreeDelivery ? deliveryCharge : 0) + discount,
   };
 };
 
@@ -151,10 +169,28 @@ export const processAdminRefundApi = async (orderId: string, decision: 'APPROVE'
   return { success: false };
 };
 /* ─── PLACE ORDER (real backend) ──────────────────────────────── */
+export const validateCouponApi = async (code: string, cartTotal: number): Promise<{
+  valid: boolean;
+  code: string;
+  discountAmount: number;
+  description: string;
+  message: string;
+}> => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Unauthorized');
+  const res = await axios.post(
+    `${COUPONS_URL}/validate`,
+    { code: code.trim().toUpperCase(), cartTotal },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return res.data;
+};
+
 export const placeOrderApi = async (payload: {
   items: { productId: string; qty: number }[];
   paymentMode: 'COD' | 'ONLINE';
   deliveryAddress: { line1: string; lat: number; lng: number };
+  couponCode?: string | null;
 }) => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('Unauthorized');
@@ -196,4 +232,15 @@ export const reportOrderIssueApi = async (formData: FormData) => {
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   await new Promise(resolve => setTimeout(resolve, 1000));
   return { success: true };
+};
+
+export const rateOrderApi = async (orderId: string, rating: number, comment: string) => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Unauthorized');
+  const res = await axios.post(
+    `${API_URL}/${orderId}/rate`,
+    { rating, comment },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return res.data; // { success: true, message }
 };

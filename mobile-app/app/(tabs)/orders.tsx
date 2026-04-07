@@ -16,7 +16,8 @@ import { useDispatch } from 'react-redux';
 import { addToCart } from '@/store/slices/cartSlice';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
-import { getUserOrders, cancelOrderApi } from '@/api/ordersApi';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getUserOrders, cancelOrderApi, rateOrderApi } from '@/api/ordersApi';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 // INTEGRATED: Import settings hook
@@ -62,6 +63,12 @@ export default function OrdersScreen() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{title: string, msg: string, action: () => void} | null>(null);
 
+  // ── Rating state ──────────────────────────────────────────────────────────
+  const [ratingOrder, setRatingOrder] = useState<any>(null);  // order pending a rating prompt
+  const [starValue, setStarValue] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
   const fetchOrders = useCallback(async (isQuiet = false) => {
     if (!isQuiet) setLoading(true);
     try {
@@ -73,6 +80,20 @@ export default function OrdersScreen() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       setOrders(normalizedData);
+
+      // Auto-prompt rating for first unrated delivered order
+      const unrated = normalizedData.find(
+        (o: any) => o.orderStatus === 'DELIVERED' && !o.rating?.value
+      );
+      if (unrated) {
+        const skippedKey = `@rating_skipped_${unrated._id ?? unrated.id}`;
+        const skipped = await AsyncStorage.getItem(skippedKey);
+        if (!skipped) {
+          setStarValue(0);
+          setRatingComment('');
+          setRatingOrder(unrated);
+        }
+      }
     } catch (err) {
       showToast('error', 'Sync Failed', 'Please check your connection');
     } finally {
@@ -159,6 +180,29 @@ export default function OrdersScreen() {
     }
   };
 
+  const skipRating = async () => {
+    if (!ratingOrder) return;
+    const key = `@rating_skipped_${ratingOrder._id ?? ratingOrder.id}`;
+    await AsyncStorage.setItem(key, '1');
+    setRatingOrder(null);
+  };
+
+  const submitRating = async () => {
+    if (starValue === 0) return showToast('error', 'Select Stars', 'Please tap a star to rate.');
+    setIsSubmittingRating(true);
+    try {
+      await rateOrderApi(ratingOrder._id ?? ratingOrder.id, starValue, ratingComment);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('success', 'Thank you!', 'Your feedback helps us improve.');
+      setRatingOrder(null);
+      fetchOrders(true);
+    } catch (err: any) {
+      showToast('error', 'Error', err.message || 'Could not submit rating.');
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
+
   useFocusEffect(useCallback(() => { fetchOrders(); }, [fetchOrders]));
 
   const onRefresh = useCallback(() => {
@@ -202,6 +246,23 @@ export default function OrdersScreen() {
             <Text style={styles.primaryBtnText}>Reorder</Text>
           </TouchableOpacity>
         </View>
+        {/* Rate button for unrated delivered orders */}
+        {item.orderStatus === 'DELIVERED' && !item.rating?.value && (
+          <TouchableOpacity
+            style={styles.rateBtn}
+            onPress={() => { setStarValue(0); setRatingComment(''); setRatingOrder(item); }}
+          >
+            <Ionicons name="star-outline" size={15} color="#f59e0b" />
+            <Text style={styles.rateBtnText}>Rate this order</Text>
+          </TouchableOpacity>
+        )}
+        {/* Show submitted rating */}
+        {item.rating?.value && (
+          <View style={styles.ratingDisplay}>
+            <Text style={styles.ratingStars}>{'★'.repeat(item.rating.value)}{'☆'.repeat(5 - item.rating.value)}</Text>
+            {item.rating.comment ? <Text style={styles.ratingCommentSmall}>{item.rating.comment}</Text> : null}
+          </View>
+        )}
       </View>
     );
   };
@@ -344,6 +405,61 @@ export default function OrdersScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* RATING MODAL */}
+      <Modal visible={!!ratingOrder} transparent animationType="fade" onRequestClose={skipRating}>
+        <View style={styles.alertOverlay}>
+          <View style={[styles.alertBox, { paddingBottom: 28 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={styles.alertTitle}>Rate Your Order</Text>
+              <TouchableOpacity onPress={skipRating}>
+                <Ionicons name="close" size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.alertMsg, { marginBottom: 20 }]}>
+              How was your experience with order #{String(ratingOrder?._id ?? ratingOrder?.id).slice(-6)}?
+            </Text>
+
+            {/* Star selector */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <TouchableOpacity key={s} onPress={() => { setStarValue(s); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Ionicons
+                    name={s <= starValue ? 'star' : 'star-outline'}
+                    size={36}
+                    color={s <= starValue ? '#f59e0b' : '#d1d5db'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Optional comment */}
+            <TextInput
+              style={[styles.inputArea, { marginBottom: 20, minHeight: 70 }]}
+              placeholder="Any comments? (optional)"
+              multiline
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              maxLength={300}
+            />
+
+            <View style={styles.alertButtons}>
+              <TouchableOpacity style={styles.alertSecondary} onPress={skipRating}>
+                <Text style={styles.alertSecondaryText}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.alertPrimary, isSubmittingRating && { opacity: 0.6 }]}
+                onPress={submitRating}
+                disabled={isSubmittingRating}
+              >
+                {isSubmittingRating
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.alertPrimaryText}>Submit</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -446,4 +562,33 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: 12,
   },
+
+  // Rating
+  rateBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#fcd34d',
+    backgroundColor: '#fffbeb',
+  },
+  rateBtnText: { color: '#b45309', fontWeight: '800', fontSize: 13 },
+  ratingDisplay: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#fffbeb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingStars: { fontSize: 16, color: '#f59e0b', letterSpacing: 1 },
+  ratingCommentSmall: { fontSize: 12, color: '#78716c', flex: 1, fontStyle: 'italic' },
 });

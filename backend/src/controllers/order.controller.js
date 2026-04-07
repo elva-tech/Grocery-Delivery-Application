@@ -2,6 +2,8 @@ const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const mongoose = require("mongoose");
 const User = require("../models/User.model");
+const Settings = require("../models/Settings.model");
+const Coupon = require("../models/Coupon.model");
 
 
 const PAYMENT_MODES = ["COD", "ONLINE"];
@@ -11,7 +13,7 @@ const PAYMENT_MODES = ["COD", "ONLINE"];
  */
 exports.placeCustomerOrder = async (req, res) => {
   try {
-    const { items, paymentMode, deliveryAddress } = req.body;
+    const { items, paymentMode, deliveryAddress, couponCode } = req.body;
 
     const userId = req.user.userId;
     const tenantId = req.user.tenantId;
@@ -70,19 +72,85 @@ exports.placeCustomerOrder = async (req, res) => {
       );
     }
 
-    const paymentStatus =
-      paymentMode === "COD" ? "PENDING" : "PAID";
+    // Apply settings: delivery charge + discount
+    const settings = await Settings.findOneAndUpdate(
+      { tenantId },
+      { $setOnInsert: { tenantId } },
+      { upsert: true, new: true }
+    );
+
+    const subtotal = totalAmount;
+    const isFreeDelivery = subtotal >= settings.freeDeliveryAbove;
+    const deliveryCharge = isFreeDelivery ? 0 : settings.deliveryCharge;
+
+    let discount = 0;
+    if (settings.discountType === "PERCENTAGE" && settings.discountValue > 0) {
+      discount = Math.round((subtotal * settings.discountValue) / 100);
+    } else if (settings.discountType === "FLAT" && settings.discountValue > 0) {
+      discount = settings.discountValue;
+    }
+    discount = Math.min(discount, subtotal);
+
+    // Coupon validation (server-side — never trust client)
+    let couponDiscount = 0;
+    let appliedCoupon = null;
+    if (couponCode) {
+      const coupon = await Coupon.findOne({
+        tenantId,
+        code: couponCode.trim().toUpperCase(),
+        isActive: true,
+        validFrom: { $lte: new Date() },
+        validTo:   { $gte: new Date() },
+      });
+
+      if (coupon) {
+        const usageLimitOk = coupon.usageLimit == null || coupon.usedCount < coupon.usageLimit;
+        const minValueOk = subtotal >= coupon.minOrderValue;
+
+        let firstTimeOk = true;
+        if (coupon.firstTimeUserOnly) {
+          const prev = await Order.findOne({ userId, orderStatus: { $nin: ["CANCELLED"] } });
+          firstTimeOk = !prev;
+        }
+
+        if (usageLimitOk && minValueOk && firstTimeOk) {
+          if (coupon.discountType === "PERCENTAGE") {
+            couponDiscount = Math.round((subtotal * coupon.discountValue) / 100);
+            if (coupon.maxDiscount != null) {
+              couponDiscount = Math.min(couponDiscount, coupon.maxDiscount);
+            }
+          } else {
+            couponDiscount = coupon.discountValue;
+          }
+          couponDiscount = Math.min(couponDiscount, subtotal);
+          appliedCoupon = coupon;
+        }
+      }
+    }
+
+    const grandTotal = subtotal + deliveryCharge - discount - couponDiscount;
+
+    const paymentStatus = "PENDING";
 
     const order = await Order.create({
       tenantId,
       userId,
       items: orderItems,
-      totalAmount,
+      totalAmount: grandTotal,
+      deliveryCharge,
+      discount,
+      couponCode: appliedCoupon ? appliedCoupon.code : null,
+      couponDiscount,
       paymentMode,
       deliveryAddress,
       orderStatus: "PLACED",
       paymentStatus,
     });
+
+    // Atomically increment coupon usage after order is confirmed
+    if (appliedCoupon) {
+      await Coupon.findByIdAndUpdate(appliedCoupon._id, { $inc: { usedCount: 1 } });
+    }
 
     res.status(201).json({
       message: "Order placed successfully",
@@ -378,5 +446,48 @@ exports.getRevenue = async (req, res) => {
     res.status(500).json({
       message: "Something went wrong"
     });
+  }
+};
+
+// ─── POST /api/orders/:orderId/rate ──────────────────────────────────────────
+exports.rateOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { rating, comment } = req.body;
+    const userId = req.user.userId;
+    const tenantId = req.user.tenantId;
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: "Rating must be an integer between 1 and 5" });
+    }
+
+    const order = await Order.findOne({ _id: orderId, tenantId });
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    if (String(order.userId) !== String(userId)) {
+      return res.status(403).json({ success: false, message: "Not your order" });
+    }
+
+    if (order.orderStatus !== "DELIVERED") {
+      return res.status(400).json({ success: false, message: "Can only rate delivered orders" });
+    }
+
+    if (order.rating?.value != null) {
+      return res.status(409).json({ success: false, message: "Order already rated" });
+    }
+
+    order.rating = {
+      value: rating,
+      comment: (comment || "").trim(),
+      createdAt: new Date(),
+    };
+    await order.save();
+
+    res.json({ success: true, message: "Rating submitted successfully" });
+  } catch (err) {
+    console.error("rateOrder error:", err);
+    res.status(500).json({ success: false, message: "Failed to submit rating" });
   }
 };

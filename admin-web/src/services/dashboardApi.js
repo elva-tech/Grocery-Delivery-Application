@@ -136,6 +136,47 @@ export const dashboardService = {
       throw error;
     }
   },
+
+  /**
+   * Get top selling products based on delivered orders
+   * @param {number} limit - Max products to return (default 5)
+   */
+  getTopProducts: async (limit = 5) => {
+    try {
+      const response = await dashboardApi.get(`/api/analytics/top-products?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching top products:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get daily sales data for delivered orders
+   * @param {number} days - Number of past days (default 7)
+   */
+  getDailySales: async (days = 7) => {
+    try {
+      const response = await dashboardApi.get(`/api/analytics/daily-sales?days=${days}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching daily sales:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get ratings summary (avg, distribution, low ratings count)
+   */
+  getRatingsSummary: async () => {
+    try {
+      const response = await dashboardApi.get('/api/analytics/ratings-summary');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching ratings summary:', error);
+      throw error;
+    }
+  },
 };
 
 export default dashboardService;

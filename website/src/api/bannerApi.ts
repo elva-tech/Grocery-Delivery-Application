@@ -1,8 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+import { API_BASE_URL } from '../config';
 
 export const getBanners = async (tenantId: string) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/banners`, {
+    const response = await fetch(`${API_BASE_URL}/api/banners`, {
       headers: {
         "x-tenant-id": tenantId,
       },

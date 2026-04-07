@@ -10,7 +10,7 @@ import { Image } from 'expo-image';
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCart, removeFromCart } from '@/store/slices/cartSlice';
 import { RootState } from '@/store/store';
-import { MOCK_PRODUCTS } from '@/api/mockData';
+import { useGetProductsQuery } from '@/api/apiSlice';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -27,7 +27,8 @@ export default function ProductDetailScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Data Fetching
-  const product = MOCK_PRODUCTS.find(p => p.id === id);
+  const { data: allProducts } = useGetProductsQuery();
+  const product = allProducts?.find(p => p.id === id);
 
   // FIX: Explicitly checking if THIS specific ID is in the cart
   const cartItem = useSelector((state: RootState) =>

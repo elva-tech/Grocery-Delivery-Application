@@ -9,7 +9,9 @@ import {
   ShieldCheck,
   FileText,
   ImageIcon,
-  RotateCcw
+  RotateCcw,
+  SlidersHorizontal,
+  Tag
 } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
 
@@ -31,6 +33,8 @@ const Sidebar = () => {
         { name: 'Data Export', path: '/export', icon: FileText, color: 'text-emerald-600' },
         { name: 'Delivery Partners', path: '/riders', icon: Bike, color: 'text-blue-500' },
         { name: 'App Banners', path: '/banners', icon: ImageIcon, color: 'text-purple-600' },
+        { name: 'Settings', path: '/settings', icon: SlidersHorizontal, color: 'text-slate-600' },
+        { name: 'Coupons', path: '/coupons', icon: Tag, color: 'text-pink-600' },
         // CONDITIONAL RENDER: This logic handles the visibility
         ...(appSettings.allowRefunds ? [{ 
           name: 'Returns & Refunds', 
