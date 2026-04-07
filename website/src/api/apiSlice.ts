@@ -1,7 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL;
-const TENANT_ID = import.meta.env.VITE_TENANT_ID || 'demo-tenant';
+import { API_BASE_URL, TENANT_ID } from '../config';
 
 /* -------- helpers -------- */
 const toCatId = (name: string) =>
@@ -191,20 +189,50 @@ export const apiSlice = createApi({
       deliveryCharge: number;
       grandTotal: number;
       isFreeDelivery: boolean;
+      amountToFree: number;
+      discount: number;
+      saved: number;
     }, any[]>({
       queryFn: async (items) => {
         try {
-          const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-          const freeDeliveryThreshold = 500;
-          const isFree = subtotal >= freeDeliveryThreshold;
-          const deliveryCharge = (subtotal === 0 || isFree) ? 0 : 40;
+          const subtotal = items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
+
+          // Fetch live settings — no hardcoded fallbacks; fail loudly if unavailable
+          const settingsRes = await fetch(`${API_BASE_URL}/api/settings`, {
+            headers: { 'x-tenant-id': TENANT_ID },
+          });
+          if (!settingsRes.ok) throw new Error('Failed to fetch store settings');
+          const s = await settingsRes.json();
+
+          const deliveryCharge: number = s.deliveryCharge;
+          const freeDeliveryAbove: number = s.freeDeliveryAbove;
+          const discountType: string = s.discountType ?? 'NONE';
+          const discountValue: number = s.discountValue ?? 0;
+          let discount = 0;
+
+          const isFreeDelivery = subtotal >= freeDeliveryAbove;
+          const finalDelivery = (subtotal === 0 || isFreeDelivery) ? 0 : deliveryCharge;
+          const amountToFree = isFreeDelivery ? 0 : freeDeliveryAbove - subtotal;
+
+          if (discountType === 'PERCENTAGE' && discountValue > 0) {
+            discount = Math.round((subtotal * discountValue) / 100);
+          } else if (discountType === 'FLAT' && discountValue > 0) {
+            discount = discountValue;
+          }
+          discount = Math.min(discount, subtotal);
+
+          const grandTotal = subtotal + finalDelivery - discount;
+          const saved = (isFreeDelivery ? deliveryCharge : 0) + discount;
 
           return {
             data: {
               subtotal,
-              deliveryCharge,
-              grandTotal: subtotal + deliveryCharge,
-              isFreeDelivery: isFree
+              deliveryCharge: finalDelivery,
+              grandTotal,
+              isFreeDelivery,
+              amountToFree,
+              discount,
+              saved,
             }
           };
         } catch (error) {

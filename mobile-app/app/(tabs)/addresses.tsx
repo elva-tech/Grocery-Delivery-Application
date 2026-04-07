@@ -11,10 +11,20 @@ import * as Location from 'expo-location';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { useDispatch, useSelector } from 'react-redux';
 
+import RazorpayCheckout from 'react-native-razorpay';
+
 import { clearCart } from '@/store/slices/cartSlice';
 import { RootState } from '@/store/store';
 import { showToast } from '@/utils/toast';
-import { getAddresses, addAddress, getAddressFromCoords, createOrder } from '@/api/addresses';
+import { getAddresses, addAddress, getAddressFromCoords } from '@/api/addresses';
+import {
+  placeOrderBackend,
+  validateCouponApi,
+  createMobilePaymentOrder,
+  verifyMobilePayment,
+} from '@/api/ordersApi';
+import { getCartCalculation } from '@/api/mockData';
+import { RAZORPAY_KEY_ID } from '@/src/config/constants';
 
 type OrderMode = 'self' | 'others';
 
@@ -38,6 +48,15 @@ export default function AddressesScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
   const { items, totalAmount } = useSelector((state: RootState) => state.cart);
+  const { user, token } = useSelector((state: RootState) => state.auth);
+
+  const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number; isFreeDelivery: boolean }>(
+    { grandTotal: totalAmount, deliveryFee: 0, isFreeDelivery: false },
+  );
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [couponError, setCouponError] = useState('');
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -63,6 +82,14 @@ export default function AddressesScreen() {
   const geocodeAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (items && items.length > 0) {
+      getCartCalculation(items).then(setBill).catch(() => {
+        setBill({ grandTotal: totalAmount, deliveryFee: 0, isFreeDelivery: false });
+      });
+    }
+  }, [items, totalAmount]);
 
   const load = async () => {
     try {
@@ -109,59 +136,121 @@ export default function AddressesScreen() {
     setOrderMode('others');
   };
 
- // inside AddressesScreen component...
+  const couponDiscount = appliedCoupon?.discountAmount ?? 0;
+  const finalAmount = Math.max(0, bill.grandTotal - couponDiscount);
 
-const handleFinalConfirm = async () => {
-  // 1. Basic Guard
-  if (!items || items.length === 0) {
-    showToast('error', 'Empty Cart', 'Add items before placing an order.');
-    return;
-  }
-
-  // 2. Address/Recipient Guard
-  if (orderMode === 'self' && !selectedId) {
-    showToast('error', 'Required', 'Select a delivery address');
-    return;
-  }
-  if (orderMode === 'others' && !othersConfirmed) {
-    showToast('error', 'Required', 'Enter recipient details');
-    return;
-  }
-
-  try {
-    setIsPlacingOrder(true);
-    // 3. THE DATA PAYLOAD
-    // This is how you distinguish between 'Self' and 'Others' for the backend
-    const orderPayload = {
-      items: items,
-      total: totalAmount,
-      orderType: orderMode, // 'self' or 'others'
-      addressId: orderMode === 'self' ? selectedId : null,
-      recipientDetails: orderMode === 'others' ? othersForm : null,
-    };
-
-    console.log("SENDING ORDER TO API:", orderPayload);
-
-    // FIX: Calling the actual API function
-    const response = await createOrder(orderPayload);
-
-    if (response.success) {
-      // 4. Success Actions
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
-      // IMPORTANT: Clear the "Others" data so the next order doesn't reuse it
-      setOthersForm(EMPTY_OTHERS);
-      setOthersConfirmed(false);
-      
-      dispatch(clearCart());
-      router.replace('/(tabs)/order-success');
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    if (!token) { showToast('error', 'Session Expired', 'Please log in again'); return; }
+    setCouponError('');
+    setIsApplyingCoupon(true);
+    try {
+      const result = await validateCouponApi(couponInput.trim().toUpperCase(), bill.grandTotal, token);
+      setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount });
+      setCouponInput('');
+      showToast('success', 'Coupon Applied', result.message || `Saved ₹${result.discountAmount}!`);
+    } catch (err: any) {
+      setCouponError(err?.message || 'Invalid coupon code');
+      setAppliedCoupon(null);
+    } finally {
+      setIsApplyingCoupon(false);
     }
-  } catch (error) {
-    showToast('error', 'Order Failed', 'Please try again');
-  } finally {
-    setIsPlacingOrder(false);
-  }
-};
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError('');
+    setCouponInput('');
+  };
+
+  const handleFinalConfirm = async () => {
+    if (!items || items.length === 0) {
+      showToast('error', 'Empty Cart', 'Add items before placing an order.');
+      return;
+    }
+    if (orderMode === 'self' && !selectedId) {
+      showToast('error', 'Required', 'Select a delivery address');
+      return;
+    }
+    if (orderMode === 'others' && !othersConfirmed) {
+      showToast('error', 'Required', 'Enter recipient details');
+      return;
+    }
+    if (!token) {
+      showToast('error', 'Session Expired', 'Please log in again');
+      router.push('/auth/landing');
+      return;
+    }
+
+    try {
+      setIsPlacingOrder(true);
+
+      const deliveryLine =
+        orderMode === 'self'
+          ? (addresses.find((a: any) => a.id === selectedId)?.full || '')
+          : othersForm.fullAddress;
+
+      const order = await placeOrderBackend(
+        {
+          items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
+          paymentMode: 'ONLINE',
+          deliveryAddress: { line1: deliveryLine, lat: 0, lng: 0 },
+          couponCode: appliedCoupon?.code ?? null,
+        },
+        token,
+      );
+
+      const paymentData = await createMobilePaymentOrder(order.orderId, token);
+
+      const rawPhone = ((user as any)?.phone || '').replace(/^\+91\s?/, '').slice(-10);
+
+      const rzpOptions = {
+        description: 'Grocery Order',
+        currency: paymentData.currency || 'INR',
+        key: RAZORPAY_KEY_ID,
+        amount: String(paymentData.amount),
+        name: 'KMF Grocery',
+        order_id: paymentData.razorpay_order_id,
+        prefill: {
+          email: (user as any)?.email || '',
+          contact: rawPhone,
+          name: (user as any)?.name || '',
+        },
+        theme: { color: '#0F2C1D' },
+      };
+
+      const rzpResponse: any = await RazorpayCheckout.open(rzpOptions);
+
+      const verified = await verifyMobilePayment(
+        {
+          order_id: order.orderId,
+          razorpay_order_id: rzpResponse.razorpay_order_id,
+          razorpay_payment_id: rzpResponse.razorpay_payment_id,
+          razorpay_signature: rzpResponse.razorpay_signature,
+        },
+        token,
+      );
+
+      if (verified.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setOthersForm(EMPTY_OTHERS);
+        setOthersConfirmed(false);
+        setAppliedCoupon(null);
+        dispatch(clearCart());
+        router.replace('/(tabs)/order-success');
+      } else {
+        showToast('error', 'Payment Error', 'Verification failed. Contact support.');
+      }
+    } catch (error: any) {
+      if (error?.code === 0 || String(error?.description).toLowerCase().includes('cancel')) {
+        showToast('error', 'Cancelled', 'Payment was cancelled');
+      } else {
+        showToast('error', 'Order Failed', error?.message || 'Please try again');
+      }
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
 
   const fetchAddressFromBackend = useCallback(async (lat: number, lng: number) => {
     geocodeAbortRef.current?.abort();
@@ -339,6 +428,46 @@ const handleFinalConfirm = async () => {
               </TouchableOpacity>
             </View>
           ) : (
+            {/* Coupon input */}
+            <View style={styles.couponRow}>
+              {appliedCoupon ? (
+                <View style={styles.couponApplied}>
+                  <Ionicons name="pricetag" size={15} color="#16a34a" />
+                  <Text style={styles.couponAppliedText}>
+                    {appliedCoupon.code} · –₹{appliedCoupon.discountAmount}
+                  </Text>
+                  <TouchableOpacity onPress={handleRemoveCoupon} style={{ marginLeft: 6 }}>
+                    <Ionicons name="close-circle" size={17} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <TextInput
+                    style={styles.couponInput}
+                    placeholder="Coupon code"
+                    placeholderTextColor="#94a3b8"
+                    value={couponInput}
+                    onChangeText={t => { setCouponInput(t.toUpperCase()); setCouponError(''); }}
+                    autoCapitalize="characters"
+                    returnKeyType="done"
+                    onSubmitEditing={handleApplyCoupon}
+                  />
+                  <TouchableOpacity
+                    style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon) && { opacity: 0.5 }]}
+                    onPress={handleApplyCoupon}
+                    disabled={!couponInput.trim() || isApplyingCoupon}
+                  >
+                    {isApplyingCoupon ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.couponApplyText}>Apply</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+            {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
+
             <TouchableOpacity 
               style={[styles.confirmBtn, isPlacingOrder && { opacity: 0.8 }]} 
               onPress={handleFinalConfirm} 
@@ -352,10 +481,10 @@ const handleFinalConfirm = async () => {
                   <>
                     <View style={styles.confirmBtnLeft}>
                       <Text style={styles.confirmBtnItemCount}>{items.length} item{items.length > 1 ? 's' : ''}</Text>
-                      <Text style={styles.confirmBtnText}>Place Order</Text>
+                      <Text style={styles.confirmBtnText}>Pay & Place Order</Text>
                     </View>
                     <View style={styles.confirmBtnRight}>
-                      <Text style={styles.confirmBtnAmount}>₹{totalAmount}</Text>
+                      <Text style={styles.confirmBtnAmount}>₹{finalAmount}</Text>
                       <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.8)" />
                     </View>
                   </>
@@ -534,6 +663,15 @@ const styles = StyleSheet.create({
   confirmBtnText: { fontSize: 17, fontWeight: '800', color: '#fff', marginTop: 1 },
   confirmBtnRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   confirmBtnAmount: { fontSize: 20, fontWeight: '800', color: '#fff' },
+
+  // Coupon
+  couponRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 },
+  couponInput: { flex: 1, height: 42, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, fontSize: 13, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#dde6f0', letterSpacing: 1 },
+  couponApplyBtn: { backgroundColor: '#4b6f9e', borderRadius: 10, height: 42, paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center' },
+  couponApplyText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  couponApplied: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#dcfce7', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#86efac', gap: 6 },
+  couponAppliedText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#16a34a' },
+  couponError: { fontSize: 12, color: '#dc2626', marginBottom: 6, marginLeft: 2 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

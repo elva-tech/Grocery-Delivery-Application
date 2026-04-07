@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StatCard from '../../components/shared/StatCard';
+import TopProductsSection from './TopProductsSection';
+import DailySalesChart from './DailySalesChart';
+import RatingSummaryCard from './RatingSummaryCard';
 import { 
   ShoppingBag, 
   IndianRupee, 
@@ -31,6 +34,13 @@ const DashboardHome = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeFilter, setTimeFilter] = useState('7');
+
+  // Analytics state
+  const [topProducts, setTopProducts] = useState([]);
+  const [dailySales, setDailySales] = useState([]);
+  const [ratingsSummary, setRatingsSummary] = useState(null);
+  const [analyticsFilter, setAnalyticsFilter] = useState('30');
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
   
   const [lastUpdated, setLastUpdated] = useState(
     new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -112,6 +122,43 @@ const DashboardHome = () => {
 
     fetchDashboardData();
   }, [timeFilter]);
+
+  // ============================================
+  // FETCH ANALYTICS DATA
+  // ============================================
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      setAnalyticsLoading(true);
+      // Fetch independently so one failure doesn't blank the other
+      const [topResult, dailyResult, ratingsResult] = await Promise.allSettled([
+        dashboardService.getTopProducts(5),
+        dashboardService.getDailySales(parseInt(analyticsFilter)),
+        dashboardService.getRatingsSummary(),
+      ]);
+
+      if (topResult.status === 'fulfilled') {
+        setTopProducts(topResult.value?.data || []);
+      } else {
+        console.error('Top products fetch failed:', topResult.reason);
+      }
+
+      if (dailyResult.status === 'fulfilled') {
+        setDailySales(dailyResult.value?.data || []);
+      } else {
+        console.error('Daily sales fetch failed:', dailyResult.reason);
+      }
+
+      if (ratingsResult.status === 'fulfilled') {
+        setRatingsSummary(ratingsResult.value?.data || null);
+      } else {
+        console.error('Ratings summary fetch failed:', ratingsResult.reason);
+      }
+
+      setAnalyticsLoading(false);
+    };
+
+    fetchAnalytics();
+  }, [analyticsFilter]);
 
   // ============================================
   // INVENTORY CALCULATIONS
@@ -284,6 +331,22 @@ const DashboardHome = () => {
             <p className="text-slate-500 font-semibold">No revenue data available for this period</p>
           </div>
         )}
+      </div>
+
+      {/* ── Analytics Row ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TopProductsSection data={topProducts} isLoading={analyticsLoading} />
+        <DailySalesChart
+          data={dailySales}
+          isLoading={analyticsLoading}
+          filter={analyticsFilter}
+          onFilterChange={setAnalyticsFilter}
+        />
+      </div>
+
+      {/* ── Ratings Row ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <RatingSummaryCard data={ratingsSummary} isLoading={analyticsLoading} />
       </div>
 
       <div className="bg-[#1A4D2E] p-8 rounded-[32px] text-white shadow-xl shadow-green-900/20 flex flex-col w-full">

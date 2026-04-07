@@ -12,6 +12,8 @@ import ReportsPage from './modules/Reports/ReportsPage';
 import RiderManagement from './pages/Riders/RiderManagement';
 import BannerManagement from './components/banner/BannerManagement';
 import ReturnManagement from './modules/Orders/ReturnManagement';
+import SettingsPage from './modules/Settings/SettingsPage';
+import CouponManagement from './modules/Coupons/CouponManagement';
 
 // Create a helper component to handle the conditional logic inside the Router
 const AppRoutes = () => {
@@ -32,6 +34,8 @@ const AppRoutes = () => {
         />
 
         <Route path="/banners" element={<BannerManagement />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/coupons" element={<CouponManagement />} />
       </Route>
       {/* Catch all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -13,6 +13,9 @@ export const API_BASE_URL = {
   PRODUCTION: 'https://api.egrocery.com',
 };
 
+export const TENANT_ID = 'demo-tenant';
+export const RAZORPAY_KEY_ID = 'rzp_test_SaHmJpDs42QvIp';
+
 // ============================================
 // ORDER STATUSES
 // ============================================

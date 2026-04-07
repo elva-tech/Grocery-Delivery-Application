@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, EffectFade } from 'swiper/modules';
 import { getBanners } from '../../api/bannerApi';
+import { API_BASE_URL, TENANT_ID } from '../../config';
 
 import 'swiper/css';
 import 'swiper/css/pagination';
 import 'swiper/css/effect-fade';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL.replace('/api', '');
+const BASE_URL = API_BASE_URL;
 
 const PromoBanners = () => {
   const [banners, setBanners] = useState<any[]>([]);
@@ -16,17 +17,15 @@ const PromoBanners = () => {
 
   const getTenantId = () => {
     const token = localStorage.getItem("token");
-
     if (token) {
       try {
-        return JSON.parse(atob(token.split('.')[1])).tenantId;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.tenantId) return payload.tenantId;
       } catch {
-        return null;
+        // ignore decode errors
       }
     }
-
-    // fallback for guests
-    return "demo-tenant";
+    return TENANT_ID;
   };
 
   // ✅ derive tenantId once
@@ -75,7 +74,7 @@ const PromoBanners = () => {
           <SwiperSlide key={banner._id}>
             <div className="relative h-full w-full group">
               <img 
-                src={`${BASE_URL}/${banner.image.replace(/\\/g, "/")}`}
+                src={`${BASE_URL}${banner.image.replace(/\\/g, "/")}`}
                 className="w-full h-full object-cover transition-transform duration-[5000ms] group-hover:scale-110" 
                 alt={banner.title} 
               />

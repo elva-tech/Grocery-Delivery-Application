@@ -4,13 +4,15 @@ import DataTable from '../../components/shared/DataTable';
 import CustomButton from '../../components/shared/CustomButton';
 import ProductForm from './ProductForm';
 import CategoryForm from './CategoryForm';
-import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight, Search, X } from 'lucide-react';
+import Pagination from '../../components/shared/Pagination';
+import usePagination from '../../hooks/usePagination';
 import { APP_CONFIG } from '../../config/appConfig';
 import { apiService } from '../../services/apiService';
 
 const ProductList = () => {
 
-  const { products, categories, addProduct, updateProduct, deleteProduct, refreshProducts } = useAppState();
+  const { products, categories, addProduct, updateProduct, deleteProduct, refreshProducts, addCategory } = useAppState();
 
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -19,6 +21,9 @@ const ProductList = () => {
   const [activePillarId, setActivePillarId] = useState('All');
   const [activeSubCatId, setActiveSubCatId] = useState('All');
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, name }
+
   const getImageUrl = (imgData) => {
     if (!imgData) return null;
     if (Array.isArray(imgData)) return imgData[0];
@@ -26,20 +31,30 @@ const ProductList = () => {
   };
 
   const filteredProducts = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
     return products.filter(p => {
-
       const matchesPillar =
         activePillarId === 'All' ||
         String(p.parentCategoryId) === String(activePillarId);
-
       const matchesSub =
         activeSubCatId === 'All' ||
         String(p.subCategoryId) === String(activeSubCatId);
-
-      return matchesPillar && matchesSub;
-
+      const matchesSearch =
+        !q ||
+        p.name?.toLowerCase().includes(q) ||
+        p.category?.toLowerCase().includes(q) ||
+        p.subcategory?.toLowerCase().includes(q);
+      return matchesPillar && matchesSub && matchesSearch;
     });
-  }, [products, activePillarId, activeSubCatId]);
+  }, [products, activePillarId, activeSubCatId, searchQuery]);
+
+  const {
+    currentPage,
+    pageSize,
+    setCurrentPage,
+    setPageSize,
+    paginatedItems: paginatedProducts,
+  } = usePagination(filteredProducts);
 
   const columns = [
 
@@ -51,8 +66,9 @@ const ProductList = () => {
         const displayImg =
           getImageUrl(row.imageUrl || row.images || row.image);
 
-        const subCat =
-          categories.find(c => String(c.id) === String(row.subCategoryId));
+        const subCat = row.subCategoryId
+          ? categories.find(c => String(c.id) === String(row.subCategoryId))
+          : null;
 
         const pillar =
           categories.find(c => String(c.id) === String(row.parentCategoryId));
@@ -130,6 +146,11 @@ const ProductList = () => {
           </h1>
           <p className="text-slate-500">
             Live Backend Sync: {products.length} Products
+            {searchQuery && (
+              <span className="ml-2 text-emerald-600 font-bold">
+                · {filteredProducts.length} results
+              </span>
+            )}
           </p>
         </div>
 
@@ -154,6 +175,39 @@ const ProductList = () => {
 
         </div>
       </div>
+
+      {/* Search bar */}
+      {!showForm && !editingItem && !showCatForm && (
+        <div className="relative max-w-sm">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search products by name or category…"
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); /* reset handled by usePagination via filteredProducts change */ }}
+            className="w-full pl-9 pr-8 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 placeholder:text-slate-300 outline-none focus:border-emerald-300 bg-white shadow-sm transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => { setSearchQuery(''); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {showCatForm && (
+        <CategoryForm
+          initialValues={null}
+          onCancel={() => setShowCatForm(false)}
+          onSubmit={(cat) => {
+            addCategory(cat);
+            setShowCatForm(false);
+          }}
+        />
+      )}
 
       {(showForm || editingItem) && (
 
@@ -224,10 +278,10 @@ const ProductList = () => {
       )}
 
       {!showForm && !editingItem && (
-
+        <>
         <DataTable
           columns={columns}
-          data={filteredProducts}
+          data={paginatedProducts}
 
           actions={(row) => (
 
@@ -241,9 +295,7 @@ const ProductList = () => {
               </button>
 
               <button
-                onClick={() =>
-                  deleteProduct(row.id)
-                }
+                onClick={() => setConfirmDelete({ id: row.id, name: row.name })}
                 className="p-2 text-slate-400 hover:text-red-500 transition-colors"
               >
                 <Trash2 size={18} />
@@ -253,9 +305,48 @@ const ProductList = () => {
 
           )}
         />
-
+        <Pagination
+          totalItems={filteredProducts.length}
+          pageSize={pageSize}
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+        />
+        </>
       )}
 
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[28px] shadow-2xl p-8 w-full max-w-sm mx-4 space-y-5">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="bg-red-100 p-4 rounded-full">
+                <Trash2 size={28} className="text-red-500" />
+              </div>
+              <h2 className="text-xl font-black text-slate-800">Delete Product?</h2>
+              <p className="text-slate-500 text-sm">
+                Are you sure you want to delete{' '}
+                <span className="font-bold text-slate-700">&ldquo;{confirmDelete.name}&rdquo;</span>?
+                This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-3 rounded-2xl border-2 border-slate-200 font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { deleteProduct(confirmDelete.id); setConfirmDelete(null); }}
+                className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-black hover:bg-red-600 active:scale-95 transition-all"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

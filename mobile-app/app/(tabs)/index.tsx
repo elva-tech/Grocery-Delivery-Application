@@ -21,7 +21,7 @@ import { useGetCategoriesQuery, useGetProductsQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
 import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
-import { PROMO_BANNERS, APP_CONFIG } from '@/api/mockData'; // Added APP_CONFIG
+import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
 
 // Constants for UI consistency
 const { width } = Dimensions.get('window');
@@ -118,13 +118,21 @@ export default function HomeScreen() {
   const searchInputRef = useRef<TextInput>(null);
 
   /**
-   * GENERIC BRANDING LOGIC
-   * Fetches configuration from mockData (intended for Backend transition).
+   * Brand name (static fallback while backend config endpoint is not yet implemented)
    */
-  const [branding, setBranding] = useState({
-    name: APP_CONFIG.brandName || "Enandi",
-    logo: APP_CONFIG.logoUrl || null
-  });
+  const [branding] = useState({ name: 'Enandi', logo: null });
+
+  // Banners — fetched from backend
+  const [banners, setBanners] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`${API_BASE_URL.DEVELOPMENT}/api/banners`, { headers: { 'x-tenant-id': TENANT_ID } })
+      .then(r => r.json())
+      .then(json => {
+        const list = json.banners ?? json ?? [];
+        if (list.length) setBanners(list.map((b: any) => ({ id: b._id ?? b.id, image: b.imageUrl ?? b.image, title: b.title })));
+      })
+      .catch(() => {});
+  }, []);
 
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
@@ -201,7 +209,7 @@ export default function HomeScreen() {
 
       {!searchQuery && (
         <>
-          <StaticBannerCarousel banners={PROMO_BANNERS || []} />
+          <StaticBannerCarousel banners={banners} />
 
           <View style={styles.leafBanner}>
             <View style={styles.leafContent}>

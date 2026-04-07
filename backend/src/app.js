@@ -43,12 +43,16 @@ const riderRoutes = require("./routes/rider.routes");
 const returnRoutes = require("./routes/return.routes");
 const bannerRoutes = require("./routes/banner.routes");
 const paymentRoutes = require("./routes/payment.routes");
+const settingsRoutes = require("./routes/settings.routes");
+const couponRoutes     = require("./routes/coupon.routes");
+const analyticsRoutes  = require("./routes/analytics.routes");
 
 
 // Public routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/banners",  bannerRoutes);
+app.use("/api/settings", settingsRoutes);
 // Protected routes
 app.use(authMiddleware);
 
@@ -58,6 +62,8 @@ app.use("/api/riders", riderRoutes);
 app.use("/api/admin",  adminRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/coupons",  couponRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 
 module.exports = app;

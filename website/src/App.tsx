@@ -17,7 +17,8 @@ import LoginModal from './components/ui/LoginModal';
 import { getCartCalculation } from './api/ordersApi';
 import { useGetProductsQuery } from './api/apiSlice';
 import type { RootState } from './store/store';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Search, X } from 'lucide-react';
+import Pagination from './components/ui/Pagination';
 import confetti from 'canvas-confetti';
 import Footer from './components/layout/Footer';
 import Orders from './pages/Orders';
@@ -37,6 +38,9 @@ const App = () => {
   const [showFreeToast, setShowFreeToast] = useState(false);
   const [wasFree, setWasFree] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false); 
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
 
   const { data: products = [] } = useGetProductsQuery();
   const { items } = useSelector((state: RootState) => state.cart);
@@ -100,6 +104,18 @@ const App = () => {
       return matchesSearch && matchesCategory;
     });
   }, [searchQuery, selectedParentId, selectedSubId, products]);
+
+  // Reset to page 1 whenever filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedParentId, selectedSubId]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedProducts = filteredProducts.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize
+  );
 
   const handleBack = () => {
     setSearchQuery('');
@@ -174,24 +190,85 @@ const App = () => {
                   <h3 className="font-black text-xl tracking-tight uppercase text-slate-800">
                     {selectedSubId || selectedParentId ? 'Filtered Products' : 'Trending Now'}
                   </h3>
+                  {filteredProducts.length > 0 && (
+                    <span className="ml-auto text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">
+                      {filteredProducts.length} Products
+                    </span>
+                  )}
                 </div>
-                <ProductGrid products={filteredProducts} />
+
+                {/* Inline search bar */}
+                <div className="relative mb-5 max-w-sm">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search products…"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2.5 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-700 placeholder:text-slate-300 outline-none focus:border-[#4b6f9e]/40 bg-white shadow-sm transition-colors"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <ProductGrid products={paginatedProducts} />
+                <Pagination
+                  totalItems={filteredProducts.length}
+                  pageSize={pageSize}
+                  currentPage={safePage}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                />
               </div>
             } />
 
             <Route path="/browse" element={
               <div className="animate-in fade-in duration-500">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
                   <button onClick={handleBack} className="group flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-100 text-[#4b6f9e] font-black text-xs uppercase tracking-widest hover:bg-[#4b6f9e] hover:text-white transition-all shadow-sm">
                     <ChevronRight size={14} className="rotate-180 group-hover:-translate-x-1 transition-transform" /> Back
                   </button>
-                  {(searchQuery || selectedParentId) && (
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">
+
+                  {/* Search bar */}
+                  <div className="relative flex-1 max-w-xs">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search products…"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2.5 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-700 placeholder:text-slate-300 outline-none focus:border-[#4b6f9e]/40 bg-white shadow-sm transition-colors"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {filteredProducts.length > 0 && (
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full whitespace-nowrap">
                       {filteredProducts.length} Results
                     </p>
                   )}
                 </div>
-                <ProductGrid products={filteredProducts} />
+                <ProductGrid products={paginatedProducts} />
+                <Pagination
+                  totalItems={filteredProducts.length}
+                  pageSize={pageSize}
+                  currentPage={safePage}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                />
               </div>
             } />
 

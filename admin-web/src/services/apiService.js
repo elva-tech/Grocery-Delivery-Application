@@ -149,7 +149,7 @@ getInventory: async () => {
 
 getBanners: async () => {
   try {
-    const res = await api.get("/api/banners/get-banners");
+    const res = await api.get("/api/banners");
     return res.data;
   } catch (error) {
     throw error.response?.data || error;
@@ -161,13 +161,8 @@ createBanner: async (formData) => {
     const res = await api.post(
       "/api/banners/create-banner",
       formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
+      { headers: { "Content-Type": "multipart/form-data" } }
     );
-
     return res.data;
   } catch (error) {
     throw error.response?.data || error;
@@ -176,17 +171,42 @@ createBanner: async (formData) => {
 
 deleteBanner: async (id) => {
   try {
-    const res = await api.delete(`/api/banners/${id}`);
+    const res = await api.delete(`/api/banners/delete-banner/${id}`);
     return res.data;
   } catch (error) {
     throw error.response?.data || error;
   }
 },
 
-deleteBanner: async (id) => {
-  const res = await api.delete(`/api/banners/delete-banner/${id}`);
-  return res.data;
-},
+  /* -------- SETTINGS APIs -------- */
+
+  getSettings: async () => {
+    const res = await api.get("/api/settings");
+    return res.data;
+  },
+
+  updateSettings: async (payload) => {
+    const res = await api.put("/api/settings", payload);
+    return res.data;
+  },
+
+  /* -------- COUPON APIs -------- */
+
+  getCoupons: async () => {
+    const res = await api.get("/api/coupons");
+    return res.data;
+  },
+
+  createCoupon: async (payload) => {
+    const res = await api.post("/api/coupons", payload);
+    return res.data;
+  },
+
+  updateCoupon: async (id, payload) => {
+    if (!id) throw new Error("Invalid coupon ID");
+    const res = await api.patch(`/api/coupons/${id}`, payload);
+    return res.data;
+  },
 
 };
 

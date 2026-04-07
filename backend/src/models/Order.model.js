@@ -31,6 +31,26 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
+    deliveryCharge: {
+      type: Number,
+      default: 0,
+    },
+
+    discount: {
+      type: Number,
+      default: 0,
+    },
+
+    couponCode: {
+      type: String,
+      default: null,
+    },
+
+    couponDiscount: {
+      type: Number,
+      default: 0,
+    },
+
     paymentMode: {
       type: String,
       enum: ["COD", "ONLINE"],
@@ -115,6 +135,12 @@ const orderSchema = new mongoose.Schema(
     riderNotes: {
       type: String,
       default: "",
+    },
+
+    rating: {
+      value: { type: Number, min: 1, max: 5, default: null },
+      comment: { type: String, default: "" },
+      createdAt: { type: Date, default: null },
     },
   },
   { timestamps: true }

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2 } from 'lucide-react';
+import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2 } from 'lucide-react';
 import type { RootState } from '../store/store';
 import { logout } from '../store/slices/authSlice';
 import { useCalculateCartMutation } from '../api/apiSlice';
-import { placeOrderApi } from '../api/ordersApi';
+import { placeOrderApi, validateCouponApi } from '../api/ordersApi';
+import { loadRazorpay } from '../utils/loadRazorpay';
+import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
 
 const Checkout = ({ address }: any) => {
   const navigate = useNavigate();
@@ -18,8 +20,17 @@ const Checkout = ({ address }: any) => {
     subtotal: 0,
     deliveryCharge: 0,
     grandTotal: 0,
-    isFreeDelivery: false
+    isFreeDelivery: false,
+    discount: 0,
+    saved: 0,
+    amountToFree: 0,
   });
+
+  // Coupon state
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number; description: string } | null>(null);
+  const [couponError, setCouponError] = useState('');
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   const [getCalculation] = useCalculateCartMutation();
 
@@ -35,22 +46,106 @@ const Checkout = ({ address }: any) => {
     if (items.length > 0) fetchBill();
   }, [items, getCalculation]);
 
+const handleApplyCoupon = async () => {
+  if (!couponInput.trim()) return;
+  setCouponError('');
+  setIsApplyingCoupon(true);
+  try {
+    const result = await validateCouponApi(couponInput.trim(), bill.subtotal);
+    setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount, description: result.description });
+    setCouponInput('');
+  } catch (err: any) {
+    setCouponError(err?.response?.data?.message || 'Invalid coupon code');
+    setAppliedCoupon(null);
+  } finally {
+    setIsApplyingCoupon(false);
+  }
+};
+
+const handleRemoveCoupon = () => {
+  setAppliedCoupon(null);
+  setCouponError('');
+  setCouponInput('');
+};
+
+const couponDiscount = appliedCoupon?.discountAmount ?? 0;
+const finalTotal = bill.grandTotal - couponDiscount;
+
 const handlePlaceOrder = async () => {
   if (items.length === 0) return;
   setIsProcessing(true);
   try {
-    const result = await placeOrderApi({
+    const order = await placeOrderApi({
       items: items.map(item => ({ productId: item.id, qty: item.quantity })),
-      paymentMode: 'COD',
+      paymentMode: 'ONLINE',
       deliveryAddress: {
         line1: address?.full || '',
         lat: typeof address?.lat === 'number' ? address.lat : 0,
         lng: typeof address?.lng === 'number' ? address.lng : 0,
       },
+      couponCode: appliedCoupon?.code ?? null,
     });
-    // clearCart is handled by OrderSuccess on mount — don't dispatch here
-    // to avoid the App.tsx guard (items.length===0 at /checkout → redirect to /)
-    navigate('/success', { state: { fromCheckout: true, orderId: result.orderId, orderItems: items } });
+
+    const scriptLoaded = await loadRazorpay();
+    if (!scriptLoaded) {
+      alert('Failed to load payment gateway. Please check your connection.');
+      setIsProcessing(false);
+      return;
+    }
+
+    const paymentData = await createPaymentOrder(order.orderId);
+
+    const rawPhone: string = user?.phone || user?.phoneNumber || '';
+    const contact = rawPhone.replace(/^\+91/, '').replace(/\s+/g, '').slice(-10);
+
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID as string,
+      amount: paymentData.amount,
+      currency: paymentData.currency,
+      order_id: paymentData.razorpay_order_id,
+      prefill: {
+        name: user?.name || '',
+        email: user?.email || '',
+        contact,
+      },
+      method: {
+        upi: true,
+        card: true,
+        netbanking: true,
+        wallet: true,
+      },
+      theme: { color: '#1e293b' },
+      handler: async (response: any) => {
+        try {
+          const verification = await verifyPayment({
+            order_id: order.orderId,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          if (verification.success) {
+            navigate('/success', { state: { fromCheckout: true, orderId: order.orderId, orderItems: items } });
+          } else {
+            alert('Payment verification failed. Please contact support.');
+            setIsProcessing(false);
+          }
+        } catch (err) {
+          console.error('Payment verification error:', err);
+          alert('Payment verification failed. Please contact support.');
+          setIsProcessing(false);
+        }
+      },
+    };
+
+    const rzp = new (window as any).Razorpay(options);
+
+    rzp.on('payment.failed', (response: any) => {
+      console.error('Payment failed:', response);
+      alert(response?.error?.description || 'Payment failed. Please try again.');
+      setIsProcessing(false);
+    });
+
+    rzp.open();
   } catch (error: any) {
     console.error('Order placement failed:', error);
     if (error?.response?.status === 401) {
@@ -126,10 +221,68 @@ const handlePlaceOrder = async () => {
                   <span>Delivery</span>
                   <span>{bill.isFreeDelivery ? 'FREE' : `₹${bill.deliveryCharge}`}</span>
                 </div>
-                <div className="flex justify-between items-baseline pt-4">
+                {bill.discount > 0 && (
+                  <div className="flex justify-between text-xs font-bold text-emerald-500">
+                    <span>Store Discount</span>
+                    <span>-₹{bill.discount}</span>
+                  </div>
+                )}
+                {couponDiscount > 0 && (
+                  <div className="flex justify-between text-xs font-bold text-purple-600">
+                    <span>Coupon ({appliedCoupon!.code})</span>
+                    <span>-₹{couponDiscount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-baseline pt-4 border-t border-slate-100">
                   <span className="font-black text-slate-900 uppercase text-xs">Total</span>
-                  <span className="text-3xl font-black text-slate-900 tracking-tighter">₹{bill.grandTotal}</span>
+                  <span className="text-3xl font-black text-slate-900 tracking-tighter">₹{finalTotal}</span>
                 </div>
+              </div>
+
+              {/* Coupon input */}
+              <div className="mb-6">
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={14} className="text-purple-600" />
+                      <div>
+                        <p className="text-xs font-black text-purple-700 font-mono">{appliedCoupon.code}</p>
+                        {appliedCoupon.description && (
+                          <p className="text-[10px] text-purple-500 mt-0.5">{appliedCoupon.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={handleRemoveCoupon} className="text-purple-400 hover:text-purple-700 transition-colors ml-2">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponError(''); }}
+                          onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+                          placeholder="Coupon code"
+                          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold uppercase focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400 placeholder:normal-case placeholder:font-sans placeholder:font-normal"
+                        />
+                      </div>
+                      <button
+                        onClick={handleApplyCoupon}
+                        disabled={isApplyingCoupon || !couponInput.trim()}
+                        className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-purple-700 text-white text-xs font-black uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {isApplyingCoupon ? <Loader2 size={14} className="animate-spin" /> : 'Apply'}
+                      </button>
+                    </div>
+                    {couponError && (
+                      <p className="text-[10px] text-red-500 font-bold px-1">{couponError}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button 

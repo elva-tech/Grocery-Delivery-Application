@@ -28,7 +28,7 @@ const normaliseProduct = p => ({
   category:         p.category,
   subcategory:      p.subcategory,
   parentCategoryId: toCatId(p.category || 'uncategorized'),
-  subCategoryId:    p.subcategory ? toSubId(p.subcategory) : toCatId(p.category || 'uncategorized'),
+  subCategoryId:    p.subcategory ? toSubId(p.subcategory) : null,
 });
 
 const buildCategories = items => {
@@ -400,8 +400,12 @@ export const AppStateProvider = ({ children }) => {
       },
       refreshProducts: fetchProductsFromAPI,
 
-      addCategory: c =>
-        setCategories(prev => [...prev, { ...c, id: `cat${Date.now()}` }]),
+      addCategory: c => {
+        const id = c.parentId ? toSubId(c.name) : toCatId(c.name);
+        setCategories(prev =>
+          prev.some(cat => cat.id === id) ? prev : [...prev, { ...c, id }]
+        );
+      },
 
       updateCategory: (id, up) =>
         setCategories(prev => prev.map(c => c.id === id ? { ...c, ...up } : c)),

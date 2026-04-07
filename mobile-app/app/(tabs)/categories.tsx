@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useDispatch } from 'react-redux';
@@ -21,6 +21,9 @@ export default function CategoriesScreen() {
 
   const [activeParentId, setActiveParentId] = useState<string | null>(null);
   const [activeSubCatId, setActiveSubCatId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 12;
 
   const parentCategories = useMemo(
     () => categories.filter(c => c.parentId === null),
@@ -57,10 +60,18 @@ useEffect(() => {
   const { data: products = [], isLoading: prodLoading } =
     useGetProductsByCategoryQuery(activeParentId || '', { skip: !activeParentId });
 
-  const filteredProducts = useMemo(
-    () => products.filter(p => p.subCategoryId === activeSubCatId),
-    [products, activeSubCatId]
-  );
+  const filteredProducts = useMemo(() => {
+    const base = products.filter(p => p.subCategoryId === activeSubCatId);
+    if (!searchQuery.trim()) return base;
+    const q = searchQuery.toLowerCase();
+    return base.filter(p => p.name?.toLowerCase().includes(q));
+  }, [products, activeSubCatId, searchQuery]);
+
+  // Reset page when filter / search changes
+  useEffect(() => { setCurrentPage(1); }, [activeParentId, activeSubCatId, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const paginatedProducts = filteredProducts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleAddToCart = (product: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -168,16 +179,61 @@ useEffect(() => {
 
         {/* ================= PRODUCTS ================= */}
         <View style={styles.productsArea}>
+
+          {/* Search bar */}
+          <View style={styles.searchRow}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search-outline" size={14} color="#94a3b8" style={{ marginRight: 6 }} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search products…"
+                placeholderTextColor="#b0bec5"
+                value={searchQuery}
+                onChangeText={t => setSearchQuery(t)}
+                returnKeyType="search"
+              />
+              {!!searchQuery && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                </TouchableOpacity>
+              )}
+            </View>
+            {filteredProducts.length > 0 && (
+              <Text style={styles.resultCount}>{filteredProducts.length}</Text>
+            )}
+          </View>
+
           {prodLoading ? (
             <ActivityIndicator color="#4b6f9e" style={{ marginTop: 40 }} />
           ) : filteredProducts.length > 0 ? (
             <FlatList
-              data={filteredProducts}
+              data={paginatedProducts}
               keyExtractor={item => item.id}
               numColumns={2}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.productList}
               columnWrapperStyle={styles.row}
+              ListFooterComponent={
+                totalPages > 1 ? (
+                  <View style={styles.paginationRow}>
+                    <TouchableOpacity
+                      onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
+                    >
+                      <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? '#c0cdd8' : '#4b6f9e'} />
+                    </TouchableOpacity>
+                    <Text style={styles.pageLabel}>{currentPage} / {totalPages}</Text>
+                    <TouchableOpacity
+                      onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
+                    >
+                      <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? '#c0cdd8' : '#4b6f9e'} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null
+              }
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.productCard}
@@ -324,5 +380,64 @@ const styles = StyleSheet.create({
   },
 
   emptyContainer: { alignItems: 'center', marginTop: 80 },
-  emptyText: { fontSize: 14, color: '#7b8a9a', marginTop: 16 }
+  emptyText: { fontSize: 14, color: '#7b8a9a', marginTop: 16 },
+
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#dbe4ef',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#2c3e50',
+    padding: 0,
+  },
+  resultCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4b6f9e',
+    backgroundColor: '#e9f0f8',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+
+  paginationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingVertical: 16,
+  },
+  pageBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#e9f0f8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnDisabled: { backgroundColor: '#f1f5f9' },
+  pageLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2c3e50',
+    minWidth: 50,
+    textAlign: 'center',
+  },
 });
