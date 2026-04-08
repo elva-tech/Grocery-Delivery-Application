@@ -16,7 +16,7 @@ const ProductSchema = Yup.object().shape({
   price: Yup.number().min(1, 'Price must be positive').required('Required'),
   stock: Yup.number().min(0, 'No negative stock').required('Required'),
   parentCategoryId: Yup.string().required('Required'),
-  subCategoryId: Yup.string().required('Required'),
+  subCategoryId: Yup.string(),
   unit: Yup.string().required('Required')
 });
 
