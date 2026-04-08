@@ -125,11 +125,23 @@ const ProductList = () => {
     {
       header: 'Stock',
       accessor: 'stock',
-      render: (v) => (
-        <span className={`font-bold ${v < 10 ? 'text-red-500' : 'text-slate-600'}`}>
-          {v} units
-        </span>
-      )
+      render: (v, row) => {
+        const unitLabel = row.unit
+          ? (String(row.unit).trim().replace(/^\d+(\.\d+)?\s*/, '').trim() || String(row.unit).trim())
+          : 'units';
+        const threshold = row.threshold ?? row.thresholdQty ?? 10;
+        const isLow = v <= threshold;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className={`font-bold ${isLow ? 'text-red-500' : 'text-slate-600'}`}>
+              {v} {unitLabel}
+            </span>
+            {isLow && (
+              <span className="text-[9px] font-black uppercase tracking-widest text-red-400">Low Stock</span>
+            )}
+          </div>
+        );
+      }
     }
 
   ];
@@ -216,7 +228,8 @@ const ProductList = () => {
           initialValues={{
             ...editingItem,
             description: editingItem?.description ?? "",
-            stock: editingItem?.stock ?? editingItem?.availableQty ?? 0
+            stock: editingItem?.stock ?? editingItem?.availableQty ?? 0,
+            threshold: editingItem?.threshold ?? editingItem?.thresholdQty ?? 10
           }}
 
           onCancel={() => {
@@ -237,8 +250,9 @@ const ProductList = () => {
                 category:    catObj?.name    || v.parentCategoryId,
                 subcategory: subCatObj?.name || v.subCategoryId,
                 price:       Number(v.price),
-                unit:        v.unit,
+                unit:        `${v.unitValue} ${v.unitType}`,
                 stocks:      Number(v.stock),
+                threshold:   v.threshold != null ? Number(v.threshold) : 10,
                 imageUrl:    Array.isArray(v.image) ? (v.image[0] || '') : (v.image || '')
               };
 

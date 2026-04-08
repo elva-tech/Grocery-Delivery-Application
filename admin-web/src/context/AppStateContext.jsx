@@ -24,6 +24,8 @@ const normaliseProduct = p => ({
   images:           p.imageUrl ? [p.imageUrl] : [],
   stock:            p.availableQty ?? 0,
   availableQty:     p.availableQty ?? 0,
+  threshold:        p.thresholdQty ?? 10,
+  thresholdQty:     p.thresholdQty ?? 10,
   status:           'Active',
   category:         p.category,
   subcategory:      p.subcategory,

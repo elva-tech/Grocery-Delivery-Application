@@ -6,7 +6,7 @@ const Inventory = require("../models/Inventory.model");
 
 const addProduct = async (req, res) => {
   try {
-    const { name, category, subcategory, description, price, unit, stocks, stock, imageUrl } = req.body;
+    const { name, category, subcategory, description, price, unit, stocks, stock, imageUrl, threshold } = req.body;
 
     if (req.user.role !== "ADMIN") {
       return res.status(403).json({ message: "Access denied. Admin only." });
@@ -55,7 +55,7 @@ const addProduct = async (req, res) => {
       tenantId,
       productId: product._id,
       availableQty: finalStocks,
-      thresholdQty: 10
+      thresholdQty: threshold != null ? Number(threshold) : 10
     });
 
     return res.status(201).json({
@@ -119,6 +119,8 @@ const updateProductFromAdmin = async (req, res) => {
 
       if (inventory) {
         inventory.availableQty = finalStocks;
+        const { threshold } = req.body;
+        if (threshold != null) inventory.thresholdQty = Number(threshold);
         await inventory.save();
       }
 

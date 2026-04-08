@@ -145,6 +145,35 @@ getInventory: async () => {
     throw error.response?.data || error;
   }
 },
+/* -------- UNIT APIs -------- */
+
+getUnits: async () => {
+  try {
+    const res = await api.get("/api/units");
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
+createUnit: async (name) => {
+  try {
+    const res = await api.post("/api/units", { name });
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
+deleteUnit: async (id) => {
+  try {
+    const res = await api.delete(`/api/units/${id}`);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
 /* -------- BANNER APIs -------- */
 
 getBanners: async () => {
