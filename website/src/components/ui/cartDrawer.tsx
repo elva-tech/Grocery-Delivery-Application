@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../../store/store';
 import { addToCart, removeFromCart } from '../../store/slices/cartSlice';
@@ -6,11 +6,12 @@ import { getCartCalculation } from '../../api/ordersApi';
 import { X, ShoppingBasket, Trash2, Zap, Gift, Bike } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
+const CartDrawer = ({ isOpen, onClose, onProceed, storeStatus }: any) => {
   const { items } = useSelector((state: RootState) => state.cart);
   const dispatch = useDispatch();
   const [bill, setBill] = useState<any>(null);
   const [wasFree, setWasFree] = useState(false);
+  const storeClosed = Boolean(storeStatus && !storeStatus.loading && !storeStatus.isOpen);
 
   useEffect(() => {
     const updateCart = async () => {
@@ -92,6 +93,12 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
 
         {items.length > 0 && (
           <div className="bg-white p-8 border-t border-slate-100 shadow-[0_-20px_40px_rgba(0,0,0,0.02)]">
+            {storeClosed && (
+              <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-red-700">
+                <p className="text-[10px] font-black uppercase tracking-[0.25em]">Store closed</p>
+                <p className="text-xs font-semibold mt-1">Checkout is disabled until the store opens again.</p>
+              </div>
+            )}
             <div className="flex justify-between items-center mb-6">
               <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">To Pay</p>
@@ -99,8 +106,8 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
               </div>
               {bill?.isFreeDelivery && <span className="bg-green-100 text-green-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">Saved ₹40</span>}
             </div>
-            <button onClick={onProceed} className="w-full bg-[#1e293b] text-white py-5 rounded-[2.5rem] font-black text-lg flex items-center justify-center gap-3 hover:bg-[#4b6f9e] transition-all shadow-xl active:scale-95">
-              Proceed <Zap size={20} fill="currentColor" />
+            <button onClick={onProceed} disabled={storeClosed} className={`w-full text-white py-5 rounded-[2.5rem] font-black text-lg flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 disabled:cursor-not-allowed disabled:shadow-none ${storeClosed ? 'bg-slate-300' : 'bg-[#1e293b] hover:bg-[#4b6f9e]'}`}>
+              {storeClosed ? 'Store Closed' : <><span>Proceed</span> <Zap size={20} fill="currentColor" /></>}
             </button>
           </div>
         )}

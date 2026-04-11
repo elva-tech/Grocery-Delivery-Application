@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2 } from 'lucide-react';
@@ -8,14 +8,17 @@ import { useCalculateCartMutation } from '../api/apiSlice';
 import { placeOrderApi, validateCouponApi } from '../api/ordersApi';
 import { loadRazorpay } from '../utils/loadRazorpay';
 import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
+import { fetchStoreStatus } from '../api/storeApi';
 
-const Checkout = ({ address }: any) => {
+const Checkout = ({ address, storeStatus }: { address: any; storeStatus: { isOpen: boolean; loading?: boolean; reason?: string | null; nextChange?: string | null } }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { items } = useSelector((state: RootState) => state.cart);
   const { user } = useSelector((state: RootState) => state.auth);
   
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCheckingStore, setIsCheckingStore] = useState(false);
+  const [storeClosedMessage, setStoreClosedMessage] = useState('');
   const [bill, setBill] = useState({
     subtotal: 0,
     deliveryCharge: 0,
@@ -33,6 +36,7 @@ const Checkout = ({ address }: any) => {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   const [getCalculation] = useCalculateCartMutation();
+  const storeClosed = Boolean(storeStatus && !storeStatus.loading && !storeStatus.isOpen);
 
   useEffect(() => {
     const fetchBill = async () => {
@@ -73,8 +77,21 @@ const finalTotal = bill.grandTotal - couponDiscount;
 
 const handlePlaceOrder = async () => {
   if (items.length === 0) return;
-  setIsProcessing(true);
+  if (storeClosed) {
+    setStoreClosedMessage('Store is currently closed. Please try again when it opens.');
+    return;
+  }
+
+  setStoreClosedMessage('');
+  setIsCheckingStore(true);
   try {
+    const liveStoreStatus = await fetchStoreStatus();
+    if (!liveStoreStatus.isOpen) {
+      setStoreClosedMessage('Store is currently closed. Please try again when it opens.');
+      return;
+    }
+
+    setIsProcessing(true);
     const order = await placeOrderApi({
       items: items.map(item => ({ productId: item.id, qty: item.quantity })),
       paymentMode: 'ONLINE',
@@ -156,6 +173,8 @@ const handlePlaceOrder = async () => {
       alert(error?.response?.data?.message || 'Failed to place order. Please try again.');
       setIsProcessing(false);
     }
+  } finally {
+    setIsCheckingStore(false);
   }
 };
 
@@ -166,6 +185,15 @@ const handlePlaceOrder = async () => {
           <ArrowLeft size={18} />
           <span className="text-[10px] font-black uppercase tracking-widest">Back</span>
         </button>
+
+        {(storeClosed || storeClosedMessage) && (
+          <div className="mb-8 rounded-[2rem] border border-red-100 bg-red-50 p-5 text-red-700">
+            <p className="text-[10px] font-black uppercase tracking-[0.25em]">Store closed</p>
+            <p className="text-sm font-semibold mt-1">
+              {storeClosedMessage || 'Checkout is disabled until the store opens again.'}
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2 space-y-8">
@@ -287,10 +315,10 @@ const handlePlaceOrder = async () => {
 
               <button 
                 onClick={handlePlaceOrder} 
-                disabled={isProcessing || items.length === 0} 
+                disabled={isProcessing || isCheckingStore || items.length === 0 || storeClosed} 
                 className="w-full bg-[#1e293b] hover:bg-[#4b6f9e] text-white h-16 rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:cursor-not-allowed"
               >
-                {isProcessing ? <Loader2 className="animate-spin" size={20} /> : "Confirm Order"}
+                {isProcessing || isCheckingStore ? <Loader2 className="animate-spin" size={20} /> : storeClosed ? 'Store Closed' : 'Confirm Order'}
               </button>
               
               <div className="mt-6 flex items-center justify-center gap-2 text-[#94a3b8]">

@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   MapPin, Plus, ArrowLeft, Loader2, CheckCircle2, 
-  Gift, User, Users, X, Phone, UserCircle, MessageSquare 
+  Gift, User, Users, X, Phone, UserCircle 
 } from 'lucide-react';
 import { getAddresses } from '../api/addresses';
 import AddressModal from '../components/layout/AddressModal';
 
-const Addresses = ({ items, onSelect }: any) => {
+const Addresses = ({ items, onSelect, storeStatus }: { items: any[]; onSelect: (addr: any) => void; storeStatus: { isOpen: boolean; loading?: boolean; reason?: string | null; nextChange?: string | null } }) => {
   const navigate = useNavigate();
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -37,6 +37,8 @@ const Addresses = ({ items, onSelect }: any) => {
     }, 0);
   }, [items]);
 
+  const storeClosed = Boolean(storeStatus && !storeStatus.loading && !storeStatus.isOpen);
+
   const fetchAddresses = async () => {
     setLoading(true);
     const data = await getAddresses();
@@ -50,6 +52,11 @@ const Addresses = ({ items, onSelect }: any) => {
   }, [items]);
 
   const handleFinalConfirm = () => {
+    if (storeClosed) {
+      alert('Store is currently closed. Please try again later.');
+      return;
+    }
+
     if (orderMode === 'self') {
       const selected = addresses.find(a => a.id === selectedId);
       if (!selected) return;
@@ -79,6 +86,13 @@ const Addresses = ({ items, onSelect }: any) => {
         <h1 className="text-4xl font-black italic tracking-tighter uppercase text-slate-900">Delivery</h1>
         <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Select your delivery point</p>
       </div>
+
+      {storeClosed && (
+        <div className="mb-8 rounded-[2rem] border border-red-100 bg-red-50 p-5 text-red-700">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em]">Store closed</p>
+          <p className="text-sm font-semibold mt-1">You can choose an address, but checkout is temporarily disabled until the store opens.</p>
+        </div>
+      )}
 
       {/* MODE TOGGLE */}
       <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
@@ -156,15 +170,11 @@ const Addresses = ({ items, onSelect }: any) => {
             <span className="text-2xl font-black text-slate-900 italic">₹{totalAmount}</span>
           </div>
           <button 
-            disabled={(orderMode === 'self' && !selectedId) || (orderMode === 'others' && !othersConfirmed)}
+            disabled={storeClosed || (orderMode === 'self' && !selectedId) || (orderMode === 'others' && !othersConfirmed)}
             onClick={handleFinalConfirm}
-            className={`flex-1 py-5 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${
-              (orderMode === 'self' && selectedId) || (orderMode === 'others' && othersConfirmed)
-              ? 'bg-[#1e293b] text-white shadow-2xl' 
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-            }`}
+            className={`flex-1 py-5 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${storeClosed ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : (orderMode === 'self' && selectedId) || (orderMode === 'others' && othersConfirmed) ? 'bg-[#1e293b] text-white shadow-2xl' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
           >
-            Continue to Checkout
+            {storeClosed ? 'Store Closed' : 'Continue to Checkout'}
           </button>
         </div>
       </div>

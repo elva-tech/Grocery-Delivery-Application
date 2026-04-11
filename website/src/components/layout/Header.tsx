@@ -10,12 +10,18 @@ import { APP_CONFIG } from '../../api/mockdata';
 
 interface HeaderProps {
   searchValue: string;
+  storeStatus: {
+    isOpen: boolean;
+    loading: boolean;
+    reason: string | null;
+    nextChange: string | null;
+  };
   onSearchChange: (val: string) => void;
   onCartClick: () => void;
   onLoginClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClick, onLoginClick }) => {
+const Header: React.FC<HeaderProps> = ({ searchValue, storeStatus, onSearchChange, onCartClick, onLoginClick }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { totalAmount } = useSelector((state: RootState) => state.cart);
@@ -133,6 +139,11 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
             <span className="hidden sm:block text-[8px] font-black text-[#4b6f9e] tracking-[0.4em] uppercase opacity-50 group-hover:opacity-100 transition-opacity">Pure Dairy Culture</span>
           </div>
 
+          <div className={`hidden lg:flex items-center gap-2 px-3 py-2 rounded-full border text-[10px] font-black uppercase tracking-[0.25em] shrink-0 ${storeStatus.loading ? 'bg-slate-50 text-slate-500 border-slate-100' : storeStatus.isOpen ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
+            <span className={`w-2 h-2 rounded-full ${storeStatus.loading ? 'bg-slate-400' : storeStatus.isOpen ? 'bg-emerald-500' : 'bg-red-500'}`} />
+            {storeStatus.loading ? 'Checking Store' : storeStatus.isOpen ? 'Store Open' : 'Store Closed'}
+          </div>
+
           {/* LOCATION (Hidden on very small screens to save space) */}
           <div onClick={() => setIsAddrModalOpen(true)} className="hidden md:flex items-center gap-3 py-2 px-3 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer border border-transparent hover:border-slate-100 shrink-0">
             <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-[#4b6f9e]">
@@ -192,7 +203,7 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
             {/* FIXED CART BUTTON HEIGHT */}
             <button 
               onClick={onCartClick} 
-              className="bg-[#1e293b] text-white h-10 sm:h-12 px-3 sm:px-5 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-4 hover:bg-[#4b6f9e] transition-all shadow-xl shadow-slate-200 active:scale-95"
+              className={`text-white h-10 sm:h-12 px-3 sm:px-5 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-4 transition-all shadow-xl shadow-slate-200 active:scale-95 ${storeStatus.loading ? 'bg-slate-500 hover:bg-slate-600' : storeStatus.isOpen ? 'bg-[#1e293b] hover:bg-[#4b6f9e]' : 'bg-red-500 hover:bg-red-600'}`}
             >
                 <div className="flex flex-col items-start leading-tight border-r border-white/10 pr-2 sm:pr-4">
                     <span className="hidden sm:block text-[8px] font-black uppercase tracking-widest opacity-50">Basket</span>

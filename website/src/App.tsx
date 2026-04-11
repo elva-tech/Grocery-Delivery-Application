@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSelector } from 'react-redux';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
 import PromoBanners from './components/home/PromoBanners';
@@ -23,6 +23,14 @@ import confetti from 'canvas-confetti';
 import Footer from './components/layout/Footer';
 import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
+import { fetchStoreStatus, type StoreStatusResponse } from './api/storeApi';
+
+type StoreStatusState = {
+  isOpen: boolean;
+  loading: boolean;
+  reason: string | null;
+  nextChange: string | null;
+};
 
 const App = () => {
   const navigate = useNavigate();
@@ -46,6 +54,56 @@ const App = () => {
   const { items } = useSelector((state: RootState) => state.cart);
   const { isAuthenticated } = useSelector((state: RootState) => state.auth); 
   const timerRef = useRef<any>(null);
+  const [storeStatus, setStoreStatus] = useState<StoreStatusState>({
+    isOpen: true,
+    loading: true,
+    reason: null,
+    nextChange: null,
+  });
+
+  useEffect(() => {
+    let isActive = true;
+
+    const syncStoreStatus = async () => {
+      try {
+        const status: StoreStatusResponse = await fetchStoreStatus();
+        if (!isActive) return;
+
+        setStoreStatus({
+          isOpen: Boolean(status.isOpen),
+          loading: false,
+          reason: status.reason ?? null,
+          nextChange: status.nextChange ?? null,
+        });
+      } catch (error) {
+        if (!isActive) return;
+        setStoreStatus(prev => ({
+          ...prev,
+          loading: false,
+        }));
+      }
+    };
+
+    syncStoreStatus();
+
+    const pollId = window.setInterval(syncStoreStatus, 15000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncStoreStatus();
+      }
+    };
+
+    window.addEventListener('focus', syncStoreStatus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(pollId);
+      window.removeEventListener('focus', syncStoreStatus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
 
   // RESET LOGIC: Clears filters when switching between Home and Browse
   useEffect(() => {
@@ -128,6 +186,11 @@ const App = () => {
   const isCheckoutFlow = ['/checkout', '/addresses', '/success'].includes(location.pathname);
 
   const handleProceed = () => {
+    if (!storeStatus.loading && !storeStatus.isOpen) {
+      alert('Store is currently closed. Please try again when it opens.');
+      return;
+    }
+
     setIsCartOpen(false);
     if (!isAuthenticated) {
       setIsLoginOpen(true);
@@ -150,6 +213,7 @@ const App = () => {
     <div className="flex flex-col min-h-screen bg-[#f8fafc] text-[#1e293b] font-sans">
       <Header
         searchValue={searchQuery}
+        storeStatus={storeStatus}
         onSearchChange={(val) => {
           setSearchQuery(val);
           if (val && location.pathname !== '/browse') navigate('/browse');
@@ -157,6 +221,24 @@ const App = () => {
         onCartClick={() => setIsCartOpen(true)}
         onLoginClick={() => setIsLoginOpen(true)}
       />
+
+      {!storeStatus.loading && !storeStatus.isOpen && (
+        <div className="w-full border-b border-red-100 bg-red-50/90 text-red-700">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em]">Store closed</p>
+              <p className="text-xs font-semibold">
+                Online ordering is temporarily disabled until the store opens again.
+              </p>
+            </div>
+            {storeStatus.nextChange && (
+              <span className="text-[10px] font-black uppercase tracking-[0.25em] bg-white/80 px-3 py-1.5 rounded-full border border-red-100">
+                Next change: {new Date(storeStatus.nextChange).toLocaleString()}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex-grow flex max-w-7xl mx-auto w-full min-h-[calc(100vh-80px)]">
         {isBrowseMode && (
@@ -273,8 +355,8 @@ const App = () => {
             } />
 
             <Route path="/product/:productId" element={<ProductDetail />} />
-            <Route path="/addresses" element={<Addresses items={items} onSelect={(addr: any) => setSelectedAddress(addr)} />} />
-            <Route path="/checkout" element={<Checkout address={selectedAddress} />} />
+            <Route path="/addresses" element={<Addresses items={items} storeStatus={storeStatus} onSelect={(addr: any) => setSelectedAddress(addr)} />} />
+            <Route path="/checkout" element={<Checkout address={selectedAddress} storeStatus={storeStatus} />} />
             <Route path="/success" element={<OrderSuccess />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/about" element={<LegalPage />} />
@@ -294,6 +376,7 @@ const App = () => {
         isOpen={isCartOpen}
          onClose={() => setIsCartOpen(false)}
         onProceed={handleProceed}
+        storeStatus={storeStatus}
       />
 
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
