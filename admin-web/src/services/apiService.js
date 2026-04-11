@@ -237,5 +237,22 @@ deleteBanner: async (id) => {
     return res.data;
   },
 
+  /* -------- STORE APIs -------- */
+
+  getStoreStatus: async () => {
+    const res = await api.get("/api/store/status");
+    return res.data;
+  },
+
+  updateStoreSchedule: async (payload) => {
+    const res = await api.patch("/api/store/schedule", payload);
+    return res.data;
+  },
+
+  toggleStoreStatus: async (payload) => {
+    const res = await api.patch("/api/store/status", payload);
+    return res.data;
+  },
+
 };
 

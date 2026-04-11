@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
 import dashboardService from '../../services/dashboardApi';
+import { apiService } from '../../services/apiService';
 
 const DashboardHome = () => {
   const navigate = useNavigate();
@@ -42,6 +43,9 @@ const DashboardHome = () => {
   const [analyticsFilter, setAnalyticsFilter] = useState('30');
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   
+  // Store status state
+  const [storeStatus, setStoreStatus] = useState({ isOpen: false, loading: true });
+  
   const [lastUpdated, setLastUpdated] = useState(
     new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
   );
@@ -56,17 +60,25 @@ const DashboardHome = () => {
       
       try {
         // Fetch all data in parallel
-        const [activeOrdersRes, pendingOrdersRes, revenueRes, productsRes] = await Promise.all([
+        const [activeOrdersRes, pendingOrdersRes, revenueRes, productsRes, storeStatusRes] = await Promise.all([
           dashboardService.getActiveOrders(),
           dashboardService.getPendingOrders(),
           dashboardService.getRevenue(parseInt(timeFilter)),
           dashboardService.getProducts(),
+          apiService.getStoreStatus().catch(err => ({ isOpen: false })), // Fallback if store API fails
         ]);
 
         console.log('Active Orders Response:', activeOrdersRes);
         console.log('Pending Orders Response:', pendingOrdersRes);
         console.log('Revenue Response:', revenueRes);
         console.log('Products Response:', productsRes);
+        console.log('Store Status Response:', storeStatusRes);
+
+        // Process store status
+        setStoreStatus({
+          isOpen: storeStatusRes.isOpen || false,
+          loading: false,
+        });
 
         // Process metrics
         const activeCount = activeOrdersRes.activeOrders || 0;
@@ -238,6 +250,14 @@ const DashboardHome = () => {
         </div>
         <div onClick={() => navigate('/orders')} className="cursor-pointer">
           <StatCard title="Active Orders" value={dashboardMetrics.activeOrders} icon={<Truck />} color="purple" />
+        </div>
+        <div className="cursor-pointer">
+          <StatCard 
+            title="Store Status" 
+            value={storeStatus.loading ? "Loading..." : (storeStatus.isOpen ? "Open" : "Closed")} 
+            icon={storeStatus.loading ? <Loader className="animate-spin" /> : (storeStatus.isOpen ? <CheckCircle2 /> : <XCircle />)} 
+            color={storeStatus.loading ? "gray" : (storeStatus.isOpen ? "emerald" : "red")} 
+          />
         </div>
       </div>
 
