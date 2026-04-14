@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
 import { store } from '@/store/store';
 
@@ -6,38 +5,20 @@ const BASE = API_BASE_URL.DEVELOPMENT;
 
 const getAuthToken = (): string | null => (store.getState() as any).auth?.token ?? null;
 
-const ORDERS_KEY = '@enandi_orders_v1';
-const ORDER_COUNTER_KEY = '@enandi_order_counter';
-const LAST_ORDER_KEY = '@last_order_id';
-
-const generateBackendOrderId = async (): Promise<string> => {
-  try {
-    const counterStr = await AsyncStorage.getItem(ORDER_COUNTER_KEY);
-    const currentCounter = counterStr ? parseInt(counterStr, 10) : 1000;
-    const newCounter = currentCounter + 1;
-    await AsyncStorage.setItem(ORDER_COUNTER_KEY, newCounter.toString());
-    return `ORD${newCounter.toString().padStart(6, '0')}`;
-  } catch (error) {
-    return `ORD${Date.now().toString().slice(-6)}`;
-  }
-};
-
 /* ----------- CANCEL ORDER (real backend) ----------- */
 export const cancelOrderApi = async (orderId: string) => {
   const token = getAuthToken();
-  if (!token) return { success: false };
-  try {
-    const res = await fetch(`${BASE}/api/orders/${orderId}/cancel`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'x-tenant-id': TENANT_ID,
-      },
-    });
-    return { success: res.ok };
-  } catch {
-    return { success: false };
-  }
+  if (!token) throw new Error('Not authenticated');
+  const res = await fetch(`${BASE}/api/orders/${orderId}/cancel`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-tenant-id': TENANT_ID,
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.message || 'Could not cancel order');
+  return data;
 };
 
 /* ----------- GET USER ORDERS ----------- */
@@ -67,7 +48,7 @@ export const getUserOrders = async (_userId?: string) => {
     }));
   } catch (error) {
     console.error('Order fetch error:', error);
-    return [];
+    throw error;
   }
 };
 
@@ -98,25 +79,6 @@ export const getOrderById = async (orderId: string) => {
   } catch (error) {
     return null;
   }
-};
-
-/* ----------- CART CALCULATION (local) ----------- */
-export const getCartCalculation = async (items: any[]) => {
-  const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const FREE_DELIVERY_THRESHOLD = 500;
-  const SHIPPING_CHARGES = 40;
-  const isFreeDelivery = subtotal >= FREE_DELIVERY_THRESHOLD;
-  const deliveryCharge = isFreeDelivery ? 0 : SHIPPING_CHARGES;
-
-  return {
-    subtotal,
-    isFreeDelivery,
-    amountToFree: isFreeDelivery ? 0 : FREE_DELIVERY_THRESHOLD - subtotal,
-    progress: Math.min(subtotal / FREE_DELIVERY_THRESHOLD, 1),
-    deliveryCharge,
-    grandTotal: subtotal + deliveryCharge,
-    saved: isFreeDelivery ? SHIPPING_CHARGES : 0,
-  };
 };
 
 // ─── REAL BACKEND API FUNCTIONS ──────────────────────────────────────────────
@@ -168,7 +130,7 @@ export const createMobilePaymentOrder = async (orderId: string, token: string) =
   const res = await fetch(`${BASE}/api/payments/create`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ orderId }),
+    body: JSON.stringify({ order_id: orderId }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || 'Payment initiation failed');
@@ -211,4 +173,33 @@ export const rateOrderApi = async (
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || 'Failed to submit rating');
   return data; // { success: true, message }
+};
+
+/** Submit an issue/return request for a delivered order. Uses POST /api/returns/create. */
+export const reportOrderIssueApi = async (
+  orderId: string,
+  reason: string,
+  customerComment: string,
+  token: string,
+) => {
+  const res = await fetch(`${BASE}/api/returns/create`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ orderId, reason, customerComment }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || 'Failed to submit report');
+  return data; // { success: true, data: ReturnRequest }
+};
+
+/** Update the authenticated user's display name. */
+export const updateProfileApi = async (name: string, token: string) => {
+  const res = await fetch(`${BASE}/api/auth/profile`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || 'Failed to update profile');
+  return data; // { success: true, user: { id, name, phoneNumber, ... } }
 };

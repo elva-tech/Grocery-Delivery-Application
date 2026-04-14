@@ -3,7 +3,7 @@
  * @description Order history management with Admin Feedback Loop integrated.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, Modal, ScrollView, TextInput, Alert
@@ -12,12 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { showToast } from '@/utils/toast';
 import { useRouter } from 'expo-router';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { addToCart } from '@/store/slices/cartSlice';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getUserOrders, cancelOrderApi, rateOrderApi } from '@/api/ordersApi';
+import { getUserOrders, cancelOrderApi, rateOrderApi, reportOrderIssueApi } from '@/api/ordersApi';
+import { RootState } from '@/store/store';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 // INTEGRATED: Import settings hook
@@ -45,6 +46,7 @@ const REPORT_REASONS = [
 export default function OrdersScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
+  const { token } = useSelector((state: RootState) => state.auth);
   
   // INTEGRATED: Fetch remote settings
   const { data: settings } = useGetAppSettingsQuery();
@@ -83,7 +85,7 @@ export default function OrdersScreen() {
 
       // Auto-prompt rating for first unrated delivered order
       const unrated = normalizedData.find(
-        (o: any) => o.orderStatus === 'DELIVERED' && !o.rating?.value
+        (o: any) => o.status === 'DELIVERED' && !o.rating?.value
       );
       if (unrated) {
         const skippedKey = `@rating_skipped_${unrated._id ?? unrated.id}`;
@@ -163,7 +165,21 @@ export default function OrdersScreen() {
     });
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      if (!token) throw new Error('Not authenticated');
+      await reportOrderIssueApi(
+        selectedOrder._id ?? selectedOrder.id,
+        selectedReason,
+        issueComment || 'No comment',
+        token,
+      );
+      // Optimistic local update
+      setOrders(prev =>
+        prev.map((o: any) =>
+          o.id === selectedOrder.id || o._id === selectedOrder._id
+            ? { ...o, status: 'ISSUE_REPORTED', issueDetails: { reason: selectedReason, comment: issueComment } }
+            : o
+        )
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('success', 'Report Sent', 'Admin will review.');
       
@@ -211,6 +227,19 @@ export default function OrdersScreen() {
     fetchOrders(true);
   }, [fetchOrders]);
 
+  // Group orders: Active → Delivered → Past
+  const groupedList = useMemo(() => {
+    const ACTIVE = ['PLACED', 'CONFIRMED', 'OUT_FOR_DELIVERY'];
+    const active = orders.filter(o => ACTIVE.includes(o.status));
+    const delivered = orders.filter(o => o.status === 'DELIVERED');
+    const past = orders.filter(o => !ACTIVE.includes(o.status) && o.status !== 'DELIVERED');
+    const result: any[] = [];
+    if (active.length) result.push({ _sectionHeader: true, label: '🚚  Active Orders', count: active.length }, ...active);
+    if (delivered.length) result.push({ _sectionHeader: true, label: '✅  Delivered', count: delivered.length }, ...delivered);
+    if (past.length) result.push({ _sectionHeader: true, label: '📋  Past Orders', count: past.length }, ...past);
+    return result;
+  }, [orders]);
+
   const handleReorder = (items: any[]) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     items.forEach((p: any) => dispatch(addToCart(p)));
@@ -219,6 +248,15 @@ export default function OrdersScreen() {
   };
 
   const renderItem = ({ item }: { item: any }) => {
+    // Section header
+    if (item._sectionHeader) {
+      return (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeaderText}>{item.label}</Text>
+          <View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{item.count}</Text></View>
+        </View>
+      );
+    }
     const theme = STATUS_THEME[item.status] || STATUS_THEME.PLACED;
     return (
       <View style={styles.card}>
@@ -247,7 +285,7 @@ export default function OrdersScreen() {
           </TouchableOpacity>
         </View>
         {/* Rate button for unrated delivered orders */}
-        {item.orderStatus === 'DELIVERED' && !item.rating?.value && (
+        {item.status === 'DELIVERED' && !item.rating?.value && (
           <TouchableOpacity
             style={styles.rateBtn}
             onPress={() => { setStarValue(0); setRatingComment(''); setRatingOrder(item); }}
@@ -274,11 +312,20 @@ export default function OrdersScreen() {
       </View>
 
       <FlatList
-        data={orders}
+        data={groupedList}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.list}
+        keyExtractor={(item, idx) => item._sectionHeader ? `header-${idx}` : item.id}
+        contentContainerStyle={[styles.list, groupedList.length === 0 && { flexGrow: 1 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4b6f9e" />}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="receipt-outline" size={56} color="#cbd5e1" />
+              <Text style={styles.emptyTitle}>No orders yet</Text>
+              <Text style={styles.emptySubtitle}>Your orders will appear here after you place one.</Text>
+            </View>
+          ) : null
+        }
       />
 
       {/* Main Order Details Modal */}
@@ -292,6 +339,23 @@ export default function OrdersScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {/* Delivery info row */}
+              {(selectedOrder?.address || selectedOrder?.deliverySlot) && (
+                <View style={styles.deliveryInfoBox}>
+                  {selectedOrder?.address && (
+                    <View style={styles.deliveryInfoRow}>
+                      <Ionicons name="location-outline" size={15} color="#4b6f9e" />
+                      <Text style={styles.deliveryInfoText} numberOfLines={2}>{selectedOrder.address}</Text>
+                    </View>
+                  )}
+                  {selectedOrder?.deliverySlot && (
+                    <View style={styles.deliveryInfoRow}>
+                      <Ionicons name="time-outline" size={15} color="#4b6f9e" />
+                      <Text style={styles.deliveryInfoText}>{selectedOrder.deliverySlot}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
               {selectedOrder?.items?.map((product: any, idx: number) => (
                 <View key={idx} style={styles.productRow}>
                   <Image source={{ uri: Array.isArray(product.image) ? product.image[0] : product.image }} style={styles.productImage} />
@@ -591,4 +655,14 @@ const styles = StyleSheet.create({
   },
   ratingStars: { fontSize: 16, color: '#f59e0b', letterSpacing: 1 },
   ratingCommentSmall: { fontSize: 12, color: '#78716c', flex: 1, fontStyle: 'italic' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, paddingVertical: 10, marginTop: 8 },
+  sectionHeaderText: { fontSize: 13, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionBadge: { backgroundColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  sectionBadgeText: { fontSize: 11, fontWeight: '700', color: '#64748b' },
+  deliveryInfoBox: { backgroundColor: '#f0f7ff', borderRadius: 12, padding: 12, marginBottom: 16, gap: 8 },
+  deliveryInfoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  deliveryInfoText: { fontSize: 13, color: '#334155', flex: 1, lineHeight: 18 },
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#64748b' },
+  emptySubtitle: { fontSize: 13, color: '#94a3b8', textAlign: 'center', paddingHorizontal: 32 },
 });

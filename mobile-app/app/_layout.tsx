@@ -12,6 +12,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setCredentials } from '@/store/slices/authSlice';
+import { hydrateCart } from '@/store/slices/cartSlice';
+import { CART_STORAGE_KEY } from '@/store/store';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -31,14 +33,20 @@ function RootLayoutNav() {
     'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
   });
 
-  // Restore auth from AsyncStorage on app start
+  // Restore auth + cart from AsyncStorage on app start
   useEffect(() => {
     (async () => {
       try {
-        const token = await AsyncStorage.getItem('token');
-        const userStr = await AsyncStorage.getItem('user');
+        const [token, userStr, cartStr] = await Promise.all([
+          AsyncStorage.getItem('token'),
+          AsyncStorage.getItem('user'),
+          AsyncStorage.getItem(CART_STORAGE_KEY),
+        ]);
         if (token && userStr) {
           dispatch(setCredentials({ user: JSON.parse(userStr), token }));
+        }
+        if (cartStr) {
+          dispatch(hydrateCart(JSON.parse(cartStr)));
         }
       } catch (_) {
         // ignore

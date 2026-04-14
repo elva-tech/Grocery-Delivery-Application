@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Platform
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
 import { addToCart, removeFromCart } from '@/store/slices/cartSlice';
-import { getCartCalculation } from '@/api/mockData';
+import { getCartCalculation } from '@/api/cartApi';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';

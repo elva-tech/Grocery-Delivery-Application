@@ -14,8 +14,9 @@ import {
   createMobilePaymentOrder,
   verifyMobilePayment,
 } from '@/api/ordersApi';
-import { getCartCalculation } from '@/api/mockData';
-import { RAZORPAY_KEY_ID } from '@/src/config/constants';
+import { getCartCalculation } from '@/api/cartApi';
+import { getAddresses } from '@/api/addresses';
+import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
 
 export default function CheckoutScreen() {
   const { items, totalAmount } = useSelector((state: RootState) => state.cart);
@@ -24,6 +25,7 @@ export default function CheckoutScreen() {
   const router = useRouter();
 
   const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number }>({ grandTotal: totalAmount, deliveryFee: 0 });
+  const [selectedAddress, setSelectedAddress] = useState<any>(null);
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
   const [couponError, setCouponError] = useState('');
@@ -33,6 +35,7 @@ export default function CheckoutScreen() {
   useEffect(() => {
     if (items.length === 0) { router.replace('/(tabs)'); return; }
     getCartCalculation(items).then(setBill).catch(() => {});
+    getAddresses().then(list => { if (list.length > 0) setSelectedAddress(list[0]); }).catch(() => {});
   }, [items]);
 
   const couponDiscount = appliedCoupon?.discountAmount ?? 0;
@@ -66,7 +69,9 @@ export default function CheckoutScreen() {
         {
           items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
           paymentMode: 'ONLINE',
-          deliveryAddress: { line1: '123, Green Apartments, Bengaluru, 560001', lat: 0, lng: 0 },
+          deliveryAddress: selectedAddress
+            ? { line1: selectedAddress.full || selectedAddress.label, lat: 0, lng: 0 }
+            : { line1: 'Address not selected', lat: 0, lng: 0 },
           couponCode: appliedCoupon?.code ?? null,
         },
         token,
@@ -80,7 +85,7 @@ export default function CheckoutScreen() {
         currency: paymentData.currency || 'INR',
         key: RAZORPAY_KEY_ID,
         amount: String(paymentData.amount),
-        name: 'KMF Grocery',
+        name: APP_BRAND,
         order_id: paymentData.razorpay_order_id,
         prefill: {
           email: (user as any)?.email || '',
@@ -125,9 +130,16 @@ export default function CheckoutScreen() {
           <View style={styles.addressCard}>
             <Ionicons name="location-outline" size={20} color="#4b6f9e" />
             <Text style={styles.addressText}>
-              123, Green Apartments, Bengaluru, 560001
+              {selectedAddress
+                ? (selectedAddress.full || selectedAddress.label || 'Saved address')
+                : 'No address saved — add one in Addresses'}
             </Text>
           </View>
+          {!selectedAddress && (
+            <TouchableOpacity onPress={() => router.push('/(tabs)/addresses')}>
+              <Text style={{ color: '#4b6f9e', fontSize: 13, marginTop: 6, marginLeft: 4 }}>+ Add delivery address</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
