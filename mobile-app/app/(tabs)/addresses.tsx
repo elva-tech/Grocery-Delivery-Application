@@ -23,7 +23,7 @@ import {
   createMobilePaymentOrder,
   verifyMobilePayment,
 } from '@/api/ordersApi';
-import { getCartCalculation } from '@/api/mockData';
+import { getCartCalculation } from '@/api/cartApi';
 import { RAZORPAY_KEY_ID } from '@/src/config/constants';
 
 type OrderMode = 'self' | 'others';

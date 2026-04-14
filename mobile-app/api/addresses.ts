@@ -1,7 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
-let ADDRESS_DB: any[] = [];
-const savedKeys = new Set();
+const ADDRESSES_KEY = '@enandi_addresses';
 const COUNTRY_CODE = "+91"; // Backend controlled
 
 const makeKey = (address: any) =>
@@ -33,96 +33,28 @@ export const getAddressFromCoords = async (lat: number, lng: number, signal?: Ab
   }
 };
 
-export const getAddresses = async () => {
-  return new Promise<any[]>((resolve) => setTimeout(() => resolve([...ADDRESS_DB]), 100));
+export const getAddresses = async (): Promise<any[]> => {
+  try {
+    const json = await AsyncStorage.getItem(ADDRESSES_KEY);
+    return json ? JSON.parse(json) : [];
+  } catch {
+    return [];
+  }
 };
 
-// NEW: OTP Request API
-export const requestOtp = async (phone: string) => {
-  return new Promise((resolve) => {
-    // Backend logic: Prepend code for the SMS Gateway
-    console.log(`[SMS GATEWAY] Sending code to: ${COUNTRY_CODE}${phone}`);
-    setTimeout(() => {
-      resolve({ success: true, message: "OTP Sent Successfully" });
-    }, 800);
-  });
+export const addAddress = async (address: any): Promise<any> => {
+  const existing = await getAddresses();
+  const key = makeKey(address);
+  if (existing.some((a: any) => makeKey(a) === key)) {
+    throw Object.assign(new Error('This address is already saved.'), { code: 'DUPLICATE' });
+  }
+  const newAddress = {
+    ...address,
+    id: Date.now().toString(),
+    phone: `${COUNTRY_CODE} ${address.phone}`,
+    altPhone: address.altPhone ? `${COUNTRY_CODE} ${address.altPhone}` : '',
+  };
+  const updated = [...existing, newAddress];
+  await AsyncStorage.setItem(ADDRESSES_KEY, JSON.stringify(updated));
+  return newAddress;
 };
-
-export const addAddress = async (address: any) => {
-  return new Promise<any>((resolve, reject) => {
-    setTimeout(() => {
-      const key = makeKey(address);
-      if (savedKeys.has(key)) {
-        reject(Object.assign(new Error('This address is already saved.'), { code: 'DUPLICATE' }));
-        return;
-      }
-      
-      // BACKEND LOGIC: Prepend country code before saving to DB
-      const newAddress = { 
-        ...address, 
-        id: Date.now().toString(),
-        phone: `${COUNTRY_CODE} ${address.phone}`,
-        altPhone: address.altPhone ? `${COUNTRY_CODE} ${address.altPhone}` : ''
-      };
-      
-      savedKeys.add(key);
-      ADDRESS_DB.push(newAddress);
-      resolve(newAddress);
-    }, 100);
-  });
-};
-
-export const createOrder = async (orderPayload: any) => {
-  return new Promise<any>((resolve, reject) => {
-    setTimeout(() => {
-      if (!orderPayload.items || orderPayload.items.length === 0) {
-        reject(new Error("Cart is empty"));
-        return;
-      }
-
-      // BACKEND LOGIC: Format recipient phone for 'others'
-      if (orderPayload.orderType === 'others' && orderPayload.recipientDetails) {
-        const rawPhone = orderPayload.recipientDetails.recipientPhone;
-        orderPayload.recipientDetails.recipientPhone = `${COUNTRY_CODE} ${rawPhone}`;
-      }
-
-      console.log("FINAL API CALL DATA:", JSON.stringify(orderPayload, null, 2));
-
-      resolve({ 
-        success: true, 
-        orderId: `ORD-${Math.floor(Math.random() * 1000000)}`,
-        timestamp: new Date().toISOString()
-      });
-    }, 1500);
-  });
-};
-
-
-
-
-
-
-
-// ONCE BACKEND GOOGLE MAPS ENDPOINT AVAILABLE CHANGE/MODIFY LIKE THIS
-// import axios from 'axios';
-
-// // The function your UI is already calling
-// export const getAddressFromCoords = async (lat, lng) => {
-//   try {
-//     // 1. Call the new backend endpoint
-//     const response = await axios.get(`https://your-backend-api.com/maps/reverse-geocode`, {
-//       params: {
-//         latitude: lat,
-//         longitude: lng
-//       }
-//     });
-
-//     // 2. Return the formatted string the backend sends back
-//     // (Assuming backend returns: { address: "123 Street Name, City..." })
-//     return response.data.address; 
-    
-//   } catch (error) {
-//     console.error("Backend Geocoding Error:", error);
-//     return "Location not found";
-//   }
-// };
