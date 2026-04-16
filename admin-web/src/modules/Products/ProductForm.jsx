@@ -7,6 +7,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { X, Plus, ChevronDown } from 'lucide-react';
+import axios from 'axios';
 import { useAppState } from '../../context/AppStateContext';
 import { apiService } from '../../services/apiService';
 
@@ -41,6 +42,11 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
   const [addUnitError, setAddUnitError] = useState('');
 
   const [showErrors, setShowErrors] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
+  const [imagePreviews, setImagePreviews] = useState(
+    initialValues?.image || initialValues?.images || []
+  );
 
   useEffect(() => {
     apiService.getUnits()
@@ -190,7 +196,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
 
                     <div className="grid grid-cols-2 gap-2">
 
-                      {values.image.map((img, i) => (
+                      {imagePreviews.map((img, i) => (
 
                         <div
                           key={i}
@@ -204,14 +210,17 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
 
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
                               setFieldValue(
                                 'image',
                                 values.image.filter(
                                   (_, idx) => idx !== i
                                 )
-                              )
-                            }
+                              );
+                              setImagePreviews(
+                                imagePreviews.filter((_, idx) => idx !== i)
+                              );
+                            }}
                             className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
                           >
 
@@ -228,6 +237,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                         onClick={() =>
                           fileInputRef.current.click()
                         }
+                        disabled={isUploadingImage}
                         className="aspect-square border-2 border-dashed border-emerald-200 rounded-lg flex items-center justify-center bg-emerald-50/30 text-emerald-600"
                       >
 
@@ -240,20 +250,61 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                         ref={fileInputRef}
                         hidden
                         multiple
-                        onChange={(e) =>
-                          setFieldValue(
-                            'image',
-                            [
-                              ...values.image,
-                              ...Array.from(e.target.files).map(
-                                f => URL.createObjectURL(f)
-                              )
-                            ]
-                          )
-                        }
+                        onChange={async (e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (!files.length) return;
+
+                          setImageUploadError('');
+                          setIsUploadingImage(true);
+
+                          const localPreviews = files.map((file) => URL.createObjectURL(file));
+                          setImagePreviews((prev) => [...prev, ...localPreviews]);
+
+                          try {
+                            const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                            const token = localStorage.getItem('jwtToken');
+                            const uploadedUrls = await Promise.all(
+                              files.map(async (file) => {
+                                const formData = new FormData();
+                                formData.append('file', file);
+
+                                const response = await axios.post(`${baseURL}/api/upload`, formData, {
+                                  headers: {
+                                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                    'Content-Type': 'multipart/form-data',
+                                  },
+                                });
+
+                                return response?.data?.url;
+                              })
+                            );
+
+                            setFieldValue(
+                              'image',
+                              [...values.image, ...uploadedUrls.filter(Boolean)]
+                            );
+                          } catch (err) {
+                            localPreviews.forEach((url) => URL.revokeObjectURL(url));
+                            setImagePreviews((prev) =>
+                              prev.slice(0, prev.length - localPreviews.length)
+                            );
+                            setImageUploadError(
+                              err?.response?.data?.message || 'Image upload failed. Please try again.'
+                            );
+                          } finally {
+                            setIsUploadingImage(false);
+                            e.target.value = '';
+                          }
+                        }}
                       />
 
                     </div>
+                    {isUploadingImage && (
+                      <p className="text-[11px] text-emerald-600">Uploading image...</p>
+                    )}
+                    {imageUploadError && (
+                      <p className="text-[11px] text-red-500">{imageUploadError}</p>
+                    )}
 
                   </div>
 

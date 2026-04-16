@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Camera, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import axios from 'axios';
 import { reportOrderIssueApi } from '../api/ordersApi';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
+import { API_BASE_URL } from '../config';
 
 const REPORT_REASONS = ["Item damaged", "Wrong item received", "Quality issue", "Items missing", "Package tampered"];
 
@@ -10,9 +12,10 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
   
   const [selectedReason, setSelectedReason] = useState('');
   const [comment, setComment] = useState('');
-  const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [evidenceUrl, setEvidenceUrl] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -23,8 +26,8 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
       setStep(1);
       setSelectedReason('');
       setComment('');
-      setImage(null);
       setPreview(null);
+      setEvidenceUrl('');
       setError(null);
     }
     return () => {
@@ -35,34 +38,54 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
   // Safety: If feature is disabled via backend, do not render modal
   if (!isOpen || !settings?.allowReportIssue) return null;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         return setError("Image size must be less than 5MB");
       }
       setError(null);
-      setImage(file);
+      setEvidenceUrl('');
       const url = URL.createObjectURL(file);
       setPreview(url);
+
+      try {
+        setUploadingImage(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadRes = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        if (!uploadRes?.data?.url) {
+          throw new Error('Upload failed');
+        }
+
+        setEvidenceUrl(uploadRes.data.url);
+      } catch {
+        setEvidenceUrl('');
+        setError("Failed to upload image. Please try again.");
+      } finally {
+        setUploadingImage(false);
+      }
     }
   };
 
   const handleSubmit = async () => {
     if (!selectedReason) return setError("Please select a reason");
-    if (!image) return setError("Evidence photo is required");
+    if (!evidenceUrl) return setError("Evidence photo is required");
     
     setLoading(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('orderId', order.id);
-    formData.append('reason', selectedReason);
-    formData.append('comment', comment.trim() || "No comment");
-    formData.append('evidence', image);
-
     try {
-      await reportOrderIssueApi(formData);
+      await reportOrderIssueApi({
+        orderId: order.id,
+        reason: selectedReason,
+        comment: comment.trim() || "No comment",
+        evidenceUrl,
+      });
       onSuccess(); 
       setStep(2);
     } catch (err) {
@@ -142,11 +165,11 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
               </div>
 
               <button 
-                disabled={loading} 
+                disabled={loading || uploadingImage} 
                 onClick={handleSubmit} 
                 className="w-full bg-[#1e293b] text-white h-16 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4b6f9e] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200 disabled:opacity-50"
               >
-                {loading ? <Loader2 className="animate-spin" /> : "Submit Report"}
+                {loading || uploadingImage ? <Loader2 className="animate-spin" /> : "Submit Report"}
               </button>
             </div>
           </div>

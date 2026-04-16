@@ -1,4 +1,3 @@
-import { MOCK_ORDERS } from './mockdata';
 import axios from "axios";
 import { API_BASE_URL, TENANT_ID } from "../config";
 
@@ -200,38 +199,20 @@ export const placeOrderApi = async (payload: {
   return res.data; // { orderId, totalAmount, orderStatus, ... }
 };
 
-export const reportOrderIssueApi = async (formData: FormData) => {
-  const orderId = String(formData.get('orderId'));
-  const reason = formData.get('reason');
-  const comment = formData.get('comment');
-
-  const savedOrdersStr = localStorage.getItem(ORDERS_KEY);
-  let orders = savedOrdersStr ? JSON.parse(savedOrdersStr) : [];
-
-  const orderExistsLocally = orders.find((o: any) => o.id === orderId);
-
-  if (orderExistsLocally) {
-    orders = orders.map((o: any) =>
-      o.id === orderId
-        ? { ...o, status: 'ISSUE_REPORTED', issueDetails: { reason, comment } }
-        : o
-    );
-  } else {
-    const mockOrder = MOCK_ORDERS.find(o => o.id === orderId);
-    if (mockOrder) {
-      orders.push({
-        ...mockOrder,
-        status: 'ISSUE_REPORTED',
-        issueDetails: { reason, comment }
-      });
-    }
-  }
-
-  
-
-  localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  return { success: true };
+export const reportOrderIssueApi = async (payload: {
+  orderId: string;
+  reason: string;
+  comment: string;
+  evidenceUrl: string;
+}) => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Unauthorized');
+  const res = await axios.post(
+    `${API_URL}/report-issue`,
+    payload,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return res.data;
 };
 
 export const rateOrderApi = async (orderId: string, rating: number, comment: string) => {

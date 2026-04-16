@@ -7,13 +7,19 @@ const Order = require("../models/Order.model");
 exports.createReturnRequest = async (req, res) => {
   try {
 
-    const { orderId, reason, customerComment } = req.body;
+    const { orderId, reason, customerComment, comment, evidenceUrl } = req.body;
 
     // Validation
     if (!orderId || !reason) {
       return res.status(400).json({
         success: false,
         message: "orderId and reason are required"
+      });
+    }
+    if (!evidenceUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "evidenceUrl is required"
       });
     }
 
@@ -51,7 +57,9 @@ exports.createReturnRequest = async (req, res) => {
       orderId,
       userId: req.user.userId,
       reason,
-      customerComment,
+      // Accept both legacy and new frontend key; persist in existing schema field
+      customerComment: customerComment ?? comment,
+      evidenceImage: evidenceUrl,
       refundAmount
     });
 

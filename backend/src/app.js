@@ -47,6 +47,7 @@ const settingsRoutes = require("./routes/settings.routes");
 const couponRoutes     = require('./routes/coupon.routes');
 const analyticsRoutes  = require('./routes/analytics.routes');
 const unitRoutes       = require('./routes/unit.routes');
+const uploadRoutes     = require("./routes/upload.routes");
 
 
 // Public routes
@@ -55,6 +56,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/banners",  bannerRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/units",    unitRoutes);
+app.use("/api/upload",   uploadRoutes);
 // Protected routes
 app.use(authMiddleware);
 
