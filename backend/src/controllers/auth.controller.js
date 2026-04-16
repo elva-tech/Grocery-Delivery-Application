@@ -170,4 +170,29 @@ const verifyOtp = async (req, res) => {
   }
 };
 
-module.exports = { sendOtp, verifyOtp };
+module.exports = { sendOtp, verifyOtp, updateProfile };
+
+/* ===============================
+   UPDATE PROFILE (authenticated)
+================================ */
+async function updateProfile(req, res) {
+  try {
+    const { name } = req.body;
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ success: false, message: 'Name must be at least 2 characters' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { name: name.trim() },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    return res.status(200).json({
+      success: true,
+      user: { id: user._id, phoneNumber: user.phoneNumber, name: user.name, role: user.role, tenantId: user.tenantId },
+    });
+  } catch (error) {
+    console.error('updateProfile error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}

@@ -1,6 +1,6 @@
-﻿import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
+import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
 
-// â”€â”€ Cart Bill Calculation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Cart Bill Calculation ─────────────────────────────────────────────────────
 
 /** Fallback defaults used when the backend is unreachable */
 export const CART_CONFIG = {

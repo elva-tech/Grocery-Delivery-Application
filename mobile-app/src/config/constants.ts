@@ -15,6 +15,8 @@ export const API_BASE_URL = {
 
 export const TENANT_ID = 'demo-tenant';
 export const RAZORPAY_KEY_ID = 'rzp_test_SaHmJpDs42QvIp';
+export const APP_BRAND = 'Enandi';
+export const SUPPORT_PHONE = '+919876543210';
 
 // ============================================
 // ORDER STATUSES
