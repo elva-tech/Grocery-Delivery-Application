@@ -8,7 +8,7 @@
       "monthlyPrice": 0,
       "includedOrders": null,
       "pricePerExtraOrder": 0,
-      "pricePerOrder": 0,
+      "pricePerOrder": 10,
       "isDefault": true,
       "isActive": true
     },
