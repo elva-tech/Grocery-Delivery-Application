@@ -24,6 +24,9 @@ const ProductList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, name }
 
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successData, setSuccessData] = useState(null);
+
   const getImageUrl = (imgData) => {
     if (!imgData) return null;
     if (Array.isArray(imgData)) return imgData[0];
@@ -241,19 +244,19 @@ const ProductList = () => {
 
             try {
 
-              const catObj    = categories.find(c => c.id === v.parentCategoryId);
+              const catObj = categories.find(c => c.id === v.parentCategoryId);
               const subCatObj = categories.find(c => c.id === v.subCategoryId);
 
               const payload = {
-                name:        v.name,
+                name: v.name,
                 description: v.description || '',
-                category:    catObj?.name    || v.parentCategoryId,
+                category: catObj?.name || v.parentCategoryId,
                 subcategory: subCatObj?.name || v.subCategoryId,
-                price:       Number(v.price),
-                unit:        `${v.unitValue} ${v.unitType}`,
-                stocks:      Number(v.stock),
-                threshold:   v.threshold != null ? Number(v.threshold) : 10,
-                imageUrl:    Array.isArray(v.image) ? (v.image[0] || '') : (v.image || '')
+                price: Number(v.price),
+                unit: `${v.unitValue} ${v.unitType}`,
+                stocks: Number(v.stock),
+                threshold: v.threshold != null ? Number(v.threshold) : 10,
+                imageUrl: Array.isArray(v.image) ? (v.image[0] || '') : (v.image || '')
               };
 
               if (editingItem) {
@@ -270,7 +273,21 @@ const ProductList = () => {
 
                 await apiService.addProduct(payload);
                 await addProduct();
+                setSuccessData({
+                  name: v.name,
+                  price: v.price,
+                  unit: `${v.unitValue} ${v.unitType}`,
+                  stock: v.stock
+                });
 
+                setSuccessData({
+                  name: v.name,
+                  price: v.price,
+                  unit: `${v.unitValue} ${v.unitType}`,
+                  stock: v.stock
+                });
+
+                setShowSuccess(true);
               }
 
               setShowForm(false);
@@ -293,39 +310,39 @@ const ProductList = () => {
 
       {!showForm && !editingItem && (
         <>
-        <DataTable
-          columns={columns}
-          data={paginatedProducts}
+          <DataTable
+            columns={columns}
+            data={paginatedProducts}
 
-          actions={(row) => (
+            actions={(row) => (
 
-            <div className="flex gap-2">
+              <div className="flex gap-2">
 
-              <button
-                onClick={() => setEditingItem(row)}
-                className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"
-              >
-                <Edit size={18} />
-              </button>
+                <button
+                  onClick={() => setEditingItem(row)}
+                  className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"
+                >
+                  <Edit size={18} />
+                </button>
 
-              <button
-                onClick={() => setConfirmDelete({ id: row.id, name: row.name })}
-                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-              >
-                <Trash2 size={18} />
-              </button>
+                <button
+                  onClick={() => setConfirmDelete({ id: row.id, name: row.name })}
+                  className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={18} />
+                </button>
 
-            </div>
+              </div>
 
-          )}
-        />
-        <Pagination
-          totalItems={filteredProducts.length}
-          pageSize={pageSize}
-          currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
-        />
+            )}
+          />
+          <Pagination
+            totalItems={filteredProducts.length}
+            pageSize={pageSize}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
 
@@ -361,6 +378,52 @@ const ProductList = () => {
           </div>
         </div>
       )}
+
+
+      {/* {Succes POP UP} */}
+    {showSuccess && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    
+    <div className="bg-white rounded-[28px] shadow-2xl p-8 w-full max-w-sm mx-4 space-y-5 animate-in zoom-in-95">
+      
+      <div className="flex flex-col items-center text-center gap-3">
+        
+        <div className="bg-green-100 p-4 rounded-full">
+          <Package size={28} className="text-green-600" />
+        </div>
+
+        <h2 className="text-xl font-black text-slate-800">
+          Product Added
+        </h2>
+
+        <p className="text-slate-500 text-sm">
+          <span className="font-bold text-slate-700">
+            {successData?.name}
+          </span> has been added successfully.
+        </p>
+
+        <div className="text-xs text-slate-400 space-y-1">
+          <p>₹{successData?.price} • {successData?.unit}</p>
+          <p>Stock: {successData?.stock}</p>
+        </div>
+
+      </div>
+
+      <button
+        onClick={() => {
+          setShowSuccess(false);
+          setShowForm(false);
+          setEditingItem(null);
+        }}
+        className="w-full py-3 rounded-2xl bg-green-600 text-white font-black hover:bg-green-700 transition-all"
+      >
+        Done
+      </button>
+
+    </div>
+
+  </div>
+)}
     </div>
   );
 };

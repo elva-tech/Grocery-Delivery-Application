@@ -1,19 +1,23 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
-import { 
-  LayoutDashboard, 
-  ShoppingBasket, 
-  ShoppingCart, 
+import {
+  LayoutDashboard,
+  ShoppingBasket,
+  ShoppingCart,
   Bike,
   ShieldCheck,
   FileText,
   ImageIcon,
   RotateCcw,
   SlidersHorizontal,
+  Clock,
   Tag
 } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
+import { useLocation } from 'react-router-dom';
+
+import { DollarSign } from 'lucide-react';
 
 const Sidebar = () => {
   const { appSettings } = useAppState();
@@ -33,14 +37,30 @@ const Sidebar = () => {
         { name: 'Data Export', path: '/export', icon: FileText, color: 'text-emerald-600' },
         { name: 'Delivery Partners', path: '/riders', icon: Bike, color: 'text-blue-500' },
         { name: 'App Banners', path: '/banners', icon: ImageIcon, color: 'text-purple-600' },
-        { name: 'Settings', path: '/settings', icon: SlidersHorizontal, color: 'text-slate-600' },
+        {
+          name: 'Settings',
+          path: '/settings',
+          icon: SlidersHorizontal,
+          children: [
+            {
+              name: 'Payment Plan',
+              path: '/settings/payment-plan',
+              icon: DollarSign
+            },
+            {
+              name: 'Schedule',
+              path: '/settings/schedule',
+              icon: Clock
+            }
+          ]
+        },
         { name: 'Coupons', path: '/coupons', icon: Tag, color: 'text-pink-600' },
         // CONDITIONAL RENDER: This logic handles the visibility
-        ...(appSettings.allowRefunds ? [{ 
-          name: 'Returns & Refunds', 
-          path: '/returns', 
-          icon: RotateCcw, 
-          color: 'text-red-500' 
+        ...(appSettings.allowRefunds ? [{
+          name: 'Returns & Refunds',
+          path: '/returns',
+          icon: RotateCcw,
+          color: 'text-red-500'
         }] : []),
       ]
     }
@@ -70,35 +90,61 @@ const Sidebar = () => {
             <h3 className="px-4 text-[11px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-3">
               {section.title}
             </h3>
-            
+
             <div className="space-y-1.5">
               {section.items.map((item) => {
                 const Icon = item.icon;
+
                 return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) => `
-                      group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200
-                      ${isActive 
-                        ? 'bg-[#0F2C1D] text-white shadow-xl shadow-green-900/30 translate-x-1' 
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }
-                    `}
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <Icon 
-                          size={20} 
-                          className={`${isActive ? 'text-white' : `${item.color} group-hover:scale-110 transition-transform`}`} 
-                        />
-                        <span>{item.name}</span>
-                        {isActive && (
-                          <div className="ml-auto w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                        )}
-                      </>
+                  <div key={item.path}>
+
+                    <NavLink
+                      to={item.path}
+                      className={({ isActive }) => `
+          group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200
+          ${isActive
+                          ? 'bg-[#0F2C1D] text-white shadow-xl shadow-green-900/30 translate-x-1'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        }
+        `}
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <Icon
+                            size={20}
+                            className={`${isActive ? 'text-white' : `${item.color} group-hover:scale-110 transition-transform`}`}
+                          />
+                          <span>{item.name}</span>
+                          {isActive && (
+                            <div className="ml-auto w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                          )}
+                        </>
+                      )}
+                    </NavLink>
+
+                    {/* ✅ ADD THIS — SUB MENU */}
+                    {item.children && location.pathname.startsWith('/settings') && (
+                      <div className="ml-10 mt-1 space-y-1">
+                        {item.children.map((child) => {
+                          const ChildIcon = child.icon;
+                          return (
+                            <NavLink
+                              key={child.path}
+                              to={child.path}
+                              className={({ isActive }) => `
+                  flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
+                  ${isActive ? 'text-green-600' : 'text-gray-400 hover:text-gray-700'}
+                `}
+                            >
+                              <ChildIcon size={14} />
+                              {child.name}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
                     )}
-                  </NavLink>
+
+                  </div>
                 );
               })}
             </div>

@@ -15,6 +15,9 @@ import ReturnManagement from './modules/Orders/ReturnManagement';
 import SettingsPage from './modules/Settings/SettingsPage';
 import CouponManagement from './modules/Coupons/CouponManagement';
 
+import PaymentPlan from './modules/Settings/PaymentPlan';
+import Schedule from './modules/Settings/Schedule';
+
 // Create a helper component to handle the conditional logic inside the Router
 const AppRoutes = () => {
   return (
@@ -26,6 +29,9 @@ const AppRoutes = () => {
         <Route path="orders" element={<OrderList />} />
         <Route path="export" element={<ReportsPage />} />
         <Route path="/riders" element={<RiderManagement />} />
+        <Route path="/settings/payment-plan" element={<PaymentPlan />} />
+        <Route path="/settings/schedule" element={<Schedule />} />
+
         
         {/* PROTECTED RETURN ROUTE: Redirects to home if disabled */}
         <Route 
