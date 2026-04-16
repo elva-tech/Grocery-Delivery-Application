@@ -15,6 +15,7 @@ const Schedule = () => {
     reason: ''
   });
 
+  // this is for commiting purpose only
   useEffect(() => {
     const load = async () => {
       const data = await getSchedule();
