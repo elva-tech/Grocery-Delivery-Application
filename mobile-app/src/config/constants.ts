@@ -8,11 +8,13 @@
 // ============================================
 
 export const API_BASE_URL = {
-  DEVELOPMENT: 'http://localhost:5000',
+  // DEVELOPMENT: 'http://localhost:5000',
+  DEVELOPMENT: 'http://192.168.6.31:5000',
   STAGING: 'https://staging-api.egrocery.com',
   PRODUCTION: 'https://api.egrocery.com',
 };
 
+export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;
 export const TENANT_ID = 'demo-tenant';
 export const RAZORPAY_KEY_ID = 'rzp_test_SaHmJpDs42QvIp';
 export const APP_BRAND = 'Enandi';

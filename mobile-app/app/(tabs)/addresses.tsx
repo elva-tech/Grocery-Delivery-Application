@@ -219,7 +219,15 @@ export default function AddressesScreen() {
         theme: { color: '#0F2C1D' },
       };
 
-      const rzpResponse: any = await RazorpayCheckout.open(rzpOptions);
+      const razorpayModule = RazorpayCheckout as any;
+      if (!RAZORPAY_KEY_ID) {
+        throw new Error('Payment configuration missing. Please contact support.');
+      }
+      if (!razorpayModule || typeof razorpayModule.open !== 'function') {
+        throw new Error('Online payment is unavailable in this build. Please use a development build or installed APK.');
+      }
+
+      const rzpResponse: any = await razorpayModule.open(rzpOptions);
 
       const verified = await verifyMobilePayment(
         {

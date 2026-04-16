@@ -232,7 +232,7 @@ export const apiSlice = createApi({
             startTime: "10:00",
             endTime: "20:00",
             reason: "we are kindly inactive in these days",
-            isActive: true
+            isActive: false
           }
           let isClosed = false;
           // these red errors are common cuz time is not active

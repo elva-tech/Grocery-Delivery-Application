@@ -11,16 +11,16 @@ export default function Register() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Validation: Starts with 6-9 and is exactly 10 digits
   const indiaRegex = /^[6-9]\d{9}$/;
   const isValid = indiaRegex.test(phone) && name.length >= 2;
 
   const handleNext = async () => {
+    console.log("CLICKED SEND OTP");
     if (!isValid) return;
 
     setLoading(true);
     try {
-      await sendOtp(`+91${phone}`);
+      await sendOtp(phone as string); // ✅ FIXED
       router.push({
         pathname: '/auth/otp',
         params: { phone, name }
@@ -56,7 +56,6 @@ export default function Register() {
 
         <View style={styles.inputWrapper}>
           <Text style={styles.inputLabel}>Mobile Number</Text>
-          {/* ✅ FIXED: Changed <div> to <View> */}
           <View style={styles.inputRow}>
             <View style={styles.countryCodeBox}>
               <Text style={styles.countryCodeText}>+91</Text>
