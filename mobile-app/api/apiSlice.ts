@@ -168,6 +168,31 @@ export const apiSlice = createApi({
       },
     }),
 
+    /* ----------- STORE STATUS ----------- */
+    getStoreStatus: builder.query<{
+      isClosed: boolean;
+      reason: string;
+      nextChange: string | null;
+    }, void>({
+      queryFn: async () => {
+        try {
+          const res = await fetch(`${BASE}/api/store/status`, { headers: TENANT_HEADERS });
+          if (!res.ok) throw new Error('store status fetch failed');
+          const data = await res.json();
+          return {
+            data: {
+              isClosed:   !data.isOpen,
+              reason:     data.reason ?? 'SCHEDULE',
+              nextChange: data.nextChange ?? null,
+            },
+          };
+        } catch {
+          // Fail open – don't block the app if the API is unreachable
+          return { data: { isClosed: false, reason: 'UNAVAILABLE', nextChange: null } };
+        }
+      },
+    }),
+
   }),
 });
 
@@ -179,4 +204,5 @@ export const {
   useGetProductsByCategoryQuery,
   useGetFeaturedProductsQuery,
   useGetAppSettingsQuery,
+  useGetStoreStatusQuery,
 } = apiSlice;

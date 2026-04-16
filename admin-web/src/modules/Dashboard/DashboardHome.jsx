@@ -4,6 +4,7 @@ import StatCard from '../../components/shared/StatCard';
 import TopProductsSection from './TopProductsSection';
 import DailySalesChart from './DailySalesChart';
 import RatingSummaryCard from './RatingSummaryCard';
+import PlanUsageCard from './PlanUsageCard';
 import { 
   ShoppingBag, 
   IndianRupee, 
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
 import dashboardService from '../../services/dashboardApi';
+import { apiService } from '../../services/apiService';
 
 const DashboardHome = () => {
   const navigate = useNavigate();
@@ -41,6 +43,11 @@ const DashboardHome = () => {
   const [ratingsSummary, setRatingsSummary] = useState(null);
   const [analyticsFilter, setAnalyticsFilter] = useState('30');
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+
+  // Billing state
+  const [billingData, setBillingData] = useState({ subscription: null, usage: null, invoice: null });
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingError, setBillingError] = useState(null);
   
   const [lastUpdated, setLastUpdated] = useState(
     new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -159,6 +166,35 @@ const DashboardHome = () => {
 
     fetchAnalytics();
   }, [analyticsFilter]);
+
+  // ============================================
+  // FETCH BILLING DATA
+  // ============================================
+  useEffect(() => {
+    const fetchBilling = async () => {
+      setBillingLoading(true);
+      setBillingError(null);
+      try {
+        const [subRes, usageRes, invoiceRes] = await Promise.all([
+          apiService.getSubscription(),
+          apiService.getUsage(),
+          apiService.getCurrentInvoice(),
+        ]);
+        setBillingData({
+          subscription: subRes.data  || null,
+          usage:        usageRes.data  || null,
+          invoice:      invoiceRes.data || null,
+        });
+      } catch (err) {
+        console.error('Billing fetch error:', err);
+        setBillingError('Could not load billing data');
+      } finally {
+        setBillingLoading(false);
+      }
+    };
+    fetchBilling();
+  }, []);
+
 
   // ============================================
   // INVENTORY CALCULATIONS
@@ -344,10 +380,19 @@ const DashboardHome = () => {
         />
       </div>
 
-      {/* ── Ratings Row ──────────────────────────────────────────── */}
+      {/* ── Ratings Row ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RatingSummaryCard data={ratingsSummary} isLoading={analyticsLoading} />
       </div>
+
+      {/* ── Plan & Billing ───────────────────────────────────────── */}
+      <PlanUsageCard
+        subscription={billingData.subscription}
+        usage={billingData.usage}
+        invoice={billingData.invoice}
+        loading={billingLoading}
+        error={billingError}
+      />
 
       <div className="bg-[#1A4D2E] p-8 rounded-[32px] text-white shadow-xl shadow-green-900/20 flex flex-col w-full">
         <div className="flex justify-between items-start mb-6">
