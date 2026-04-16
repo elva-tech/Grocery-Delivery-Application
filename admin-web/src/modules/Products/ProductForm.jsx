@@ -40,10 +40,12 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
   const [savingUnit, setSavingUnit] = useState(false);
   const [addUnitError, setAddUnitError] = useState('');
 
+  const [showErrors, setShowErrors] = useState(false);
+
   useEffect(() => {
     apiService.getUnits()
       .then(data => setUnits(Array.isArray(data) ? data : (data.units || [])))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setUnitsLoading(false));
   }, []);
 
@@ -122,33 +124,36 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
 
         validationSchema={ProductSchema}
 
-        onSubmit={(values) => {
 
-          const submission = {
+        // {MISSING FIELD LOGIC}
+   onSubmit={(values, { setTouched }) => {
 
-            ...values,
+  setShowErrors(true);
 
-            price: Math.abs(Number(values.price)),
+  setTouched({
+    name: true,
+    description: true,
+    price: true,
+    stock: true,
+    parentCategoryId: true,
+    unitValue: true,
+    unitType: true,
+  });
 
-            stock: Math.max(
-              0,
-              Math.floor(Number(values.stock))
-            ),
 
-            unitValue: Number(values.unitValue),
+  const submission = {
+    ...values,
+    price: Math.abs(Number(values.price)),
+    stock: Math.max(0, Math.floor(Number(values.stock))),
+    unitValue: Number(values.unitValue),
+    threshold: values.threshold !== '' && values.threshold != null
+      ? Number(values.threshold)
+      : 10,
+    images: values.image
+  };
 
-            threshold: values.threshold !== '' && values.threshold != null
-              ? Number(values.threshold)
-              : 10,
-
-            images: values.image
-
-          };
-
-          onSubmit(submission);
-
-        }}
-
+  onSubmit(submission);
+}}
       >
 
         {({ setFieldValue, values, errors, touched }) => {
@@ -165,350 +170,353 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
 
             <>
 
-            <Form className="space-y-6">
+              {/* {ADDED MISSING FIELDS MESSAGE} */}
+              {showErrors && Object.keys(errors).length > 0 && (
+                <div className="bg-red-50 border border-red-300 text-red-600 text-xs font-bold p-3 rounded-xl">
+                  Missing: {Object.keys(errors).join(', ')}
+                </div>
+              )}
+              <Form className="space-y-6">
 
-              <div className="flex flex-col md:flex-row gap-6">
+                <div className="flex flex-col md:flex-row gap-6">
 
-                {/* LEFT IMAGE UPLOADER */}
+                  {/* LEFT IMAGE UPLOADER */}
 
-                <div className="flex-1 space-y-4">
+                  <div className="flex-1 space-y-4">
 
-                  <label className="block text-sm font-bold text-gray-700">
-                    Product Images
-                  </label>
+                    <label className="block text-sm font-bold text-gray-700">
+                      Product Images
+                    </label>
 
-                  <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
 
-                    {values.image.map((img, i) => (
+                      {values.image.map((img, i) => (
 
-                      <div
-                        key={i}
-                        className="relative aspect-square border rounded-lg overflow-hidden"
-                      >
+                        <div
+                          key={i}
+                          className="relative aspect-square border rounded-lg overflow-hidden"
+                        >
 
-                        <img
-                          src={img}
-                          className="w-full h-full object-cover"
-                        />
+                          <img
+                            src={img}
+                            className="w-full h-full object-cover"
+                          />
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFieldValue(
-                              'image',
-                              values.image.filter(
-                                (_, idx) => idx !== i
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFieldValue(
+                                'image',
+                                values.image.filter(
+                                  (_, idx) => idx !== i
+                                )
                               )
-                            )
-                          }
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
-                        >
+                            }
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                          >
 
-                          <X size={10} />
+                            <X size={10} />
 
-                        </button>
+                          </button>
 
-                      </div>
+                        </div>
 
-                    ))}
+                      ))}
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        fileInputRef.current.click()
-                      }
-                      className="aspect-square border-2 border-dashed border-emerald-200 rounded-lg flex items-center justify-center bg-emerald-50/30 text-emerald-600"
-                    >
-
-                      <Plus size={20} />
-
-                    </button>
-
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      hidden
-                      multiple
-                      onChange={(e) =>
-                        setFieldValue(
-                          'image',
-                          [
-                            ...values.image,
-                            ...Array.from(e.target.files).map(
-                              f => URL.createObjectURL(f)
-                            )
-                          ]
-                        )
-                      }
-                    />
-
-                  </div>
-
-                </div>
-
-                {/* RIGHT PRODUCT DETAILS */}
-
-                <div className="flex-1 space-y-4">
-
-                  <div className="grid grid-cols-2 gap-2">
-
-                    <div>
-
-                      <label className="text-[10px] font-bold text-gray-400 uppercase">
-                        Main Category
-                      </label>
-
-                      <Field
-                        as="select"
-                        name="parentCategoryId"
-                        className="w-full border p-3 rounded-xl bg-white mt-1"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          fileInputRef.current.click()
+                        }
+                        className="aspect-square border-2 border-dashed border-emerald-200 rounded-lg flex items-center justify-center bg-emerald-50/30 text-emerald-600"
                       >
 
-                        {mainCategories.map(c => (
-                          <option
-                            key={c.id}
-                            value={c.id}
-                          >
-                            {c.name}
-                          </option>
-                        ))}
+                        <Plus size={20} />
 
-                      </Field>
+                      </button>
 
-                    </div>
-
-                    <div>
-
-                      <label className="text-[10px] font-bold text-gray-400 uppercase">
-                        Sub Category
-                      </label>
-
-                      <Field
-                        as="select"
-                        name="subCategoryId"
-                        className="w-full border p-3 rounded-xl bg-white mt-1"
-                      >
-
-                        <option value="">
-                          Select Sub
-                        </option>
-
-                        {subCats.map(c => (
-                          <option
-                            key={c.id}
-                            value={c.id}
-                          >
-                            {c.name}
-                          </option>
-                        ))}
-
-                      </Field>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        hidden
+                        multiple
+                        onChange={(e) =>
+                          setFieldValue(
+                            'image',
+                            [
+                              ...values.image,
+                              ...Array.from(e.target.files).map(
+                                f => URL.createObjectURL(f)
+                              )
+                            ]
+                          )
+                        }
+                      />
 
                     </div>
 
                   </div>
 
-                  <Field
-                    name="name"
-                    placeholder="Product Name"
-                    className="w-full border p-3 rounded-xl"
-                  />
+                  {/* RIGHT PRODUCT DETAILS */}
 
-                  {/* DESCRIPTION */}
+                  <div className="flex-1 space-y-4">
 
-                  <div>
+                    <div className="grid grid-cols-2 gap-2">
 
-                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
-                      Product Description
-                    </label>
+                      <div>
 
-                    <Field
-                      as="textarea"
-                      name="description"
-                      placeholder="Enter detailed product info for the app..."
-                      className="w-full border p-3 rounded-xl mt-1 h-24 resize-none focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">
+                          Main Category
+                        </label>
 
-                  </div>
-
-                  {/* UNIT */}
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
-                      Unit
-                    </label>
-                    <div className="flex gap-2 mt-1">
-                      <div className="flex-1">
                         <Field
-                          name="unitValue"
-                          type="number"
-                          min="0.01"
-                          step="any"
-                          placeholder="e.g. 500"
-                          className={`w-full border p-3 rounded-xl ${
-                            errors.unitValue && touched.unitValue ? 'border-red-400' : ''
-                          }`}
-                        />
-                        <ErrorMessage name="unitValue" component="p" className="text-red-500 text-[11px] mt-1 ml-1" />
-                      </div>
-
-                      {/* Custom unit type dropdown */}
-                      <div className="w-32 relative">
-                        <button
-                          type="button"
-                          onClick={() => setUnitDropdownOpen(o => !o)}
-                          className={`w-full border p-3 rounded-xl bg-white flex items-center justify-between text-sm ${
-                            errors.unitType && touched.unitType ? 'border-red-400' : 'border-gray-300'
-                          }`}
+                          as="select"
+                          name="parentCategoryId"
+                          className="w-full border p-3 rounded-xl bg-white mt-1"
                         >
-                          <span className={values.unitType ? 'text-gray-900' : 'text-gray-400'}>
-                            {values.unitType || (unitsLoading ? '...' : 'Unit')}
-                          </span>
-                          <ChevronDown size={14} className="text-gray-400 shrink-0" />
-                        </button>
 
-                        {unitDropdownOpen && (
-                          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                            <input
-                              type="text"
-                              value={unitSearch}
-                              onChange={e => setUnitSearch(e.target.value)}
-                              placeholder="Search..."
-                              className="w-full px-3 py-2 text-sm border-b outline-none"
-                              onClick={e => e.stopPropagation()}
-                              autoFocus
-                            />
-                            <ul className="max-h-40 overflow-y-auto">
-                              {filteredUnits.map(u => (
-                                <li
-                                  key={u._id || u.name}
-                                  onClick={() => {
-                                    setFieldValue('unitType', u.name);
-                                    setUnitDropdownOpen(false);
-                                    setUnitSearch('');
-                                  }}
-                                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-emerald-50 ${
-                                    values.unitType === u.name ? 'bg-emerald-100 font-bold' : ''
-                                  }`}
-                                >
-                                  {u.name}
-                                </li>
-                              ))}
-                              {filteredUnits.length === 0 && (
-                                <li className="px-3 py-2 text-sm text-gray-400">
-                                  {unitsLoading ? 'Loading...' : 'No results'}
-                                </li>
-                              )}
-                            </ul>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setUnitDropdownOpen(false);
-                                setUnitSearch('');
-                                setShowAddUnitModal(true);
-                              }}
-                              className="w-full px-3 py-2 text-sm text-emerald-700 font-bold border-t hover:bg-emerald-50 flex items-center gap-1"
+                          {mainCategories.map(c => (
+                            <option
+                              key={c.id}
+                              value={c.id}
                             >
-                              <Plus size={13} /> Add New Unit
-                            </button>
-                          </div>
-                        )}
+                              {c.name}
+                            </option>
+                          ))}
 
-                        <ErrorMessage name="unitType" component="p" className="text-red-500 text-[11px] mt-1 ml-1" />
+                        </Field>
+
                       </div>
+
+                      <div>
+
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">
+                          Sub Category
+                        </label>
+
+                        <Field
+                          as="select"
+                          name="subCategoryId"
+                          className="w-full border p-3 rounded-xl bg-white mt-1"
+                        >
+
+                          <option value="">
+                            Select Sub
+                          </option>
+
+                          {subCats.map(c => (
+                            <option
+                              key={c.id}
+                              value={c.id}
+                            >
+                              {c.name}
+                            </option>
+                          ))}
+
+                        </Field>
+
+                      </div>
+
                     </div>
 
-                    {/* Preview */}
-                    {values.price && values.unitValue && values.unitType && (
-                      <p className="text-[11px] text-emerald-600 font-bold mt-1.5 ml-1">
-                        Preview: ₹{values.price} / {values.unitValue} {values.unitType}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-
                     <Field
-                      name="price"
-                      type="number"
-                      min="0"
-                      placeholder="Price"
+                      name="name"
+                      placeholder="Product Name"
                       className="w-full border p-3 rounded-xl"
                     />
 
-                    <Field
-                      name="stock"
-                      type="number"
-                      min="0"
-                      placeholder="Stock"
-                      className="w-full border p-3 rounded-xl"
-                    />
+                    {/* DESCRIPTION */}
+
+                    <div>
+
+                      <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
+                        Product Description
+                      </label>
+
+                      <Field
+                        as="textarea"
+                        name="description"
+                        placeholder="Enter detailed product info for the app..."
+                        className="w-full border p-3 rounded-xl mt-1 h-24 resize-none focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      />
+
+                    </div>
+
+                    {/* UNIT */}
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
+                        Unit
+                      </label>
+                      <div className="flex gap-2 mt-1">
+                        <div className="flex-1">
+                          <Field
+                            name="unitValue"
+                            type="number"
+                            min="0.01"
+                            step="any"
+                            placeholder="e.g. 500"
+                            className={`w-full border p-3 rounded-xl ${errors.unitValue && touched.unitValue ? 'border-red-400' : ''
+                              }`}
+                          />
+                          <ErrorMessage name="unitValue" component="p" className="text-red-500 text-[11px] mt-1 ml-1" />
+                        </div>
+
+                        {/* Custom unit type dropdown */}
+                        <div className="w-32 relative">
+                          <button
+                            type="button"
+                            onClick={() => setUnitDropdownOpen(o => !o)}
+                            className={`w-full border p-3 rounded-xl bg-white flex items-center justify-between text-sm ${errors.unitType && touched.unitType ? 'border-red-400' : 'border-gray-300'
+                              }`}
+                          >
+                            <span className={values.unitType ? 'text-gray-900' : 'text-gray-400'}>
+                              {values.unitType || (unitsLoading ? '...' : 'Unit')}
+                            </span>
+                            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                          </button>
+
+                          {unitDropdownOpen && (
+                            <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                              <input
+                                type="text"
+                                value={unitSearch}
+                                onChange={e => setUnitSearch(e.target.value)}
+                                placeholder="Search..."
+                                className="w-full px-3 py-2 text-sm border-b outline-none"
+                                onClick={e => e.stopPropagation()}
+                                autoFocus
+                              />
+                              <ul className="max-h-40 overflow-y-auto">
+                                {filteredUnits.map(u => (
+                                  <li
+                                    key={u._id || u.name}
+                                    onClick={() => {
+                                      setFieldValue('unitType', u.name);
+                                      setUnitDropdownOpen(false);
+                                      setUnitSearch('');
+                                    }}
+                                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-emerald-50 ${values.unitType === u.name ? 'bg-emerald-100 font-bold' : ''
+                                      }`}
+                                  >
+                                    {u.name}
+                                  </li>
+                                ))}
+                                {filteredUnits.length === 0 && (
+                                  <li className="px-3 py-2 text-sm text-gray-400">
+                                    {unitsLoading ? 'Loading...' : 'No results'}
+                                  </li>
+                                )}
+                              </ul>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUnitDropdownOpen(false);
+                                  setUnitSearch('');
+                                  setShowAddUnitModal(true);
+                                }}
+                                className="w-full px-3 py-2 text-sm text-emerald-700 font-bold border-t hover:bg-emerald-50 flex items-center gap-1"
+                              >
+                                <Plus size={13} /> Add New Unit
+                              </button>
+                            </div>
+                          )}
+
+                          <ErrorMessage name="unitType" component="p" className="text-red-500 text-[11px] mt-1 ml-1" />
+                        </div>
+                      </div>
+
+                      {/* Preview */}
+                      {values.price && values.unitValue && values.unitType && (
+                        <p className="text-[11px] text-emerald-600 font-bold mt-1.5 ml-1">
+                          Preview: ₹{values.price} / {values.unitValue} {values.unitType}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+
+                      <Field
+                        name="price"
+                        type="number"
+                        min="0"
+                        placeholder="Price"
+                        className="w-full border p-3 rounded-xl"
+                      />
+
+                      <Field
+                        name="stock"
+                        type="number"
+                        min="0"
+                        placeholder="Stock"
+                        className="w-full border p-3 rounded-xl"
+                      />
+
+                    </div>
+
+                    <div>
+                      <Field
+                        name="threshold"
+                        type="number"
+                        min="0"
+                        placeholder="5"
+                        className="w-full border p-3 rounded-xl"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1 ml-1">Low Stock Alert (optional) — Default is 10 if not set</p>
+                      <ErrorMessage name="threshold" component="p" className="text-red-500 text-[11px] mt-1 ml-1" />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-[#1A4D2E] text-white py-4 rounded-xl font-bold shadow-md hover:bg-[#143d24] transition-colors"
+                    >
+
+                      Save Product
+
+                    </button>
 
                   </div>
-
-                  <div>
-                    <Field
-                      name="threshold"
-                      type="number"
-                      min="0"
-                      placeholder="5"
-                      className="w-full border p-3 rounded-xl"
-                    />
-                    <p className="text-[10px] text-gray-400 mt-1 ml-1">Low Stock Alert (optional) — Default is 10 if not set</p>
-                    <ErrorMessage name="threshold" component="p" className="text-red-500 text-[11px] mt-1 ml-1" />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-[#1A4D2E] text-white py-4 rounded-xl font-bold shadow-md hover:bg-[#143d24] transition-colors"
-                  >
-
-                    Save Product
-
-                  </button>
 
                 </div>
 
-              </div>
+              </Form>
 
-            </Form>
-
-            {/* Add New Unit Modal */}
-            {showAddUnitModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                <div className="bg-white rounded-2xl shadow-2xl p-6 w-80">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-gray-800">Add New Unit</h3>
+              {/* Add New Unit Modal */}
+              {showAddUnitModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                  <div className="bg-white rounded-2xl shadow-2xl p-6 w-80">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-bold text-gray-800">Add New Unit</h3>
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddUnitModal(false); setNewUnitName(''); setAddUnitError(''); }}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={newUnitName}
+                      onChange={e => setNewUnitName(e.target.value.toUpperCase())}
+                      placeholder="e.g. BUNDLE"
+                      className="w-full border p-3 rounded-xl mb-2 uppercase font-mono tracking-wide"
+                      onKeyDown={e => e.key === 'Enter' && handleAddUnit(setFieldValue)}
+                      autoFocus
+                    />
+                    {addUnitError && (
+                      <p className="text-red-500 text-xs mb-2">{addUnitError}</p>
+                    )}
                     <button
                       type="button"
-                      onClick={() => { setShowAddUnitModal(false); setNewUnitName(''); setAddUnitError(''); }}
-                      className="text-gray-400 hover:text-gray-600"
+                      onClick={() => handleAddUnit(setFieldValue)}
+                      disabled={savingUnit || !newUnitName.trim()}
+                      className="w-full bg-[#1A4D2E] text-white py-3 rounded-xl font-bold disabled:opacity-50 transition-opacity"
                     >
-                      <X size={18} />
+                      {savingUnit ? 'Saving...' : 'Save Unit'}
                     </button>
                   </div>
-                  <input
-                    type="text"
-                    value={newUnitName}
-                    onChange={e => setNewUnitName(e.target.value.toUpperCase())}
-                    placeholder="e.g. BUNDLE"
-                    className="w-full border p-3 rounded-xl mb-2 uppercase font-mono tracking-wide"
-                    onKeyDown={e => e.key === 'Enter' && handleAddUnit(setFieldValue)}
-                    autoFocus
-                  />
-                  {addUnitError && (
-                    <p className="text-red-500 text-xs mb-2">{addUnitError}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleAddUnit(setFieldValue)}
-                    disabled={savingUnit || !newUnitName.trim()}
-                    className="w-full bg-[#1A4D2E] text-white py-3 rounded-xl font-bold disabled:opacity-50 transition-opacity"
-                  >
-                    {savingUnit ? 'Saving...' : 'Save Unit'}
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
 
             </>
 

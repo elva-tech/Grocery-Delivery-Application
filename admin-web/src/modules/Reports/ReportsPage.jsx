@@ -4,6 +4,8 @@ import DataTable from '../../components/shared/DataTable';
 import { apiService } from '../../services/apiService';
 import CustomButton from '../../components/shared/CustomButton';
 import { TrendingUp, ShoppingBag, FileText, Search, X, Download } from 'lucide-react';
+import Pagination from '../../components/shared/Pagination';
+import usePagination from '../../hooks/usePagination';
 
 const ReportsPage = () => {
   const { orders } = useAppState();
@@ -107,14 +109,36 @@ useEffect(() => {
   }));
 }, [inventory]);
 
-  const getFilteredData = () => {
-    const currentData = activeTab === 'REVENUE' ? revenueData : 
-                        activeTab === 'ORDERS' ? orders : inventoryReport;
-    if (!searchTerm) return currentData;
-    return currentData.filter(item => 
-      (item.customer || item.customerName || item.item || item.id || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
+const getFilteredData = () => {
+  const currentData =
+    activeTab === 'REVENUE'
+      ? revenueData
+      : activeTab === 'ORDERS'
+      ? orders
+      : inventoryReport;
+
+  if (!searchTerm) return currentData;
+
+  return currentData.filter(item =>
+    (item.customer ||
+      item.customerName ||
+      item.item ||
+      item.id ||
+      '')
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase())
+  );
+};
+
+const filteredData = useMemo(() => getFilteredData(), [activeTab, searchTerm, orders, inventory]);
+
+const {
+  currentPage,
+  pageSize,
+  setCurrentPage,
+  setPageSize,
+  paginatedItems
+} = usePagination(filteredData);
 
   const reportConfigs = {
     REVENUE: { title: 'Earnings Report', columns: [
@@ -183,7 +207,10 @@ useEffect(() => {
           {['REVENUE', 'ORDERS', 'INVENTORY'].map(tab => (
             <button 
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+  setActiveTab(tab);
+  setCurrentPage(1);
+}}
               className={`px-6 py-3 rounded-xl font-bold transition-all ${activeTab === tab ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {tab}
@@ -196,14 +223,27 @@ useEffect(() => {
             type="text" 
             placeholder="Search..." 
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+  setSearchTerm(e.target.value);
+  setCurrentPage(1);
+}}
             className="pl-10 pr-4 py-2 border rounded-xl outline-none w-64"
           />
         </div>
       </div>
 
       <div className="bg-white p-8 rounded-[32px] border shadow-sm">
-        <DataTable columns={reportConfigs[activeTab].columns} data={getFilteredData()} />
+        <DataTable 
+  columns={reportConfigs[activeTab].columns} 
+  data={paginatedItems} 
+/>
+<Pagination
+  totalItems={filteredData.length}
+  pageSize={pageSize}
+  currentPage={currentPage}
+  onPageChange={setCurrentPage}
+  onPageSizeChange={setPageSize}
+/>
       </div>
     </div>
   );

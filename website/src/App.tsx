@@ -13,7 +13,7 @@ import ProductDetail from './pages/ProductDetail';
 import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
 import Addresses from './pages/Addresses';
-import LoginModal from './components/ui/LoginModal'; 
+import LoginModal from './components/ui/LoginModal';
 import { getCartCalculation } from './api/ordersApi';
 import { useGetProductsQuery } from './api/apiSlice';
 import type { RootState } from './store/store';
@@ -24,11 +24,13 @@ import Footer from './components/layout/Footer';
 import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
 
+import { useGetStoreStatusQuery } from './api/apiSlice';
+
 const App = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // UPDATED STATES FOR NESTED CATEGORIES
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
@@ -37,20 +39,28 @@ const App = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showFreeToast, setShowFreeToast] = useState(false);
   const [wasFree, setWasFree] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false); 
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
 
   const { data: products = [] } = useGetProductsQuery();
   const { items } = useSelector((state: RootState) => state.cart);
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth); 
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const timerRef = useRef<any>(null);
+
+
+  const { data: storeStatus } = useGetStoreStatusQuery(undefined, {
+    pollingInterval: 30000 // Every 30 seconds: call API again → update UI automatically
+  });
+
+  const isClosed = storeStatus?.isClosed ?? false;
+  const reason = storeStatus?.reason ?? "";
 
   // RESET LOGIC: Clears filters when switching between Home and Browse
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    
+
     // Only reset if moving between these specific paths to avoid "ghosting"
     if (location.pathname === '/' || location.pathname === '/browse') {
       setSelectedParentId(null);
@@ -96,9 +106,9 @@ const App = () => {
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedSubId 
+      const matchesCategory = selectedSubId
         ? String(p.subCategoryId) === String(selectedSubId)
-        : selectedParentId 
+        : selectedParentId
           ? String(p.parentCategoryId) === String(selectedParentId)
           : true;
       return matchesSearch && matchesCategory;
@@ -146,8 +156,104 @@ const App = () => {
     }
   }, [location.pathname, selectedAddress, items.length, navigate]);
 
+
+
+  // {12 HOUR FOMAT}
+  const formatTime = (time?: string) => {
+    if (!time) return "";
+
+    const [h, m] = time.split(":").map(Number);
+
+    const hour = h % 12 || 12;
+    const ampm = h >= 12 ? "PM" : "AM";
+
+    return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc] text-[#1e293b] font-sans">
+
+      {isClosed && (
+        <div className="fixed inset-0 bg-gradient-to-br from-black/70 to-black/50 backdrop-blur-md z-[9999] flex items-center justify-center px-4">
+
+          <div className="bg-white p-8 rounded-3xl text-center max-w-md w-full shadow-2xl transform animate-fadeIn">
+
+            {/* Icon */}
+            <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-lg">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+
+            {/* Title */}
+            <h2 className="text-2xl font-black mb-3 text-gray-900">
+              Store Closed
+            </h2>
+
+            {/* Reason */}
+            <p className="text-base text-gray-600 mb-6 leading-relaxed">
+              {reason || "We are currently not accepting orders"}
+            </p>
+
+            {/* TIME BASED */}
+            {storeStatus?.type === "TIME" && (
+              <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+                <p className="text-sm font-semibold text-red-700">
+                  🕒 Closed Daily
+                </p>
+                <p className="text-sm text-red-600 mt-1">
+                  {formatTime(storeStatus.startTime)} - {formatTime(storeStatus.endTime)}
+                </p>
+              </div>
+            )}
+
+            {/* DATE BASED */}
+           {storeStatus?.type === "DATE" && (
+  <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+    <p className="text-sm font-semibold text-red-700">
+      📅 Occasion Closure
+    </p>
+
+    <p className="text-sm text-red-600 mt-1">
+      {storeStatus.startDate} to {storeStatus.endDate}
+    </p>
+
+    {storeStatus.startTime && storeStatus.endTime && (
+      <p className="text-sm text-red-600 mt-1">
+        {formatTime(storeStatus.startTime)} - {formatTime(storeStatus.endTime)}
+      </p>
+    )}
+  </div>
+)}
+
+            {/* Optional: Contact Info */}
+            <p className="text-xs text-gray-500 mt-6">
+              Please check back later or contact us for more information
+            </p>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* Add to your global CSS or style tag */}
+      <style>{`
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .animate-fadeIn {
+    animation: fadeIn 0.3s ease-out;
+  }
+`}</style>
+
       <Header
         searchValue={searchQuery}
         onSearchChange={(val) => {
@@ -160,11 +266,11 @@ const App = () => {
 
       <div className="flex-grow flex max-w-7xl mx-auto w-full min-h-[calc(100vh-80px)]">
         {isBrowseMode && (
-          <CategorySidebar 
-            selectedParentId={selectedParentId} 
+          <CategorySidebar
+            selectedParentId={selectedParentId}
             selectedSubId={selectedSubId}
-            onSelectParent={setSelectedParentId} 
-            onSelectSub={setSelectedSubId} 
+            onSelectParent={setSelectedParentId}
+            onSelectSub={setSelectedSubId}
           />
         )}
 
@@ -276,7 +382,10 @@ const App = () => {
             <Route path="/addresses" element={<Addresses items={items} onSelect={(addr: any) => setSelectedAddress(addr)} />} />
             <Route path="/checkout" element={<Checkout address={selectedAddress} />} />
             <Route path="/success" element={<OrderSuccess />} />
-            <Route path="/orders" element={<Orders />} />
+            <Route
+              path="/orders"
+              element={<Orders openCart={() => setIsCartOpen(true)} />}
+            />
             <Route path="/about" element={<LegalPage />} />
             <Route path="/contact" element={<LegalPage />} />
             <Route path="/faqs" element={<LegalPage />} />
@@ -292,7 +401,7 @@ const App = () => {
 
       <CartDrawer
         isOpen={isCartOpen}
-         onClose={() => setIsCartOpen(false)}
+        onClose={() => setIsCartOpen(false)}
         onProceed={handleProceed}
       />
 

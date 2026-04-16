@@ -20,7 +20,7 @@ const STATUS_THEME: any = {
   REFUND_REJECTED: { color: 'text-red-700', bg: 'bg-red-100', label: 'Refund Rejected' },
 };
 
-const Orders = () => {
+const Orders = ({ openCart }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
@@ -98,7 +98,7 @@ const loadOrders = async () => {
     }));
   });
 
-  navigate('/cart');
+  openCart();
 };
 
  const handleCancelOrder = async () => {
@@ -178,8 +178,8 @@ const loadOrders = async () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-5 space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+        <div className="md:col-span-5 space-y-8">
           <h1 className="text-3xl font-black text-slate-900 mb-6 px-2 italic uppercase tracking-tighter">Order History.</h1>
           
           {sections.map((section) => section.data.length > 0 && (
@@ -227,9 +227,9 @@ const loadOrders = async () => {
           ))}
         </div>
 
-        <div className="lg:col-span-7">
+        <div className="md:col-span-7">
           {selectedOrder ? (
-            <div className="bg-white rounded-[3rem] p-8 sticky top-24 border border-slate-100 shadow-2xl animate-in fade-in slide-in-from-right-4">
+            <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-2xl h-fit animate-in fade-in slide-in-from-right-4">
               <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-50">
                 <div>
                   <h2 className="text-xl font-black text-slate-900">Summary</h2>
@@ -266,6 +266,7 @@ const loadOrders = async () => {
                       <button onClick={() => handleReorder(selectedOrder.items)} className="flex items-center justify-center gap-2 bg-[#1e293b] text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all">
                         <RotateCcw size={14} /> Reorder
                       </button>
+                      
 
                       {/* RATE ORDER BUTTON */}
                       {!selectedOrder.rating?.value ? (
