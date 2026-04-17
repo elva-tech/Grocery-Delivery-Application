@@ -5,7 +5,7 @@ import axios from 'axios';
 // ============================================
 
 // Get API Base URL from environment variable or use default
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://grocery-delivery-application-2kc4.onrender.com';
 
 // ============================================
 // JWT TOKEN DECODER
