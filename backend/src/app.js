@@ -47,6 +47,7 @@ const settingsRoutes = require("./routes/settings.routes");
 const couponRoutes     = require('./routes/coupon.routes');
 const analyticsRoutes  = require('./routes/analytics.routes');
 const unitRoutes       = require('./routes/unit.routes');
+const uploadRoutes     = require("./routes/upload.routes");
 const billingRoutes           = require('./routes/billing.routes');
 const storeAvailabilityRoutes = require('./routes/storeAvailability.routes');
 const { startStoreScheduler } = require('./services/storeScheduler.service');
@@ -58,6 +59,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/banners",  bannerRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/units",    unitRoutes);
+app.use("/api/upload",   uploadRoutes);
 app.use("/api/store",    storeAvailabilityRoutes); // GET /api/store/status is public
 // Protected routes
 app.use(authMiddleware);

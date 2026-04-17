@@ -7,6 +7,7 @@ const Inventory = require("../models/Inventory.model");
 const addProduct = async (req, res) => {
   try {
     const { name, category, subcategory, description, price, unit, stocks, stock, imageUrl, threshold } = req.body;
+    const resolvedImageUrl = typeof imageUrl === "string" ? imageUrl.trim() : imageUrl;
 
     if (req.user.role !== "ADMIN") {
       return res.status(403).json({ message: "Access denied. Admin only." });
@@ -47,7 +48,8 @@ const addProduct = async (req, res) => {
       description: description || '',
       price: finalPrice,
       unit,
-      imageUrl,
+      // Persist Cloudinary/public URL sent by frontend
+      imageUrl: resolvedImageUrl,
       isAvailable: finalStocks > 0
     });
 
@@ -91,6 +93,12 @@ const updateProductFromAdmin = async (req, res) => {
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) updateData[field] = req.body[field];
     });
+    if (req.body.imageUrl !== undefined) {
+      // Keep incoming image URL instead of ignoring/overwriting it
+      updateData.imageUrl = typeof req.body.imageUrl === "string"
+        ? req.body.imageUrl.trim()
+        : req.body.imageUrl;
+    }
 
     if (updateData.price !== undefined) {
       const priceNum = Number(updateData.price);
