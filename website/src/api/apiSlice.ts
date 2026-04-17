@@ -189,100 +189,27 @@ export const apiSlice = createApi({
     getStoreStatus: builder.query<{
       isClosed: boolean;
       reason: string;
-      type: "TIME" | "DATE";
-      startTime?: string;
-      endTime?: string;
-      startDate?: string;
-      endDate?: string;
+      nextChange: string | null;
     }, void>({
       queryFn: async () => {
         try {
-          const now = new Date();
-
-          const schedule:
-            | {
-              type: "TIME";
-              startTime: string;
-              endTime: string;
-              reason: string;
-              isActive: boolean;
-            }
-
-            | {
-              type: "DATE";
-              startDate: string;
-              endDate: string;
-              reason: string;
-              isActive: boolean;
-
-
-              // MOCK BACKEND DATA (CHANGE HERE TO TEST)
-
-            } = {
-            // type: "TIME",
-            // startTime: "12:00",
-            // endTime: "8:00",
-            // reason: "Store under maintenance",
-            // isActive: true
-
-            // uses real Timezone Date
-            type: "DATE",
-            startDate: "2026-04-01",
-            endDate: "2026-04-28",
-            startTime: "10:00",
-            endTime: "20:00",
-            reason: "we are kindly inactive in these days",
-            isActive: false
-          }
-          let isClosed = false;
-          // these red errors are common cuz time is not active
-
-          if (schedule.isActive) {
-            if (schedule.type === "TIME") {
-              const current = now.getHours() * 60 + now.getMinutes();
-
-              const [sh, sm] = schedule.startTime.split(":").map(Number);
-              const [eh, em] = schedule.endTime.split(":").map(Number);
-
-              const start = sh * 60 + sm;
-              const end = eh * 60 + em;
-
-              isClosed =
-                start < end
-                  ? current >= start && current <= end
-                  : current >= start || current <= end;
-            }
-
-            if (schedule.type === "DATE") {
-              const start = new Date(
-                schedule.startDate + "T" + (schedule.startTime || "00:00") + ":00"
-              );
-
-              const end = new Date(
-                schedule.endDate + "T" + (schedule.endTime || "23:59") + ":59"
-              );
-
-              isClosed = now >= start && now <= end;
-            }
-          }
-
+          const res = await fetch(`${API_BASE_URL}/api/store/status`, {
+            headers: { 'x-tenant-id': TENANT_ID },
+          });
+          if (!res.ok) throw new Error('store status fetch failed');
+          const data = await res.json();
           return {
             data: {
-              isClosed,
-              reason: schedule.reason,
-              type: schedule.type,
-              startTime: schedule.startTime,
-              endTime: schedule.endTime,
-              startDate: schedule.type === "DATE" ? (schedule.startDate as string) : undefined,
-              endDate: schedule.type === "DATE" ? (schedule.endDate as string) : undefined,
-            }
+              isClosed:   !data.isOpen,
+              reason:     data.reason ?? 'SCHEDULE',
+              nextChange: data.nextChange ?? null,
+            },
           };
-        } catch (err: any) {
-          return {
-            error: { status: 500, data: "Store status error" }
-          };
+        } catch {
+          // Fail open – don't block the store if the API is unreachable
+          return { data: { isClosed: false, reason: 'UNAVAILABLE', nextChange: null } };
         }
-      }
+      },
     }),
 
     /* ----------- CART & BILLING ----------- */

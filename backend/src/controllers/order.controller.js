@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const User = require("../models/User.model");
 const Settings = require("../models/Settings.model");
 const Coupon = require("../models/Coupon.model");
+const { recordOrderBilling, reverseOrderBilling } = require("../services/billing.service");
 
 
 const PAYMENT_MODES = ["COD", "ONLINE"];
@@ -150,6 +151,13 @@ exports.placeCustomerOrder = async (req, res) => {
     // Atomically increment coupon usage after order is confirmed
     if (appliedCoupon) {
       await Coupon.findByIdAndUpdate(appliedCoupon._id, { $inc: { usedCount: 1 } });
+    }
+
+    // Track billing usage — best-effort, never blocks order creation
+    try {
+      await recordOrderBilling(tenantId);
+    } catch (billingErr) {
+      console.error("Billing tracking error (non-critical):", billingErr.message);
     }
 
     res.status(201).json({
@@ -377,6 +385,13 @@ exports.cancelOrder = async (req, res) => {
 
     order.orderStatus = "CANCELLED";
     await order.save();
+
+    // Reverse billing usage — best-effort, never blocks cancellation
+    try {
+      await reverseOrderBilling(tenantId);
+    } catch (billingErr) {
+      console.error("Billing reversal error (non-critical):", billingErr.message);
+    }
 
     return res.status(200).json({
       success: true,

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Calendar, Save, CheckCircle } from 'lucide-react';
-import { saveSchedule, getSchedule } from '../../api/scheduleApi';
+import { Clock, Calendar, Save, CheckCircle, Power } from 'lucide-react';
+import { saveSchedule, getSchedule, toggleStore } from '../../api/scheduleApi';
 
 const Schedule = () => {
   const [type, setType] = useState('TIME');
   const [currentSchedule, setCurrentSchedule] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
+  const [toggling, setToggling] = useState(false);
 
   const [form, setForm] = useState({
     startTime: '',
@@ -15,27 +17,47 @@ const Schedule = () => {
     reason: ''
   });
 
-  // this is for commiting purpose only
   useEffect(() => {
     const load = async () => {
       const data = await getSchedule();
       setCurrentSchedule(data);
+      if (typeof data?.isOpen === 'boolean') setIsOpen(data.isOpen);
     };
     load();
   }, []);
 
   const isLocked = currentSchedule?.isActive;
 
+  // Manual toggle – open/close immediately
+  const handleToggle = async () => {
+    try {
+      setToggling(true);
+      const res = await toggleStore(!isOpen);
+      setIsOpen(res.isOpen);
+      setCurrentSchedule((prev) => ({ ...prev, isOpen: res.isOpen, manualOverride: true }));
+    } catch {
+      // silent
+    } finally {
+      setToggling(false);
+    }
+  };
+
   const handleSave = async () => {
-    await saveSchedule({
-      type,
-      startTime: form.startTime,
-      endTime: form.endTime,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      reason: form.reason,
-      isActive: true
-    });
+    // Build UTC ISO strings from the form inputs
+    let openISO, closeISO;
+
+    if (type === 'TIME') {
+      // Use today's date + the chosen time
+      const today = new Date().toISOString().slice(0, 10);
+      openISO  = new Date(`${today}T${form.startTime}:00`).toISOString();
+      closeISO = new Date(`${today}T${form.endTime}:00`).toISOString();
+    } else {
+      // DATE mode – combine date + time
+      openISO  = new Date(`${form.startDate}T${form.startTime || '00:00'}:00`).toISOString();
+      closeISO = new Date(`${form.endDate}T${form.endTime || '23:59'}:00`).toISOString();
+    }
+
+    await saveSchedule({ openTime: openISO, closeTime: closeISO });
 
     setCurrentSchedule({
       type,
@@ -43,7 +65,6 @@ const Schedule = () => {
       isActive: true
     });
 
-    // 🔥 POPUP INSTEAD OF ALERT
     setShowPopup(true);
     setTimeout(() => setShowPopup(false), 2000);
   };
@@ -84,6 +105,29 @@ const Schedule = () => {
 
   </div>
 )}
+        {/* MANUAL TOGGLE */}
+        <div className="bg-white rounded-3xl p-5 shadow-md border border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="font-bold text-gray-900">Store Status</p>
+            <p className={`text-sm font-semibold mt-0.5 ${isOpen ? 'text-green-600' : 'text-red-500'}`}>
+              {isOpen ? '🟢 Open' : '🔴 Closed'}
+              {currentSchedule?.manualOverride && (
+                <span className="ml-2 text-xs text-gray-400 font-normal">(Manual override)</span>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={handleToggle}
+            disabled={toggling}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white transition-all ${
+              isOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+            } disabled:opacity-50`}
+          >
+            <Power className="w-4 h-4" />
+            {toggling ? 'Updating…' : isOpen ? 'Close Store' : 'Open Store'}
+          </button>
+        </div>
+
         {/* ACTIVE SCHEDULE */}
         {currentSchedule?.isActive && (
           <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 border border-yellow-300 p-5 rounded-2xl shadow-sm">
@@ -228,6 +272,7 @@ const Schedule = () => {
             onClick={async () => {
               await saveSchedule({ isActive: false });
               setCurrentSchedule({ isActive: false });
+              setIsOpen(true);
             }}
             className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white py-3 rounded-2xl font-bold shadow-md"
           >

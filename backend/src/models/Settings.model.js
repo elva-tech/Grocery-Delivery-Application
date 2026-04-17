@@ -28,6 +28,11 @@ const settingsSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    thresholdDistance: {
+      type: Number,
+      default: 10,
+      min: 0,
+    },
   },
   { timestamps: true }
 );
