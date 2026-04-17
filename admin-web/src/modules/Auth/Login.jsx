@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/apiService';
 
 const Login = () => {
-  const { login, resetPassword } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
