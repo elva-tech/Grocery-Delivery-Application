@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { authMiddleware } = require("../middleware/auth.middleware");
+const { resolveTenant } = require("../middleware/tenant.middleware");
 const {
   getPlans,
   getSubscription,
@@ -13,6 +14,8 @@ const {
   initiatePlanPayment,
   activatePlanNow,
 } = require("../controllers/billing.controller");
+
+router.use(resolveTenant);
 
 // All billing routes require authentication
 router.use(authMiddleware);

@@ -7,11 +7,8 @@ const {
 // GET /api/store/status  (PUBLIC – used by website & mobile)
 async function getStatus(req, res) {
   try {
-    // tenantId can come from: header (website/mobile), query param, or auth token (admin)
-    const tenantId =
-      req.headers["x-tenant-id"] ||
-      req.query.tenantId ||
-      (req.user && req.user.tenantId);
+    // tenantId is set by resolveTenant middleware
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
     const data = await getStoreStatus(tenantId);
     res.json(data);

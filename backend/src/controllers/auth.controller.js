@@ -31,8 +31,16 @@ const validatePhone = (phoneNumber) => {
 ================================ */
 
 const sendOtp = async (req, res) => {
-  
   try {
+    // tenantId is set by resolveTenant middleware
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant could not be identified. Check the request host or x-tenant-id header.",
+      });
+    }
+
     const { phoneNumber } = req.body;
 
     const phoneError = validatePhone(phoneNumber);
@@ -46,7 +54,7 @@ const sendOtp = async (req, res) => {
     const phone = String(phoneNumber).trim();
 
     // TEMP STATIC OTP (for testing)
-    console.log(`OTP for ${phone} is ${STATIC_OTP}`);
+    console.log(`[sendOtp] tenantId=${tenantId} phone=${phone} OTP=${STATIC_OTP}`);
 
     return res.status(200).json({
       success: true,
@@ -67,7 +75,16 @@ const sendOtp = async (req, res) => {
 ================================ */
 const verifyOtp = async (req, res) => {
   try {
-    const { phoneNumber, otp, name, mode } = req.body;
+    const { phoneNumber, otp, name } = req.body;
+
+    // tenantId is set by resolveTenant middleware — guard here as a safety net
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant could not be identified. Check the request host or x-tenant-id header.",
+      });
+    }
 
     // Phone validation
     const phoneError = validatePhone(phoneNumber);
@@ -94,24 +111,16 @@ const verifyOtp = async (req, res) => {
     }
 
     const phone = String(phoneNumber).trim();
-    const tenantId = "demo-tenant";
 
+    // Always scope the lookup to this tenant — same phone can exist in other tenants
     let user = await User.findOne({ tenantId, phoneNumber: phone });
 
-    // Handle signup vs login
-    if (mode === "signup") {
-      if (user) {
-        // User already exists, cannot signup with same phone
-        return res.status(400).json({
-          success: false,
-          message: "Phone number already registered. Please login instead.",
-        });
-      }
-      // Create new user during signup
+    if (!user) {
+      // First-time login for this phone on this tenant → auto-create CUSTOMER account
       if (!name || name.trim().length < 2) {
         return res.status(400).json({
           success: false,
-          message: "Please provide a valid name",
+          message: "Please provide your name to create an account",
         });
       }
       user = await User.create({
@@ -121,14 +130,9 @@ const verifyOtp = async (req, res) => {
         role: "CUSTOMER",
         isActive: true,
       });
+      console.log(`[verifyOtp] New CUSTOMER created — tenantId=${tenantId} phone=${phone}`);
     } else {
-      // Login mode
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "Phone number not registered. Please create an account first.",
-        });
-      }
+      console.log(`[verifyOtp] Existing user login — tenantId=${tenantId} role=${user.role} phone=${phone}`);
     }
 
     if (!user.isActive) {

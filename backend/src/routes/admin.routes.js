@@ -17,6 +17,9 @@ const {
 } = require("../controllers/product.controller");
 
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
+const { resolveTenant } = require("../middleware/tenant.middleware");
+
+router.use(resolveTenant);
 
 //////////////////////////////////////////////////////
 // ACTIVE ORDERS

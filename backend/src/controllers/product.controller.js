@@ -156,7 +156,8 @@ const escapeRegex = (str) =>
 const getAvailableProducts = async (req, res) => {
   try {
     const category = req.query?.category?.trim();
-    const tenantId = req.headers["x-tenant-id"]?.trim();
+    const tenantId = req.tenantId;
+    console.log("Tenant in controller:", tenantId);
 
     if (!tenantId) {
       return res.status(400).json({ message: "Tenant ID missing" });

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, EffectFade } from 'swiper/modules';
 import { getBanners } from '../../api/bannerApi';
-import { TENANT_ID } from '../../config';
+import { getTenantId } from '../../utils/getTenantId';
 import { resolveImageUrl } from '../../utils/resolveImageUrl';
 
 import 'swiper/css';
@@ -14,20 +14,7 @@ const PromoBanners = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getTenantId = () => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        if (payload.tenantId) return payload.tenantId;
-      } catch {
-        // ignore decode errors
-      }
-    }
-    return TENANT_ID;
-  };
-
-  // ✅ derive tenantId once
+  // derive tenantId from hostname
   const tenantId = getTenantId();
 
   useEffect(() => {

@@ -2,7 +2,10 @@ const Settings = require("../models/Settings.model");
 
 exports.getSettings = async (req, res) => {
   try {
-    const tenantId = req.headers["x-tenant-id"] || req.user?.tenantId || "default";
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ message: "Tenant context is missing" });
+    }
     let settings = await Settings.findOne({ tenantId });
 
     if (!settings) {
