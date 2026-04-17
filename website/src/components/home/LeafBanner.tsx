@@ -1,5 +1,3 @@
-import React from 'react';
-
 const LeafBanner = () => {
   return (
     <div className="relative bg-[#f0f9ff] rounded-[2.5rem] p-8 mb-12 flex flex-col md:flex-row items-center justify-between overflow-hidden border border-blue-50">

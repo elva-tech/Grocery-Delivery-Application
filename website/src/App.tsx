@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSelector } from 'react-redux';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
 import PromoBanners from './components/home/PromoBanners';
@@ -155,21 +155,6 @@ const App = () => {
       navigate('/', { replace: true });
     }
   }, [location.pathname, selectedAddress, items.length, navigate]);
-
-
-
-  // {12 HOUR FOMAT}
-  const formatTime = (time?: string) => {
-    if (!time) return "";
-
-    const [h, m] = time.split(":").map(Number);
-
-    const hour = h % 12 || 12;
-    const ampm = h >= 12 ? "PM" : "AM";
-
-    return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
-  };
-
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc] text-[#1e293b] font-sans">
 
@@ -195,36 +180,16 @@ const App = () => {
               {reason || "We are currently not accepting orders"}
             </p>
 
-            {/* TIME BASED */}
-            {storeStatus?.type === "TIME" && (
+            {storeStatus?.nextChange && (
               <div className="bg-red-50 border border-red-100 rounded-xl p-4">
                 <p className="text-sm font-semibold text-red-700">
-                  🕒 Closed Daily
+                  Next update
                 </p>
                 <p className="text-sm text-red-600 mt-1">
-                  {formatTime(storeStatus.startTime)} - {formatTime(storeStatus.endTime)}
+                  {storeStatus.nextChange}
                 </p>
               </div>
             )}
-
-            {/* DATE BASED */}
-           {storeStatus?.type === "DATE" && (
-  <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-    <p className="text-sm font-semibold text-red-700">
-      📅 Occasion Closure
-    </p>
-
-    <p className="text-sm text-red-600 mt-1">
-      {storeStatus.startDate} to {storeStatus.endDate}
-    </p>
-
-    {storeStatus.startTime && storeStatus.endTime && (
-      <p className="text-sm text-red-600 mt-1">
-        {formatTime(storeStatus.startTime)} - {formatTime(storeStatus.endTime)}
-      </p>
-    )}
-  </div>
-)}
 
             {/* Optional: Contact Info */}
             <p className="text-xs text-gray-500 mt-6">

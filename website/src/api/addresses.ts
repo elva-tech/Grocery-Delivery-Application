@@ -1,5 +1,3 @@
-// Using localStorage to simulate your React Native DB behavior
-let ADDRESS_DB: any[] = JSON.parse(localStorage.getItem('user_addresses') || '[]');
 const COUNTRY_CODE = "+91";
 
 export const getAddressFromCoords = async (lat: number, lng: number): Promise<string> => {
