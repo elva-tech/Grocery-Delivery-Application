@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Trash2, Upload, ImageIcon, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { apiService } from "../../services/apiService";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import resolveImageUrl from '../../utils/resolveImageUrl';
 
 const BannerManagement = () => {
   const [title, setTitle] = useState('');
@@ -14,6 +13,7 @@ const BannerManagement = () => {
   const [fieldError, setFieldError] = useState(''); // inline validation error
 
   const fileInputRef = useRef(null);
+  const previewUrlRef = useRef(null);
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -23,11 +23,14 @@ const BannerManagement = () => {
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+      const nextPreviewUrl = URL.createObjectURL(selectedFile);
+      previewUrlRef.current = nextPreviewUrl;
       setFile(selectedFile);
       setFieldError('');
-      const reader = new FileReader();
-      reader.onloadend = () => setPreview(reader.result);
-      reader.readAsDataURL(selectedFile);
+      setPreview(nextPreviewUrl);
     }
   };
 
@@ -42,6 +45,15 @@ const BannerManagement = () => {
 
   useEffect(() => {
     fetchBanners();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+    };
   }, []);
 
   const handleUpload = async () => {
@@ -63,13 +75,23 @@ const BannerManagement = () => {
     setUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("title", title.trim());
-      formData.append("image", file);
+      const uploadResponse = await apiService.uploadFile(file);
+      const imageUrl = uploadResponse?.url || uploadResponse?.data?.url;
 
-      await apiService.createBanner(formData);
+      if (!imageUrl) {
+        throw new Error("Image upload failed. Please try again.");
+      }
+
+      await apiService.createBanner({
+        title: title.trim(),
+        imageUrl
+      });
 
       setTitle("");
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
       setPreview(null);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -200,33 +222,41 @@ const BannerManagement = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {bannerList.map((b) => (
+              {bannerList.map((banner) => {
+                const imageSrc = resolveImageUrl(banner);
+                return (
                 <div
-                  key={b._id}
+                  key={banner._id}
                   className="bg-white p-4 rounded-[28px] border border-slate-100 flex gap-5 items-center group shadow-sm hover:shadow-md transition-all"
                 >
-                  <img
-                    src={`${API_BASE_URL}${b.image}`}
-                    className="w-32 h-20 rounded-2xl object-cover shadow-inner"
-                    alt={b.title}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
+                  {imageSrc ? (
+                    <img
+                      src={imageSrc}
+                      className="w-32 h-20 rounded-2xl object-cover shadow-inner"
+                      alt={banner.title}
+                    />
+                  ) : (
+                    <div className="w-32 h-20 rounded-2xl bg-slate-100 text-slate-400 text-xs font-bold flex items-center justify-center">
+                      No Image
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="font-black text-slate-800 text-lg uppercase leading-tight truncate">
-                      {b.title}
+                      {banner.title}
                     </p>
                     <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest truncate">
-                      ID: {b._id}
+                      ID: {banner._id}
                     </p>
                   </div>
                   <button
-                    onClick={() => handleDelete(b._id)}
+                    onClick={() => handleDelete(banner._id)}
                     className="mr-2 bg-red-50 text-red-500 p-4 rounded-2xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white shadow-sm flex-shrink-0"
                   >
                     <Trash2 size={20} />
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

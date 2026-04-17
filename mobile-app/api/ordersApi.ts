@@ -181,11 +181,12 @@ export const reportOrderIssueApi = async (
   reason: string,
   customerComment: string,
   token: string,
+  evidenceUrl: string,
 ) => {
   const res = await fetch(`${BASE}/api/returns/create`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ orderId, reason, customerComment }),
+    body: JSON.stringify({ orderId, reason, customerComment, evidenceUrl }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || 'Failed to submit report');

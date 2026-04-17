@@ -10,6 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { useGetCategoriesQuery, useGetProductsByCategoryQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
 import { showToast } from '@/utils/toast';
+import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 export default function CategoriesScreen() {
   const router = useRouter();
@@ -77,7 +78,7 @@ useEffect(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     dispatch(addToCart({
       ...product,
-      image: Array.isArray(product.image) ? product.image[0] : product.image
+      image: resolveProductImageUri(product) ?? undefined
     }));
     showToast('success', 'Added', `${product.name} added to basket`);
   };
@@ -105,6 +106,7 @@ useEffect(() => {
             renderItem={({ item }) => {
               const isActiveParent = activeParentId === item.id;
               const parentSubs = categories.filter(c => c.parentId === item.id);
+              const parentThumb = resolveProductImageUri(item);
 
               return (
                 <View>
@@ -127,7 +129,11 @@ useEffect(() => {
                       styles.categoryImageContainer,
                       isActiveParent && styles.categoryImageActive
                     ]}>
-                      <Image source={{ uri: item.image[0] }} style={styles.categoryImage} />
+                      {parentThumb ? (
+                        <Image source={{ uri: parentThumb }} style={styles.categoryImage} />
+                      ) : (
+                        <Ionicons name="image-outline" size={22} color="#94a3b8" />
+                      )}
                     </View>
                     <Text
                       style={[
@@ -143,6 +149,7 @@ useEffect(() => {
                   {/* -------- SUB CATEGORIES (REUSE PARENT STYLES) -------- */}
                   {isActiveParent && parentSubs.map(sub => {
                     const isActiveSub = activeSubCatId === sub.id;
+                    const subThumb = resolveProductImageUri(sub);
 
                     return (
                       <TouchableOpacity
@@ -157,7 +164,11 @@ useEffect(() => {
                           styles.categoryImageContainer,
                           isActiveSub && styles.categoryImageActive
                         ]}>
-                          <Image source={{ uri: sub.image[0] }} style={styles.categoryImage} />
+                          {subThumb ? (
+                            <Image source={{ uri: subThumb }} style={styles.categoryImage} />
+                          ) : (
+                            <Ionicons name="image-outline" size={22} color="#94a3b8" />
+                          )}
                         </View>
                         <Text
                           style={[
@@ -234,14 +245,22 @@ useEffect(() => {
                   </View>
                 ) : null
               }
-              renderItem={({ item }) => (
+              renderItem={({ item }) => {
+                const thumb = resolveProductImageUri(item);
+                return (
                 <TouchableOpacity
                   style={styles.productCard}
                   onPress={() =>
                     router.push({ pathname: '/product/[id]', params: { id: item.id } })
                   }
                 >
-                  <Image source={{ uri: item.image[0] }} style={styles.productImage} />
+                  {thumb ? (
+                    <Image source={{ uri: thumb }} style={styles.productImage} />
+                  ) : (
+                    <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                      <Ionicons name="image-outline" size={36} color="#cbd5e1" />
+                    </View>
+                  )}
                   <View style={styles.productInfo}>
                     <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
                     <Text style={styles.productUnit}>{item.unit}</Text>
@@ -259,7 +278,8 @@ useEffect(() => {
                     </View>
                   </View>
                 </TouchableOpacity>
-              )}
+                );
+              }}
             />
           ) : (
             <View style={styles.emptyContainer}>

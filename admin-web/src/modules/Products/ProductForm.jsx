@@ -10,6 +10,7 @@ import { X, Plus, ChevronDown } from 'lucide-react';
 import axios from 'axios';
 import { useAppState } from '../../context/AppStateContext';
 import { apiService } from '../../services/apiService';
+import resolveImageUrl from '../../utils/resolveImageUrl';
 
 // VALIDATION SCHEMA
 const ProductSchema = Yup.object().shape({
@@ -25,6 +26,18 @@ const ProductSchema = Yup.object().shape({
 });
 
 const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
+  const normalizeImageList = (imageValue) => {
+    if (Array.isArray(imageValue)) {
+      return imageValue
+        .filter((entry) => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    }
+
+    const resolved = resolveImageUrl({ image: imageValue });
+    return resolved ? [resolved] : [];
+  };
+
 
   const fileInputRef = useRef(null);
   const { categories } = useAppState();
@@ -45,7 +58,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState('');
   const [imagePreviews, setImagePreviews] = useState(
-    initialValues?.image || initialValues?.images || []
+    normalizeImageList(initialValues?.image ?? initialValues?.images)
   );
 
   useEffect(() => {
@@ -125,7 +138,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
             initialValues?.parentCategoryId ||
             (mainCategories[0]?.id || ''),
           subCategoryId: initialValues?.subCategoryId || '',
-          image: initialValues?.image || initialValues?.images || []
+          image: normalizeImageList(initialValues?.image ?? initialValues?.images)
         }}
 
         validationSchema={ProductSchema}

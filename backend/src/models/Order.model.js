@@ -23,6 +23,8 @@ const orderSchema = new mongoose.Schema(
         name: String,
         qty: Number,
         price: Number,
+        unit: { type: String, default: "pcs" },
+        imageUrl: { type: String, default: "" },
       },
     ],
 

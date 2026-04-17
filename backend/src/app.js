@@ -21,9 +21,6 @@ app.use("/api/webhooks", webhookRoutes);
 
 app.use(express.json());
 
-// ✅ Make uploads public
-app.use("/uploads", express.static("uploads"));
-
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   next();
