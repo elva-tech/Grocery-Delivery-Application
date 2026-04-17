@@ -1,10 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, ShoppingBag, ShieldCheck, 
   Leaf, ThermometerSnowflake, Plus, Minus, CheckCircle2,
-  Clock, Globe, Info, ChevronDown
 } from 'lucide-react';
 
 import { addToCart, removeFromCart } from '../store/slices/cartSlice';
@@ -18,7 +17,6 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [activeImg, setActiveImg] = useState(0);
-  const [showNutrients, setShowNutrients] = useState(false);
 
   const { data: allProducts = [] } = useGetProductsQuery();
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2, Star } from 'lucide-react';
 import type { RootState } from '../store/store';
@@ -6,7 +6,6 @@ import { getUserOrders, cancelOrderApi, rateOrderApi } from '../api/ordersApi';
 import { addToCart } from '../store/slices/cartSlice';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ReportIssueModal from './ReportIssueModal';
-import { MOCK_ORDERS } from '../api/mockdata';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
 import { resolveImageUrl } from '../utils/resolveImageUrl';
 
@@ -21,11 +20,11 @@ const STATUS_THEME: any = {
   REFUND_REJECTED: { color: 'text-red-700', bg: 'bg-red-100', label: 'Refund Rejected' },
 };
 
-const Orders = ({ openCart }) => {
+const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
-  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   
   // NEW: Fetch remote features
   const { data: settings } = useGetAppSettingsQuery();
