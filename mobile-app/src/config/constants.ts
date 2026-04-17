@@ -9,9 +9,9 @@
 
 export const API_BASE_URL = {
   // DEVELOPMENT: 'http://localhost:5000',
-  DEVELOPMENT: 'http://192.168.6.31:5000',
+  DEVELOPMENT: 'https://grocery-delivery-application-2kc4.onrender.com',
   STAGING: 'https://staging-api.egrocery.com',
-  PRODUCTION: 'https://api.egrocery.com',
+  PRODUCTION: 'https://grocery-delivery-application-2kc4.onrender.com',
 };
 
 export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;

@@ -274,7 +274,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                           setImagePreviews((prev) => [...prev, ...localPreviews]);
 
                           try {
-                            const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                            const baseURL = import.meta.env.VITE_API_URL || 'https://grocery-delivery-application-2kc4.onrender.com';
                             const token = localStorage.getItem('jwtToken');
                             const uploadedUrls = await Promise.all(
                               files.map(async (file) => {
