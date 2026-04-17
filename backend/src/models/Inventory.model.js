@@ -28,7 +28,12 @@ const inventorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Compound unique index for multi-tenant support
+// 🔍 Indexes
+// Compound unique index for multi-tenant support (one inventory per product per tenant)
 inventorySchema.index({ tenantId: 1, productId: 1 }, { unique: true });
+// Find low-stock items for reordering
+inventorySchema.index({ tenantId: 1, availableQty: 1 });
+// Find items below threshold for alerts
+inventorySchema.index({ tenantId: 1, availableQty: 1, thresholdQty: 1 });
 
 module.exports = mongoose.model("Inventory", inventorySchema);

@@ -10,11 +10,12 @@ import { Image } from 'expo-image';
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCart, removeFromCart } from '@/store/slices/cartSlice';
 import { RootState } from '@/store/store';
-import { MOCK_PRODUCTS } from '@/api/mockData';
+import { useGetProductsQuery } from '@/api/apiSlice';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { showToast } from '@/utils/toast';
+import { resolveProductImageGallery, resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 const { width } = Dimensions.get('window');
 const BRAND_BLUE = '#4b6f9e';
@@ -27,7 +28,8 @@ export default function ProductDetailScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Data Fetching
-  const product = MOCK_PRODUCTS.find(p => p.id === id);
+  const { data: allProducts } = useGetProductsQuery();
+  const product = allProducts?.find(p => p.id === id);
 
   // FIX: Explicitly checking if THIS specific ID is in the cart
   const cartItem = useSelector((state: RootState) =>
@@ -57,11 +59,12 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const images = Array.isArray(product.image) ? product.image : [product.image];
+  const images = resolveProductImageGallery(product);
+  const primaryImage = resolveProductImageUri(product);
 
   const handleAddToCart = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    dispatch(addToCart({ ...product, image: images[0] }));
+    dispatch(addToCart({ ...product, image: primaryImage ?? undefined }));
     showToast('success', 'Added!', `${product.name} added to basket`);
   };
 
@@ -101,16 +104,24 @@ export default function ProductDetailScreen() {
               onScroll={handleScroll}
               scrollEventThrottle={16}
             >
-              {images.map((img, index) => (
-                <View key={index} style={styles.imageWrapper}>
-                  <Image
-                    source={{ uri: img }}
-                    style={styles.mainImage}
-                    contentFit="contain" // Fills the container entirely
-                    transition={300}
-                  />
+              {images.length > 0 ? (
+                images.map((img, index) => (
+                  <View key={index} style={styles.imageWrapper}>
+                    <Image
+                      source={{ uri: img }}
+                      style={styles.mainImage}
+                      contentFit="contain" // Fills the container entirely
+                      transition={300}
+                    />
+                  </View>
+                ))
+              ) : (
+                <View style={styles.imageWrapper}>
+                  <View style={[styles.mainImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                    <Ionicons name="image-outline" size={64} color="#cbd5e1" />
+                  </View>
                 </View>
-              ))}
+              )}
             </ScrollView>
 
             {images.length > 1 && (

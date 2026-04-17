@@ -5,16 +5,56 @@ const {
   getAllOrdersForAdmin,
   updateOrderStatus,
   getUsers,
-  blockOrUnblockUser
+  blockOrUnblockUser,
+  getActiveOrders,
+  getRevenue,
+  getPendingOrders
 } = require("../controllers/admin.controller");
 
+const {
+  deleteProductFromAdmin,
+  getInventory
+} = require("../controllers/product.controller");
+
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
+
+//////////////////////////////////////////////////////
+// ACTIVE ORDERS
+//////////////////////////////////////////////////////
+
+router.get(
+  "/active-orders",
+  authMiddleware,
+  adminOnly,
+  getActiveOrders
+);
+
+//////////////////////////////////////////////////////
+// ADMIN DASHBOARD - REVENUE
+//////////////////////////////////////////////////////
+
+router.get(
+  "/revenue",
+  authMiddleware,
+  adminOnly,
+  getRevenue
+);
+
+//////////////////////////////////////////////////////
+// ADMIN DASHBOARD - PENDING ORDERS
+//////////////////////////////////////////////////////
+
+router.get(
+  "/pending-orders",
+  authMiddleware,
+  adminOnly,
+  getPendingOrders
+);
 
 //////////////////////////////////////////////////////
 // GET ALL ORDERS
 //////////////////////////////////////////////////////
 
-// GET /api/admin/orders
 router.get(
   "/orders",
   authMiddleware,
@@ -26,7 +66,6 @@ router.get(
 // UPDATE ORDER STATUS
 //////////////////////////////////////////////////////
 
-// PUT /api/admin/orders/:id/status
 router.put(
   "/orders/:id/status",
   authMiddleware,
@@ -38,7 +77,6 @@ router.put(
 // LIST USERS
 //////////////////////////////////////////////////////
 
-// GET /api/admin/users
 router.get(
   "/users",
   authMiddleware,
@@ -50,12 +88,29 @@ router.get(
 // BLOCK / UNBLOCK USER
 //////////////////////////////////////////////////////
 
-// PUT /api/admin/users/:id/block
 router.put(
   "/users/:id/block",
   authMiddleware,
   adminOnly,
   blockOrUnblockUser
+);
+
+//////////////////////////////////////////////////////
+// DELETE PRODUCT (ADMIN)
+//////////////////////////////////////////////////////
+
+router.delete(
+  "/products/:id",
+  authMiddleware,
+  adminOnly,
+  deleteProductFromAdmin
+);
+
+router.get(
+  "/inventory",
+  authMiddleware,
+  adminOnly,
+  getInventory
 );
 
 module.exports = router;

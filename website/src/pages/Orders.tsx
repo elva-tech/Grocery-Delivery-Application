@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2, Star } from 'lucide-react';
 import type { RootState } from '../store/store';
-import { getUserOrders, cancelOrderApi } from '../api/ordersApi';
+import { getUserOrders, cancelOrderApi, rateOrderApi } from '../api/ordersApi';
 import { addToCart } from '../store/slices/cartSlice';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ReportIssueModal from './ReportIssueModal';
-import { MOCK_ORDERS } from '../api/mockdata';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
+import { resolveImageUrl } from '../utils/resolveImageUrl';
 
 const STATUS_THEME: any = {
   PLACED: { color: 'text-slate-500', bg: 'bg-slate-50', label: 'Order Placed' },
@@ -20,11 +20,11 @@ const STATUS_THEME: any = {
   REFUND_REJECTED: { color: 'text-red-700', bg: 'bg-red-100', label: 'Refund Rejected' },
 };
 
-const Orders = () => {
+const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
-  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   
   // NEW: Fetch remote features
   const { data: settings } = useGetAppSettingsQuery();
@@ -35,6 +35,14 @@ const Orders = () => {
   const [showSuccess, setShowSuccess] = useState(location.state?.fromCheckout || false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
+  // Rating state
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingOrderId, setRatingOrderId] = useState<string | null>(null);
+  const [starValue, setStarValue] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingError, setRatingError] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -48,42 +56,97 @@ const Orders = () => {
   }, [isAuthenticated]);
 
 const loadOrders = async () => {
+  try {
     setLoading(true);
-    const apiData = await getUserOrders(user?.id || 'user-123');
-    const localIds = new Set(apiData.map((o: any) => o.id));
-    const uniqueMocks = MOCK_ORDERS.filter(mock => !localIds.has(mock.id));
-    
-    const combinedData = [...apiData, ...uniqueMocks].sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
 
-    setOrders(combinedData);
-    
-    if (selectedOrder) {
-      const updatedSelected = combinedData.find((o: any) => o.id === selectedOrder.id);
-      if (updatedSelected) setSelectedOrder(updatedSelected);
-    } else if (location.state?.fromCheckout && combinedData.length > 0) {
-      setSelectedOrder(combinedData[0]);
+    const apiData = await getUserOrders();
+
+    if (!apiData || !Array.isArray(apiData)) {
+      throw new Error("Invalid order data");
     }
-    
+
+    setOrders(apiData);
+
+    if (selectedOrder) {
+      const updatedSelected = apiData.find((o: any) => o.id === selectedOrder.id);
+      if (updatedSelected) setSelectedOrder(updatedSelected);
+    } else if (location.state?.fromCheckout && apiData.length > 0) {
+      setSelectedOrder(apiData[0]);
+    }
+
+  } catch (error) {
+    console.error("Failed to load orders:", error);
+
+    // ✅ SHOW USER ERROR
+    alert("Failed to load orders. Please try again.");
+
+    setOrders([]); // safe fallback
+  } finally {
     setLoading(false);
-  };
+  }
+};
 
-  const handleReorder = (items: any[]) => {
-    items.forEach(item => dispatch(addToCart(item)));
-    navigate('/cart');
-  };
+ const handleReorder = (items: any[]) => {
+  items.forEach(item => {
+    dispatch(addToCart({
+      id: item.productId,          // ✅ FIX (cart id)
+      productId: item.productId,   // ✅ IMPORTANT (backend use)
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      image: resolveImageUrl(item),
+      imageUrl: item.imageUrl ?? item.image,
+    }));
+  });
 
-  const handleCancelOrder = async () => {
-    if (!selectedOrder) return;
-    await cancelOrderApi(selectedOrder.id);
-    await loadOrders();
-    setIsCancelModalOpen(false);
-  };
+  openCart();
+};
 
+ const handleCancelOrder = async () => {
+  if (!selectedOrder) return;
+
+  const res = await cancelOrderApi(selectedOrder.id);
+
+  if (!res.success) {
+    alert(res.message || "Cancel failed");
+    return;
+  }
+
+  alert("Order cancelled successfully");
+
+  await loadOrders();        // ✅ reload
+  setIsCancelModalOpen(false); // ✅ close modal
+};
   const handleReportSuccess = async () => {
     await loadOrders();
     setIsReportModalOpen(false);
+  };
+
+  const openRatingModal = (orderId: string) => {
+    setRatingOrderId(orderId);
+    setStarValue(0);
+    setRatingComment('');
+    setRatingError('');
+    setShowRatingModal(true);
+  };
+
+  const submitRating = async () => {
+    if (starValue === 0) { setRatingError('Please select a star rating.'); return; }
+    setIsSubmittingRating(true);
+    setRatingError('');
+    try {
+      await rateOrderApi(ratingOrderId!, starValue, ratingComment);
+      setShowRatingModal(false);
+      await loadOrders();
+      // Update selected panel if it was this order
+      setSelectedOrder((prev: any) =>
+        prev?.id === ratingOrderId ? { ...prev, rating: { value: starValue, comment: ratingComment, createdAt: new Date().toISOString() } } : prev
+      );
+    } catch (err: any) {
+      setRatingError(err?.response?.data?.message || err?.message || 'Failed to submit rating.');
+    } finally {
+      setIsSubmittingRating(false);
+    }
   };
 
   const sections = [
@@ -116,8 +179,8 @@ const loadOrders = async () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-5 space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+        <div className="md:col-span-5 space-y-8">
           <h1 className="text-3xl font-black text-slate-900 mb-6 px-2 italic uppercase tracking-tighter">Order History.</h1>
           
           {sections.map((section) => section.data.length > 0 && (
@@ -146,15 +209,28 @@ const loadOrders = async () => {
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{order.items.length} Items</p>
                     <p className="font-black text-slate-900">₹{order.totalAmount}</p>
                   </div>
+                  {/* Inline rating badge on card */}
+                  {order.rating?.value && (
+                    <div className="mt-3 flex items-center gap-1.5">
+                      {[1,2,3,4,5].map(s => (
+                        <Star key={s} size={12}
+                          className={s <= order.rating.value ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}
+                        />
+                      ))}
+                      {order.rating.comment && (
+                        <span className="text-[10px] text-slate-400 font-semibold italic truncate max-w-[140px]">{order.rating.comment}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           ))}
         </div>
 
-        <div className="lg:col-span-7">
+        <div className="md:col-span-7">
           {selectedOrder ? (
-            <div className="bg-white rounded-[3rem] p-8 sticky top-24 border border-slate-100 shadow-2xl animate-in fade-in slide-in-from-right-4">
+            <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-2xl h-fit animate-in fade-in slide-in-from-right-4">
               <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-50">
                 <div>
                   <h2 className="text-xl font-black text-slate-900">Summary</h2>
@@ -169,7 +245,11 @@ const loadOrders = async () => {
               <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {selectedOrder.items.map((item: any, idx: number) => (
                   <div key={idx} className="flex items-center gap-4 hover:bg-slate-50 p-2 rounded-2xl transition-colors">
-                    <img src={item.image} className="w-14 h-14 rounded-xl object-cover" alt="" />
+                    {resolveImageUrl(item) ? (
+                      <img src={resolveImageUrl(item)} className="w-14 h-14 rounded-xl object-cover" alt={item.name} />
+                    ) : (
+                      <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-[8px] font-black uppercase tracking-widest text-slate-300">No Image</div>
+                    )}
                     <div className="flex-1">
                       <h4 className="font-black text-slate-800 text-sm leading-tight">{item.name}</h4>
                       <p className="text-[10px] font-bold text-slate-400 uppercase">{item.quantity} x {item.unit}</p>
@@ -192,6 +272,28 @@ const loadOrders = async () => {
                         <RotateCcw size={14} /> Reorder
                       </button>
                       
+
+                      {/* RATE ORDER BUTTON */}
+                      {!selectedOrder.rating?.value ? (
+                        <button
+                          onClick={() => openRatingModal(selectedOrder.id)}
+                          className="flex items-center justify-center gap-2 border-2 border-amber-200 text-amber-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-50 transition-all"
+                        >
+                          <Star size={14} /> Rate Order
+                        </button>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center border-2 border-amber-100 bg-amber-50 py-3 rounded-2xl gap-1">
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map(s => (
+                              <Star key={s} size={14} className={s <= selectedOrder.rating.value ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'} />
+                            ))}
+                          </div>
+                          {selectedOrder.rating.comment && (
+                            <p className="text-[10px] text-amber-700 font-semibold italic px-3 text-center truncate max-w-full">{selectedOrder.rating.comment}</p>
+                          )}
+                        </div>
+                      )}
+
                       {/* REPORT ISSUE TOGGLE */}
                       {settings?.allowReportIssue && (
                         <button onClick={() => setIsReportModalOpen(true)} className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all">
@@ -300,6 +402,69 @@ const loadOrders = async () => {
         order={selectedOrder}
         onSuccess={handleReportSuccess}
       />
+
+      {/* RATING MODAL */}
+      {showRatingModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Rate Your Order</h3>
+              <button onClick={() => setShowRatingModal(false)} className="p-2 rounded-full hover:bg-slate-100 text-slate-400">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-slate-400 font-bold text-sm mb-6 leading-relaxed">
+              How was your experience? Your feedback helps us improve.
+            </p>
+
+            {/* Stars */}
+            <div className="flex justify-center gap-3 mb-6">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => { setStarValue(s); setRatingError(''); }}
+                  className="transition-transform hover:scale-110"
+                >
+                  <Star
+                    size={40}
+                    className={s <= starValue ? 'fill-amber-400 text-amber-400' : 'fill-gray-100 text-gray-300'}
+                  />
+                </button>
+              ))}
+            </div>
+
+            {/* Comment */}
+            <textarea
+              value={ratingComment}
+              onChange={(e) => setRatingComment(e.target.value)}
+              placeholder="Any comments? (optional)"
+              maxLength={300}
+              rows={3}
+              className="w-full border-2 border-slate-100 rounded-2xl p-4 text-sm font-semibold text-slate-700 placeholder:text-slate-300 outline-none focus:border-amber-300 resize-none mb-2"
+            />
+
+            {ratingError && (
+              <p className="text-red-500 text-xs font-bold mb-3">{ratingError}</p>
+            )}
+
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => setShowRatingModal(false)}
+                className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                onClick={submitRating}
+                disabled={isSubmittingRating}
+                className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-amber-400 text-white hover:bg-amber-500 shadow-lg shadow-amber-100 transition-all disabled:opacity-60"
+              >
+                {isSubmittingRating ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

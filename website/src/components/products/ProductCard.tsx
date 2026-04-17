@@ -1,9 +1,10 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Minus } from 'lucide-react';
 import { addToCart, removeFromCart } from '../../store/slices/cartSlice';
 import type { RootState } from '../../store/store';
+import { resolveImageUrl } from '../../utils/resolveImageUrl';
 
 const ProductCard = memo(({ product }: { product: any }) => {
   const dispatch = useDispatch();
@@ -14,7 +15,7 @@ const ProductCard = memo(({ product }: { product: any }) => {
   );
   const quantity = cartItem?.quantity || 0;
 
-  const imageSrc = Array.isArray(product.image) ? product.image[0] : product.image;
+  const imageSrc = resolveImageUrl(product);
 
   return (
     <div
@@ -23,12 +24,16 @@ const ProductCard = memo(({ product }: { product: any }) => {
     >
       {/* IMAGE CONTAINER */}
       <div className="aspect-square w-full bg-[#f8fafc] rounded-xl sm:rounded-2xl p-2 mb-2 sm:mb-3 flex items-center justify-center overflow-hidden">
-        <img
-          src={imageSrc}
-          loading="lazy"
-          className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform duration-500"
-          alt={product.name}
-        />
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            loading="lazy"
+            className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform duration-500"
+            alt={product.name}
+          />
+        ) : (
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">No Image</span>
+        )}
       </div>
 
       {/* PRODUCT INFO */}

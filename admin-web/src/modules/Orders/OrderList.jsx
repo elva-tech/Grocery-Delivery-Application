@@ -1,24 +1,96 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import DataTable from '../../components/shared/DataTable';
 import {
   Bike, CheckCircle, PackageCheck, Truck, X, User, CheckCircle2,
   Eye, Phone, Smartphone, Hash, MapPin, MapPinned, ShoppingBag,
-  XCircle, AlertTriangle, UserPlus, AlertCircle, Image as ImageIcon
+  XCircle, AlertTriangle, UserPlus, AlertCircle, Image as ImageIcon,
+  Star, MessageSquare, Filter, Search, Calendar
 } from 'lucide-react';
+
+/** Renders filled/empty star row */
+const StarRating = ({ value }) => (
+  <span className="flex gap-0.5">
+    {[1,2,3,4,5].map(s => (
+      <Star key={s} size={13}
+        className={s <= value ? 'fill-amber-400 text-amber-400' : 'text-gray-200 fill-gray-200'}
+      />
+    ))}
+  </span>
+);
 
 const OrderList = () => {
   const { orders, riders, updateOrderStatus, assignRider } = useAppState();
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
   const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [assigningLoading, setAssigningLoading] = useState(false);
+  const [ratingFilter, setRatingFilter] = useState('ALL'); // ALL | RATED | LOW
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const filteredOrders = useMemo(() => {
+    if (!orders) return [];
+    let result = orders;
+
+    // Rating filter
+    if (ratingFilter === 'RATED') result = result.filter(o => o.rating?.value != null);
+    if (ratingFilter === 'LOW')   result = result.filter(o => o.rating?.value != null && o.rating.value <= 2);
+
+    // Search by order ID or customer name
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(o => {
+        const id   = (o.id || o._id || '').toLowerCase();
+        const name = (o.customerName || o.customer || '').toLowerCase();
+        return id.includes(q) || name.includes(q);
+      });
+    }
+
+    // Date range filter
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      result = result.filter(o => o.createdAt && new Date(o.createdAt) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter(o => o.createdAt && new Date(o.createdAt) <= to);
+    }
+
+    return result;
+  }, [orders, ratingFilter, searchQuery, dateFrom, dateTo]);
+
+  const hasActiveFilters = searchQuery.trim() || dateFrom || dateTo || ratingFilter !== 'ALL';
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setDateFrom('');
+    setDateTo('');
+    setRatingFilter('ALL');
+  };
 
   const availableRiders = riders ? riders.filter(r => r.status === 'Online') : [];
 
-  const handleSelectRider = (riderName) => {
-    assignRider(selectedOrderId, riderName);
-    updateOrderStatus(selectedOrderId, 'OUT_FOR_DELIVERY');
-    setSelectedOrderId(null);
+  const handleSelectRider = async (riderId, riderName) => {
+    setAssigningLoading(true);
+    try {
+      // Step 1: Assign the rider to the order
+      await assignRider(selectedOrderId, riderId, riderName);
+      
+      // Step 2: Update order status to OUT_FOR_DELIVERY
+      await updateOrderStatus(selectedOrderId, 'OUT_FOR_DELIVERY');
+      
+    } catch (error) {
+      console.error("Failed to assign rider:", error);
+      alert('Failed to assign rider. Please try again.');
+    } finally {
+      // Close modal regardless of success or error
+      setSelectedOrderId(null);
+      setAssigningLoading(false);
+    }
   };
 
   const confirmCancellation = () => {
@@ -34,6 +106,20 @@ const OrderList = () => {
       render: (_, row) => (
         <span className="text-xs truncate max-w-[200px] block">{row.address?.full || 'No Address'}</span>
       )
+    },
+    {
+      header: 'Rating',
+      render: (_, row) => {
+        if (!row.rating?.value) return <span className="text-[10px] text-gray-400 font-semibold">No rating</span>;
+        return (
+          <div className="space-y-0.5">
+            <StarRating value={row.rating.value} />
+            {row.rating.comment && (
+              <p className="text-[10px] text-slate-500 italic max-w-[140px] truncate">{row.rating.comment}</p>
+            )}
+          </div>
+        );
+      }
     },
     {
       header: 'Status',
@@ -75,11 +161,101 @@ const OrderList = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-black text-[#1A4D2E]">Order Management</h1>
+      {/* Header */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-black text-[#1A4D2E]">Order Management</h1>
+            <p className="text-sm text-slate-400 font-medium mt-0.5">
+              {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}
+              {hasActiveFilters && <span className="text-emerald-600"> (filtered)</span>}
+            </p>
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-colors"
+            >
+              <X size={13} /> Clear Filters
+            </button>
+          )}
+        </div>
+
+        {/* Filter Toolbar */}
+        <div className="bg-white border border-slate-100 rounded-[20px] p-4 shadow-sm flex flex-wrap gap-3 items-center">
+
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search by Order ID or Customer name…"
+              className="w-full pl-9 pr-9 py-2.5 bg-slate-50 rounded-xl text-sm font-medium placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-emerald-200 transition-all"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Date From */}
+          <div className="relative">
+            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={e => setDateFrom(e.target.value)}
+              className="pl-8 pr-3 py-2.5 bg-slate-50 rounded-xl text-sm font-medium text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200 transition-all cursor-pointer"
+              title="From date"
+            />
+          </div>
+
+          <span className="text-slate-300 font-bold text-sm hidden sm:block">→</span>
+
+          {/* Date To */}
+          <div className="relative">
+            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={e => setDateTo(e.target.value)}
+              className="pl-8 pr-3 py-2.5 bg-slate-50 rounded-xl text-sm font-medium text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200 transition-all cursor-pointer"
+              title="To date"
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="w-px h-6 bg-slate-100 hidden sm:block" />
+
+          {/* Rating filter */}
+          <div className="flex items-center gap-1.5">
+            <Filter size={13} className="text-slate-400" />
+            {['ALL','RATED','LOW'].map(f => (
+              <button
+                key={f}
+                onClick={() => setRatingFilter(f)}
+                className={`px-3 py-1.5 text-[11px] font-black rounded-lg transition-all ${
+                  ratingFilter === f
+                    ? 'bg-[#1A4D2E] text-white'
+                    : 'bg-gray-100 text-slate-600 hover:bg-gray-200'
+                }`}
+              >
+                {f === 'ALL' ? 'All' : f === 'RATED' ? 'Rated' : '⚠ Low (≤2)'}
+              </button>
+            ))}
+          </div>
+
+        </div>
+      </div>
 
     <DataTable
         columns={columns}
-        data={orders}
+        data={filteredOrders}
         actions={(row) => {
           const status = row.status?.toUpperCase();
           return (
@@ -100,15 +276,25 @@ const OrderList = () => {
               )}
 
               {status === 'CONFIRMED' && (
-                <button onClick={() => setSelectedOrderId(row.id)} className="flex items-center gap-1 bg-[#1A4D2E] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:scale-105 transition-all shadow-sm">
-                  <UserPlus size={14} /> Assign Rider
-                </button>
+                <>
+                  <button onClick={() => setSelectedOrderId(row.id)} className="flex items-center gap-1 bg-[#1A4D2E] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:scale-105 transition-all shadow-sm">
+                    <UserPlus size={14} /> Assign Rider
+                  </button>
+                  <button onClick={() => setCancellingOrder(row)} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-all border border-red-100 shadow-sm">
+                    <X size={14} /> Cancel
+                  </button>
+                </>
               )}
 
               {status === 'OUT_FOR_DELIVERY' && (
-                <button onClick={() => updateOrderStatus(row.id, 'DELIVERED')} className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-all border border-emerald-200 shadow-sm">
-                  <CheckCircle2 size={14} /> Mark Delivered
-                </button>
+                <>
+                  <button onClick={() => updateOrderStatus(row.id, 'DELIVERED')} className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-all border border-emerald-200 shadow-sm">
+                    <CheckCircle2 size={14} /> Mark Delivered
+                  </button>
+                  <button onClick={() => setCancellingOrder(row)} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-all border border-red-100 shadow-sm">
+                    <X size={14} /> Cancel
+                  </button>
+                </>
               )}
 
               {/* NEW FEATURE: Show Paid badge after delivery */}
@@ -178,6 +364,25 @@ const OrderList = () => {
                   <p className="font-black text-emerald-600 text-2xl">₹{viewingOrder.totalAmount || viewingOrder.total}</p>
                 </div>
               </div>
+
+              {/* Rating section */}
+              {viewingOrder.rating?.value && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Star size={14} className="fill-amber-400 text-amber-400" />
+                    <span className="text-[10px] uppercase font-black text-amber-700 tracking-widest">Customer Rating</span>
+                  </div>
+                  <StarRating value={viewingOrder.rating.value} />
+                  {viewingOrder.rating.comment && (
+                    <p className="text-sm text-slate-600 italic">"{viewingOrder.rating.comment}"</p>
+                  )}
+                  {viewingOrder.rating.createdAt && (
+                    <p className="text-[10px] text-slate-400">
+                      {new Date(viewingOrder.rating.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -203,21 +408,40 @@ const OrderList = () => {
           <div className="bg-white rounded-[28px] w-full max-w-sm shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center">
               <h2 className="font-black text-[#1A4D2E]">Assign Partner</h2>
-              <button onClick={() => setSelectedOrderId(null)} className="text-gray-400"><X size={20} /></button>
+              <button onClick={() => setSelectedOrderId(null)} disabled={assigningLoading} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
             </div>
-            <div className="p-4 space-y-2">
-              {availableRiders.map((rider) => (
-                <div key={rider.id} onClick={() => handleSelectRider(rider.name)} className="flex items-center justify-between p-4 rounded-2xl hover:bg-emerald-50 cursor-pointer transition-all border border-transparent hover:border-emerald-500">
-                  <div className="flex items-center gap-3">
-                    <User size={20} className="text-gray-400" />
-                    <div>
-                      <span className="font-bold text-slate-700 block">{rider.name}</span>
-                      <span className="text-[10px] font-bold text-gray-400">{rider.phone}</span>
-                    </div>
-                  </div>
-                  <CheckCircle size={16} className="text-emerald-500" />
+            <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
+              {availableRiders.length === 0 ? (
+                <div className="p-4 text-center text-gray-500">
+                  <p className="font-medium">No available riders</p>
+                  <p className="text-xs">Please ensure riders are registered and online</p>
                 </div>
-              ))}
+              ) : (
+                availableRiders.map((rider) => (
+                  <div 
+                    key={rider.id} 
+                    onClick={() => !assigningLoading && handleSelectRider(rider.id, rider.name)} 
+                    className={`flex items-center justify-between p-4 rounded-2xl transition-all border border-transparent ${
+                      assigningLoading 
+                        ? 'cursor-not-allowed opacity-50' 
+                        : 'hover:bg-emerald-50 cursor-pointer hover:border-emerald-500'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <User size={20} className="text-gray-400" />
+                      <div>
+                        <span className="font-bold text-slate-700 block">{rider.name}</span>
+                        <span className="text-[10px] font-bold text-gray-400">{rider.phone}</span>
+                      </div>
+                    </div>
+                    {assigningLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent"></div>
+                    ) : (
+                      <CheckCircle size={16} className="text-emerald-500" />
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

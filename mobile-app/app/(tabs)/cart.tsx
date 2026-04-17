@@ -3,13 +3,14 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Platform
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
 import { addToCart, removeFromCart } from '@/store/slices/cartSlice';
-import { getCartCalculation } from '@/api/mockData';
+import { getCartCalculation } from '@/api/cartApi';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 const BRAND_BLUE = '#4b6f9e';
 const SUCCESS_GREEN = '#10b981';
@@ -107,9 +108,17 @@ export default function CartScreen() {
           data={items}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
+          renderItem={({ item }) => {
+            const thumb = resolveProductImageUri(item);
+            return (
             <View style={styles.cartItem}>
-              <Image source={{ uri: item.image }} style={styles.itemImage} contentFit="cover" />
+              {thumb ? (
+                <Image source={{ uri: thumb }} style={styles.itemImage} contentFit="cover" />
+              ) : (
+                <View style={[styles.itemImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="image-outline" size={28} color="#94a3b8" />
+                </View>
+              )}
               <View style={styles.itemDetails}>
                 <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.itemUnit}>{item.unit}</Text>
@@ -125,7 +134,8 @@ export default function CartScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          )}
+            );
+          }}
           ListFooterComponent={
             <View style={styles.footer}>
               {/* CELEBRATION CARD */}

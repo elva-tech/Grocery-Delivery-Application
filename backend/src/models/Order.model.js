@@ -23,12 +23,34 @@ const orderSchema = new mongoose.Schema(
         name: String,
         qty: Number,
         price: Number,
+        unit: { type: String, default: "pcs" },
+        imageUrl: { type: String, default: "" },
       },
     ],
 
     totalAmount: {
       type: Number,
       required: true,
+    },
+
+    deliveryCharge: {
+      type: Number,
+      default: 0,
+    },
+
+    discount: {
+      type: Number,
+      default: 0,
+    },
+
+    couponCode: {
+      type: String,
+      default: null,
+    },
+
+    couponDiscount: {
+      type: Number,
+      default: 0,
     },
 
     paymentMode: {
@@ -41,6 +63,22 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: ["PENDING", "PAID", "FAILED"],
       default: "PENDING",
+    },
+
+    razorpayOrderId: {
+      type: String,
+      default: null,
+    },
+
+    razorpayPaymentId: {
+      type: String,
+      default: null,
+    },
+
+    refundStatus: {
+      type: String,
+      enum: ["NONE", "PARTIAL", "FULL"],
+      default: "NONE",
     },
 
     orderStatus: {
@@ -61,8 +99,67 @@ const orderSchema = new mongoose.Schema(
       lat: Number,
       lng: Number,
     },
+
+    // Rider assignment fields
+    riderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Rider",
+      default: null,
+    },
+
+    riderName: {
+      type: String,
+      default: null,
+    },
+
+    riderAssignedAt: {
+      type: Date,
+      default: null,
+    },
+
+    riderPickupTime: {
+      type: Date,
+      default: null,
+    },
+
+    riderDeliveryTime: {
+      type: Date,
+      default: null,
+    },
+
+    riderRating: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 5,
+    },
+
+    riderNotes: {
+      type: String,
+      default: "",
+    },
+
+    rating: {
+      value: { type: Number, min: 1, max: 5, default: null },
+      comment: { type: String, default: "" },
+      createdAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );
+
+// 🔍 Indexes
+// Rider's active orders - for delivery tracking
+orderSchema.index({ tenantId: 1, riderId: 1, orderStatus: 1 });
+// User's orders - fetch customer's order history
+orderSchema.index({ tenantId: 1, userId: 1, createdAt: -1 });
+// Filter orders by status with date sorting - admin dashboard
+orderSchema.index({ tenantId: 1, orderStatus: 1, createdAt: -1 });
+// Unpaid orders - for payment reminders
+orderSchema.index({ tenantId: 1, paymentStatus: 1 });
+// Pending confirmation orders - fulfillment queue
+orderSchema.index({ tenantId: 1, orderStatus: 1, paymentStatus: 1 });
+// Recent orders sorted by date - for listing
+orderSchema.index({ tenantId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../../store/store';
 import { addToCart, removeFromCart } from '../../store/slices/cartSlice';
 import { getCartCalculation } from '../../api/ordersApi';
 import { X, ShoppingBasket, Trash2, Zap, Gift, Bike } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { resolveImageUrl } from '../../utils/resolveImageUrl';
 
 const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
   const { items } = useSelector((state: RootState) => state.cart);
@@ -65,7 +66,11 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
                 {items.map((item) => (
                   <div key={item.id} className="bg-white p-4 rounded-[2rem] border border-slate-50 flex items-center gap-4">
                     <div className="w-16 h-16 bg-slate-50 rounded-2xl p-2 flex-shrink-0">
-                      <img src={Array.isArray(item.image) ? item.image[0] : item.image} className="w-full h-full object-contain" alt={item.name} />
+                      {resolveImageUrl(item) ? (
+                        <img src={resolveImageUrl(item)} className="w-full h-full object-contain" alt={item.name} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase tracking-widest text-slate-300">No Image</div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xs font-black text-slate-800 truncate">{item.name}</h4>

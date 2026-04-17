@@ -4,15 +4,16 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useDispatch } from "react-redux";
 import { setCredentials } from "@/store/slices/authSlice";
 import { Colors, Fonts } from "@/theme/theme";
+import { sendOtp, verifyOtp } from "@/api/authApi";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from "lottie-react-native";
-import { requestOtp } from "@/api/addresses"; // Import API
 
 export default function OTP() {
   const router = useRouter();
   const dispatch = useDispatch();
   const { phone, name } = useLocalSearchParams();
 
-  const [otp, setOtp] = useState(["", "", "", ""]);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(30);
   const [loading, setLoading] = useState(false);
   const inputs = useRef<(TextInput | null)[]>([]);
@@ -26,24 +27,25 @@ export default function OTP() {
   }, [timer]);
 
   const handleChange = (text: string, i: number) => {
-    const numericText = text.replace(/[^0-9]/g, ''); 
+    const numericText = text.replace(/[^0-9]/g, '');
     if (text && !numericText) return;
 
     const copy = [...otp];
     copy[i] = numericText.slice(-1);
     setOtp(copy);
-    
-    if (numericText && i < 3) {
+
+    if (numericText && i < 5) {
       inputs.current[i + 1]?.focus();
     }
-    if (copy.join("").length === 4) Keyboard.dismiss();
+
+    if (copy.join("").length === 6) Keyboard.dismiss();
   };
 
   const handleResend = async () => {
     setLoading(true);
     try {
-      await requestOtp(phone as string); // Hit Backend again
-      setOtp(["", "", "", ""]);
+      await sendOtp(phone as string);
+      setOtp(["", "", "", "", "", ""]);
       setTimer(30);
       inputs.current[0]?.focus();
     } catch (e) {
@@ -54,22 +56,53 @@ export default function OTP() {
   };
 
   const handleVerify = async () => {
-    if (otp.join("").length !== 4) return;
+    if (otp.join("").length !== 6) return;
     setLoading(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
 
-    dispatch(setCredentials({
-      user: {
-        id: Math.random().toString(36).substr(2, 9),
-        phone: `+91 ${phone}`, // Store with code
-        name: name as string,
-      },
-      token: "mock-session-token"
-    }));
+    try {
+     const modeToUse = name ? 'signup' : 'login';
 
-    setLoading(false);
-    router.replace('/(tabs)');
+let result;
+
+try {
+  result = await verifyOtp(
+    phone as string,
+    otp.join(""),
+    name as string,
+    'signup'
+  );
+} catch (e) {
+  result = await verifyOtp(
+    phone as string,
+    otp.join(""),
+    undefined,
+    'login'
+  );
+}
+      if (!result.token || !result.user) throw new Error(result.message || 'Verification failed');
+
+      await AsyncStorage.setItem('token', result.token);
+      await AsyncStorage.setItem('user', JSON.stringify({
+        id: result.user.id,
+        phone: result.user.phoneNumber,
+        name: result.user.name || (name as string),
+      }));
+
+      dispatch(setCredentials({
+        user: {
+          id: result.user.id,
+          phone: result.user.phoneNumber,
+          name: result.user.name || (name as string),
+        },
+        token: result.token,
+      }));
+
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      alert(e.message || "Verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -99,9 +132,9 @@ export default function OTP() {
       </View>
 
       <TouchableOpacity 
-        style={[styles.button, (otp.join("").length < 4 || loading) && styles.buttonDisabled]} 
+        style={[styles.button, (otp.join("").length < 6 || loading) && styles.buttonDisabled]} 
         onPress={handleVerify}
-        disabled={otp.join("").length < 4 || loading}
+        disabled={otp.join("").length < 6 || loading}
       >
         {loading ? <ActivityIndicator color={Colors.WHITE} /> : <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Verify & Login</Text>}
       </TouchableOpacity>
@@ -120,8 +153,18 @@ const styles = StyleSheet.create({
   lottieHero: { width: 220, height: 220, alignSelf: "center", marginBottom: 20 },
   title: { fontSize: 28, color: Colors.PRIMARY_TEXT },
   subtitle: { fontSize: 16, color: Colors.TEXT_MUTED, marginTop: 12, marginBottom: 40, lineHeight: 24 },
-  otpContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 40 },
-  input: { width: 64, height: 64, borderRadius: 16, borderWidth: 1.5, textAlign: "center", fontSize: 24, fontWeight: "700", backgroundColor: Colors.BG, color: Colors.PRIMARY_TEXT },
+  otpContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 40,  gap: 8 },
+input: {
+  width: 48,
+  height: 56,
+  borderRadius: 12,
+  borderWidth: 1.5,
+  textAlign: "center",
+  fontSize: 20,
+  fontWeight: "700",
+  backgroundColor: Colors.BG,
+  color: Colors.PRIMARY_TEXT,
+},
   button: { height: 56, backgroundColor: Colors.PRIMARY, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   buttonDisabled: { backgroundColor: Colors.BORDER },
   buttonText: { color: Colors.WHITE, fontSize: 18 },

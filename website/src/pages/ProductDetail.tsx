@@ -1,23 +1,24 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, ShoppingBag, ShieldCheck, 
   Leaf, ThermometerSnowflake, Plus, Minus, CheckCircle2,
-  Clock, Globe, Info, ChevronDown
 } from 'lucide-react';
 
 import { addToCart, removeFromCart } from '../store/slices/cartSlice';
-import { MOCK_PRODUCTS } from '../api/mockdata';
+import { useGetProductsQuery } from '../api/apiSlice';
 import type { RootState } from '../store/store';
 import ProductCard from '../components/products/ProductCard';
+import { resolveImageGallery } from '../utils/resolveImageUrl';
 
 const ProductDetail = () => {
   const { productId } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [activeImg, setActiveImg] = useState(0);
-  const [showNutrients, setShowNutrients] = useState(false);
+
+  const { data: allProducts = [] } = useGetProductsQuery();
 
   // Auto-scroll to top when product changes
   useEffect(() => {
@@ -26,15 +27,15 @@ const ProductDetail = () => {
   }, [productId]);
 
   // 1. Logic: Find Current Product
-  const product = useMemo(() => MOCK_PRODUCTS.find(p => p.id === productId), [productId]);
+  const product = useMemo(() => allProducts.find(p => p.id === productId), [productId, allProducts]);
 
-  // 2. Logic: Dynamic Related Products (Using categoryId from your MockData)
+  // 2. Logic: Dynamic Related Products (same parent category)
   const relatedProducts = useMemo(() => {
     if (!product) return [];
-    return MOCK_PRODUCTS
-      .filter(p => p.categoryId === product.categoryId && p.id !== productId)
+    return allProducts
+      .filter(p => p.parentCategoryId === product.parentCategoryId && p.id !== productId)
       .slice(0, 4);
-  }, [product, productId]);
+  }, [product, productId, allProducts]);
 
   const cartItem = useSelector((state: RootState) => 
     state.cart.items.find(item => item.id === productId)
@@ -42,7 +43,7 @@ const ProductDetail = () => {
 
   if (!product) return <div className="p-20 text-center font-black uppercase tracking-tighter text-slate-400">Product Not Found</div>;
 
-  const images = Array.isArray(product.image) ? product.image : [product.image];
+  const images = resolveImageGallery(product);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-24 animate-in fade-in duration-500">
@@ -64,11 +65,15 @@ const ProductDetail = () => {
           <div className="flex flex-col gap-6 overflow-hidden">
             {/* Main Image: Fixed Aspect Ratio */}
             <div className="aspect-square w-full bg-white rounded-[2.5rem] md:rounded-[3rem] overflow-hidden shadow-xl shadow-blue-900/5 border border-slate-100 relative group flex items-center justify-center">
-              <img 
-                src={images[activeImg]} 
-                alt={product.name}
-                className="w-full h-full object-contain p-8 md:p-12 transition-transform duration-700 group-hover:scale-105"
-              />
+              {images[activeImg] ? (
+                <img
+                  src={images[activeImg]}
+                  alt={product.name}
+                  className="w-full h-full object-contain p-8 md:p-12 transition-transform duration-700 group-hover:scale-105"
+                />
+              ) : (
+                <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-300">No Image Available</span>
+              )}
               
               <div className="absolute top-6 left-6 md:top-8 md:left-8 bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-2 border border-slate-100 shadow-sm">
                 <div className={`w-2 h-2 rounded-full ${product.stock > 10 ? 'bg-green-500' : 'bg-orange-500 animate-pulse'}`} />
@@ -87,7 +92,11 @@ const ProductDetail = () => {
                     onClick={() => setActiveImg(idx)}
                     className={`flex-shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-2xl border-2 transition-all p-2 bg-white snap-center ${activeImg === idx ? 'border-[#4b6f9e] shadow-lg scale-105' : 'border-transparent opacity-60 hover:opacity-100'}`}
                   >
-                    <img src={img} className="w-full h-full object-contain" alt={`${product.name} thumbnail ${idx}`} />
+                    {img ? (
+                      <img src={img} className="w-full h-full object-contain" alt={`${product.name} thumbnail ${idx}`} />
+                    ) : (
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">No Image</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -208,7 +217,7 @@ const ProductDetail = () => {
           <section className="border-t border-slate-100 pt-16">
             <div className="mb-10">
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">You Might Also Like</h3>
-              <p className="text-sm text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-1">Similar items in {product.categoryId === '1' ? 'Fresh Milk' : 'this category'}</p>
+              <p className="text-sm text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-1">Similar items in {product.subcategory || product.category}</p>
             </div>
             
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">

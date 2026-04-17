@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Flow Test</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f4f6f8; color: #1a1a1a; }
+    .container { max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 24px; color: #2563eb; }
+    .card {
+      background: white; border-radius: 12px; padding: 24px;
+      margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .card h2 { font-size: 14px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #374151; }
+    input {
+      width: 100%; padding: 9px 12px; border: 1px solid #d1d5db;
+      border-radius: 8px; font-size: 14px; margin-bottom: 12px;
+      outline: none; transition: border 0.2s;
+    }
+    input:focus { border-color: #2563eb; }
+    button {
+      background: #2563eb; color: white; border: none; border-radius: 8px;
+      padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s; width: 100%;
+    }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 600; margin-left: 8px;
+    }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-done { background: #d1fae5; color: #065f46; }
+    .badge-error { background: #fee2e2; color: #991b1b; }
+    .log {
+      background: #0f172a; color: #a3e635; border-radius: 8px;
+      padding: 16px; font-family: monospace; font-size: 12px;
+      max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+    }
+    .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border-radius: 50%; background: #2563eb;
+      color: white; font-size: 12px; font-weight: 700; margin-right: 8px;
+    }
+    .step-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; margin-bottom: 16px; }
+    .divider { border: none; border-top: 1px solid #e5e7eb; margin: 0 0 16px; }
+    #status-bar {
+      background: white; border-radius: 12px; padding: 16px 24px;
+      margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+    }
+    .status-item { font-size: 13px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🧪 Payment Flow Tester</h1>
+
+  <!-- Config -->
+  <div class="card">
+    <div class="step-title"><span class="step-num">0</span>Config</div>
+    <hr class="divider">
+    <label>Backend URL</label>
+    <input id="baseUrl" value="http://localhost:5000" placeholder="http://localhost:5000" />
+    <label>Razorpay Key ID</label>
+    <input id="rzpKeyId" value="rzp_test_SaHmJpDs42QvIp" />
+    <label>Tenant ID (x-tenant-id)</label>
+    <input id="tenantId" placeholder="Enter your tenant ID from DB" />
+    <label>Product ID (from DB)</label>
+    <input id="productId" placeholder="MongoDB ObjectId of a product" />
+  </div>
+
+  <!-- Status Bar -->
+  <div id="status-bar">
+    <span class="status-item">Token: <span class="badge badge-pending" id="s-token">–</span></span>
+    <span class="status-item">Order: <span class="badge badge-pending" id="s-order">–</span></span>
+    <span class="status-item">Rzp Order: <span class="badge badge-pending" id="s-rzp">–</span></span>
+    <span class="status-item">Payment: <span class="badge badge-pending" id="s-payment">–</span></span>
+  </div>
+
+  <!-- Step 1: Login -->
+  <div class="card">
+    <div class="step-title"><span class="step-num">1</span>Login (Get JWT Token)</div>
+    <hr class="divider">
+    <label>Phone Number</label>
+    <input id="phone" type="tel" placeholder="10-digit mobile number" />
+    <button onclick="sendOtp()">Send OTP</button>
+    <br><br>
+    <label>OTP <small style="color:#6b7280">(static: 123456 in test mode)</small></label>
+    <input id="otp" value="123456" />
+    <button onclick="verifyOtp()">Verify OTP & Get Token</button>
+  </div>
+
+  <!-- Step 2: Place Order -->
+  <div class="card">
+    <div class="step-title"><span class="step-num">2</span>Place Order</div>
+    <hr class="divider">
+    <label>Quantity</label>
+    <input id="qty" type="number" value="2" min="1" />
+    <label>Delivery Address Line</label>
+    <input id="addrLine" value="123 Test Street, Test City" />
+    <button onclick="placeOrder()">Place Order (ONLINE payment)</button>
+  </div>
+
+  <!-- Step 3: Initiate Payment -->
+  <div class="card">
+    <div class="step-title"><span class="step-num">3</span>Initiate Razorpay Order</div>
+    <hr class="divider">
+    <label>Order ID (auto-filled after Step 2)</label>
+    <input id="orderId" placeholder="MongoDB _id of the order" />
+    <button onclick="initiatePayment()">Initiate Payment</button>
+  </div>
+
+  <!-- Step 4: Pay -->
+  <div class="card">
+    <div class="step-title"><span class="step-num">4</span>Open Razorpay Checkout</div>
+    <hr class="divider">
+    <label>User Name</label>
+    <input id="userName" value="Test User" />
+    <label>User Email</label>
+    <input id="userEmail" value="test@example.com" />
+    <button id="payBtn" onclick="openCheckout()" disabled>Pay Now</button>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <div class="step-title">📋 Response Log</div>
+    <hr class="divider">
+    <div class="log" id="log">Waiting for actions...</div>
+    <br>
+    <button onclick="document.getElementById('log').textContent=''" style="background:#6b7280">Clear Log</button>
+  </div>
+</div>
+
+<script>
+  let token = null;
+  let orderId = null;
+  let rzpOrderId = null;
+  let rzpAmount = null;
+
+  function log(msg, data) {
+    const el = document.getElementById('log');
+    const time = new Date().toLocaleTimeString();
+    el.textContent += `\n[${time}] ${msg}\n`;
+    if (data) el.textContent += JSON.stringify(data, null, 2) + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function setStatus(id, text, type) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'badge badge-' + type;
+  }
+
+  function cfg() {
+    return {
+      base: document.getElementById('baseUrl').value.trim().replace(/\/$/, ''),
+      tenantId: document.getElementById('tenantId').value.trim(),
+    };
+  }
+
+  function headers(auth = true) {
+    const h = { 'Content-Type': 'application/json', 'x-tenant-id': cfg().tenantId };
+    if (auth && token) h['Authorization'] = `Bearer ${token}`;
+    return h;
+  }
+
+  async function sendOtp() {
+    const phone = document.getElementById('phone').value.trim();
+    if (!phone) { alert('Enter phone number'); return; }
+    log('→ Sending OTP to ' + phone);
+    try {
+      const res = await fetch(`${cfg().base}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: headers(false),
+        body: JSON.stringify({ phoneNumber: phone }),
+      });
+      const data = await res.json();
+      log('← send-otp response', data);
+    } catch (e) { log('✗ Error: ' + e.message); }
+  }
+
+  async function verifyOtp() {
+    const phone = document.getElementById('phone').value.trim();
+    const otp = document.getElementById('otp').value.trim();
+    log('→ Verifying OTP...');
+    try {
+      const res = await fetch(`${cfg().base}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: headers(false),
+        body: JSON.stringify({ phoneNumber: phone, otp }),
+      });
+      const data = await res.json();
+      log('← verify-otp response', data);
+      if (data.token) {
+        token = data.token;
+        setStatus('s-token', '✓ Got', 'done');
+        log('✓ Token saved');
+      } else {
+        setStatus('s-token', '✗ Failed', 'error');
+      }
+    } catch (e) { log('✗ Error: ' + e.message); }
+  }
+
+  async function placeOrder() {
+    if (!token) { alert('Login first (Step 1)'); return; }
+    const productId = document.getElementById('productId').value.trim();
+    if (!productId) { alert('Enter a Product ID'); return; }
+    const qty = parseInt(document.getElementById('qty').value);
+    const line1 = document.getElementById('addrLine').value.trim();
+    log('→ Placing order...');
+    try {
+      const res = await fetch(`${cfg().base}/api/orders`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          items: [{ productId, qty }],
+          paymentMode: 'ONLINE',
+          deliveryAddress: { line1, lat: 12.9716, lng: 77.5946 },
+        }),
+      });
+      const data = await res.json();
+      log('← place-order response', data);
+      if (data.orderId) {
+        orderId = data.orderId;
+        document.getElementById('orderId').value = orderId;
+        setStatus('s-order', '✓ ' + orderId.slice(-6), 'done');
+        log('✓ Order ID saved: ' + orderId);
+      } else {
+        setStatus('s-order', '✗ Failed', 'error');
+      }
+    } catch (e) { log('✗ Error: ' + e.message); }
+  }
+
+  async function initiatePayment() {
+    if (!token) { alert('Login first (Step 1)'); return; }
+    const oid = document.getElementById('orderId').value.trim();
+    if (!oid) { alert('Enter or place an order first'); return; }
+    orderId = oid;
+    log('→ Initiating payment for order: ' + oid);
+    try {
+      const res = await fetch(`${cfg().base}/api/payments/create`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ order_id: oid }),
+      });
+      const data = await res.json();
+      log('← initiate-payment response', data);
+      if (data.razorpay_order_id) {
+        rzpOrderId = data.razorpay_order_id;
+        rzpAmount = data.amount;
+        setStatus('s-rzp', '✓ ' + rzpOrderId.slice(-8), 'done');
+        document.getElementById('payBtn').disabled = false;
+        log('✓ Razorpay Order ready. Click "Pay Now"');
+      } else {
+        setStatus('s-rzp', '✗ Failed', 'error');
+      }
+    } catch (e) { log('✗ Error: ' + e.message); }
+  }
+
+  function openCheckout() {
+    if (!rzpOrderId) { alert('Initiate payment first (Step 3)'); return; }
+    const options = {
+      key: document.getElementById('rzpKeyId').value.trim(),
+      amount: rzpAmount,
+      currency: 'INR',
+      name: 'KMF E Grocery',
+      description: 'Order Payment',
+      order_id: rzpOrderId,
+      prefill: {
+        name: document.getElementById('userName').value,
+        email: document.getElementById('userEmail').value,
+        contact: document.getElementById('phone').value,
+      },
+      handler: async function(response) {
+        log('← Razorpay success callback', response);
+        await verifyPayment(response);
+      },
+      modal: {
+        ondismiss: function() { log('ℹ Razorpay checkout closed'); }
+      },
+    };
+    const rzp = new Razorpay(options);
+    rzp.on('payment.failed', function(response) {
+      log('✗ Payment failed', response.error);
+      setStatus('s-payment', '✗ Failed', 'error');
+    });
+    rzp.open();
+    log('→ Razorpay checkout opened');
+  }
+
+  async function verifyPayment(response) {
+    log('→ Verifying payment with backend...');
+    try {
+      const res = await fetch(`${cfg().base}/api/payments/verify`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          order_id: orderId,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+        }),
+      });
+      const data = await res.json();
+      log('← verify-payment response', data);
+      if (data.success) {
+        setStatus('s-payment', '✓ PAID', 'done');
+        log('✅ PAYMENT VERIFIED. Order is now PAID + CONFIRMED!');
+      } else {
+        setStatus('s-payment', '✗ Failed', 'error');
+        log('✗ Verification failed: ' + data.message);
+      }
+    } catch (e) { log('✗ Error: ' + e.message); }
+  }
+</script>
+</body>
+</html>

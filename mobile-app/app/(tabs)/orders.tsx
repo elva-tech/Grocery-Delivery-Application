@@ -3,7 +3,7 @@
  * @description Order history management with Admin Feedback Loop integrated.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, Modal, ScrollView, TextInput, Alert
@@ -12,15 +12,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { showToast } from '@/utils/toast';
 import { useRouter } from 'expo-router';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { addToCart } from '@/store/slices/cartSlice';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
-import { getUserOrders, cancelOrderApi } from '@/api/ordersApi';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getUserOrders, cancelOrderApi, rateOrderApi, reportOrderIssueApi } from '@/api/ordersApi';
+import { RootState } from '@/store/store';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 // INTEGRATED: Import settings hook
 import { useGetAppSettingsQuery } from '@/api/apiSlice';
+import { API_BASE_URL } from '@/src/config/constants';
+import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 const STATUS_THEME: any = {
   PLACED: { color: '#64748b', label: 'Order Placed' },
@@ -44,6 +48,7 @@ const REPORT_REASONS = [
 export default function OrdersScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
+  const { token } = useSelector((state: RootState) => state.auth);
   
   // INTEGRATED: Fetch remote settings
   const { data: settings } = useGetAppSettingsQuery();
@@ -56,16 +61,27 @@ export default function OrdersScreen() {
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState('');
   const [issueComment, setIssueComment] = useState('');
+  /** Local file:// URI for preview only (not sent to returns API). */
   const [issueImage, setIssueImage] = useState<string | null>(null);
+  /** Cloudinary URL from POST /api/upload — sent as evidenceUrl on submit. */
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
+  const evidenceUploadSeq = useRef(0);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{title: string, msg: string, action: () => void} | null>(null);
 
+  // ── Rating state ──────────────────────────────────────────────────────────
+  const [ratingOrder, setRatingOrder] = useState<any>(null);  // order pending a rating prompt
+  const [starValue, setStarValue] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
   const fetchOrders = useCallback(async (isQuiet = false) => {
     if (!isQuiet) setLoading(true);
     try {
-      const data = await getUserOrders('user-123');
+      const data = await getUserOrders();
       const normalizedData = data.map((order: any) => ({
         ...order,
         items: typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || [])
@@ -73,12 +89,35 @@ export default function OrdersScreen() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       setOrders(normalizedData);
+
+      // Auto-prompt rating for first unrated delivered order
+      const unrated = normalizedData.find(
+        (o: any) => o.status === 'DELIVERED' && !o.rating?.value
+      );
+      if (unrated) {
+        const skippedKey = `@rating_skipped_${unrated._id ?? unrated.id}`;
+        const skipped = await AsyncStorage.getItem(skippedKey);
+        if (!skipped) {
+          setStarValue(0);
+          setRatingComment('');
+          setRatingOrder(unrated);
+        }
+      }
     } catch (err) {
       showToast('error', 'Sync Failed', 'Please check your connection');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  }, []);
+
+  const resetIssueReportFields = useCallback(() => {
+    setIssueImage(null);
+    setEvidenceUrl(null);
+    setSelectedReason('');
+    setIssueComment('');
+    evidenceUploadSeq.current += 1;
+    setIsUploadingEvidence(false);
   }, []);
 
   const pickImage = async () => {
@@ -95,8 +134,42 @@ export default function OrdersScreen() {
       quality: 0.6,
     });
 
-    if (!result.canceled) {
-      setIssueImage(result.assets[0].uri);
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    const localUri = asset.uri;
+    setIssueImage(localUri);
+    setEvidenceUrl(null);
+
+    const seq = ++evidenceUploadSeq.current;
+    setIsUploadingEvidence(true);
+
+    const formData = new FormData();
+    const name =
+      asset.fileName ??
+      `evidence_${Date.now()}.${localUri.split('.').pop()?.split('?')[0] || 'jpg'}`;
+    const mime = asset.mimeType ?? 'image/jpeg';
+    // @ts-ignore React Native FormData file part
+    formData.append('file', { uri: localUri, name, type: mime });
+
+    try {
+      const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (seq !== evidenceUploadSeq.current) return;
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.message || 'Upload failed');
+      }
+      setEvidenceUrl(String(data.url));
+      showToast('success', 'Photo uploaded', 'Evidence is ready to submit.');
+    } catch (e: any) {
+      if (seq !== evidenceUploadSeq.current) return;
+      setEvidenceUrl(null);
+      showToast('error', 'Upload failed', e?.message || 'Could not upload evidence. Try again.');
+    } finally {
+      if (seq === evidenceUploadSeq.current) setIsUploadingEvidence(false);
     }
   };
 
@@ -120,42 +193,70 @@ export default function OrdersScreen() {
   };
 
   const submitFinalReport = async () => {
-    if (!selectedReason || !issueImage) {
-      return Alert.alert("Required Fields", "Please select a reason and upload a photo.");
+    if (!selectedReason) {
+      return Alert.alert('Required Fields', 'Please select a reason.');
+    }
+    if (!evidenceUrl) {
+      return Alert.alert(
+        'Required Fields',
+        isUploadingEvidence
+          ? 'Please wait for the photo to finish uploading.'
+          : 'Please select a photo and wait for upload to complete.',
+      );
     }
 
     setIsSubmittingReport(true);
-    const formData = new FormData();
-    formData.append('orderId', selectedOrder.id);
-    formData.append('reason', selectedReason);
-    formData.append('comment', issueComment || "No comment");
-
-    const uriParts = issueImage.split('.');
-    const fileType = uriParts[uriParts.length - 1];
-    const fileName = issueImage.split('/').pop();
-
-    // @ts-ignore
-    formData.append('evidence', {
-      uri: issueImage,
-      name: fileName || `report_${Date.now()}.${fileType}`,
-      type: `image/${fileType}`,
-    });
-
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      if (!token) throw new Error('Not authenticated');
+      await reportOrderIssueApi(
+        selectedOrder._id ?? selectedOrder.id,
+        selectedReason,
+        issueComment || 'No comment',
+        token,
+        evidenceUrl,
+      );
+      // Optimistic local update
+      setOrders(prev =>
+        prev.map((o: any) =>
+          o.id === selectedOrder.id || o._id === selectedOrder._id
+            ? { ...o, status: 'ISSUE_REPORTED', issueDetails: { reason: selectedReason, comment: issueComment } }
+            : o
+        )
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('success', 'Report Sent', 'Admin will review.');
       
       setShowIssueModal(false);
       setSelectedOrder(null);
-      setIssueImage(null);
-      setSelectedReason('');
-      setIssueComment('');
+      resetIssueReportFields();
       fetchOrders(true);
     } catch (err) {
       showToast('error', 'Error', 'Submission failed.');
     } finally {
       setIsSubmittingReport(false);
+    }
+  };
+
+  const skipRating = async () => {
+    if (!ratingOrder) return;
+    const key = `@rating_skipped_${ratingOrder._id ?? ratingOrder.id}`;
+    await AsyncStorage.setItem(key, '1');
+    setRatingOrder(null);
+  };
+
+  const submitRating = async () => {
+    if (starValue === 0) return showToast('error', 'Select Stars', 'Please tap a star to rate.');
+    setIsSubmittingRating(true);
+    try {
+      await rateOrderApi(ratingOrder._id ?? ratingOrder.id, starValue, ratingComment);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('success', 'Thank you!', 'Your feedback helps us improve.');
+      setRatingOrder(null);
+      fetchOrders(true);
+    } catch (err: any) {
+      showToast('error', 'Error', err.message || 'Could not submit rating.');
+    } finally {
+      setIsSubmittingRating(false);
     }
   };
 
@@ -167,6 +268,19 @@ export default function OrdersScreen() {
     fetchOrders(true);
   }, [fetchOrders]);
 
+  // Group orders: Active → Delivered → Past
+  const groupedList = useMemo(() => {
+    const ACTIVE = ['PLACED', 'CONFIRMED', 'OUT_FOR_DELIVERY'];
+    const active = orders.filter(o => ACTIVE.includes(o.status));
+    const delivered = orders.filter(o => o.status === 'DELIVERED');
+    const past = orders.filter(o => !ACTIVE.includes(o.status) && o.status !== 'DELIVERED');
+    const result: any[] = [];
+    if (active.length) result.push({ _sectionHeader: true, label: '🚚  Active Orders', count: active.length }, ...active);
+    if (delivered.length) result.push({ _sectionHeader: true, label: '✅  Delivered', count: delivered.length }, ...delivered);
+    if (past.length) result.push({ _sectionHeader: true, label: '📋  Past Orders', count: past.length }, ...past);
+    return result;
+  }, [orders]);
+
   const handleReorder = (items: any[]) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     items.forEach((p: any) => dispatch(addToCart(p)));
@@ -175,6 +289,15 @@ export default function OrdersScreen() {
   };
 
   const renderItem = ({ item }: { item: any }) => {
+    // Section header
+    if (item._sectionHeader) {
+      return (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeaderText}>{item.label}</Text>
+          <View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{item.count}</Text></View>
+        </View>
+      );
+    }
     const theme = STATUS_THEME[item.status] || STATUS_THEME.PLACED;
     return (
       <View style={styles.card}>
@@ -202,6 +325,23 @@ export default function OrdersScreen() {
             <Text style={styles.primaryBtnText}>Reorder</Text>
           </TouchableOpacity>
         </View>
+        {/* Rate button for unrated delivered orders */}
+        {item.status === 'DELIVERED' && !item.rating?.value && (
+          <TouchableOpacity
+            style={styles.rateBtn}
+            onPress={() => { setStarValue(0); setRatingComment(''); setRatingOrder(item); }}
+          >
+            <Ionicons name="star-outline" size={15} color="#f59e0b" />
+            <Text style={styles.rateBtnText}>Rate this order</Text>
+          </TouchableOpacity>
+        )}
+        {/* Show submitted rating */}
+        {item.rating?.value && (
+          <View style={styles.ratingDisplay}>
+            <Text style={styles.ratingStars}>{'★'.repeat(item.rating.value)}{'☆'.repeat(5 - item.rating.value)}</Text>
+            {item.rating.comment ? <Text style={styles.ratingCommentSmall}>{item.rating.comment}</Text> : null}
+          </View>
+        )}
       </View>
     );
   };
@@ -213,11 +353,20 @@ export default function OrdersScreen() {
       </View>
 
       <FlatList
-        data={orders}
+        data={groupedList}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.list}
+        keyExtractor={(item, idx) => item._sectionHeader ? `header-${idx}` : item.id}
+        contentContainerStyle={[styles.list, groupedList.length === 0 && { flexGrow: 1 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4b6f9e" />}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="receipt-outline" size={56} color="#cbd5e1" />
+              <Text style={styles.emptyTitle}>No orders yet</Text>
+              <Text style={styles.emptySubtitle}>Your orders will appear here after you place one.</Text>
+            </View>
+          ) : null
+        }
       />
 
       {/* Main Order Details Modal */}
@@ -231,16 +380,42 @@ export default function OrdersScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {selectedOrder?.items?.map((product: any, idx: number) => (
+              {/* Delivery info row */}
+              {(selectedOrder?.address || selectedOrder?.deliverySlot) && (
+                <View style={styles.deliveryInfoBox}>
+                  {selectedOrder?.address && (
+                    <View style={styles.deliveryInfoRow}>
+                      <Ionicons name="location-outline" size={15} color="#4b6f9e" />
+                      <Text style={styles.deliveryInfoText} numberOfLines={2}>{selectedOrder.address}</Text>
+                    </View>
+                  )}
+                  {selectedOrder?.deliverySlot && (
+                    <View style={styles.deliveryInfoRow}>
+                      <Ionicons name="time-outline" size={15} color="#4b6f9e" />
+                      <Text style={styles.deliveryInfoText}>{selectedOrder.deliverySlot}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              {selectedOrder?.items?.map((product: any, idx: number) => {
+                const thumb = resolveProductImageUri(product);
+                return (
                 <View key={idx} style={styles.productRow}>
-                  <Image source={{ uri: Array.isArray(product.image) ? product.image[0] : product.image }} style={styles.productImage} />
+                  {thumb ? (
+                    <Image source={{ uri: thumb }} style={styles.productImage} />
+                  ) : (
+                    <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                      <Ionicons name="image-outline" size={22} color="#94a3b8" />
+                    </View>
+                  )}
                   <View style={styles.productInfo}>
                     <Text style={styles.productName}>{product.name}</Text>
                     <Text style={styles.productMeta}>{product.quantity} x {product.unit}</Text>
                   </View>
                   <Text style={styles.productPrice}>₹{product.price * product.quantity}</Text>
                 </View>
-              ))}
+                );
+              })}
 
               {selectedOrder?.adminComment && (
                 <View style={styles.adminResponseBox}>
@@ -273,7 +448,13 @@ export default function OrdersScreen() {
 
               {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
               {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && (
-                <TouchableOpacity style={styles.reportBtn} onPress={() => setShowIssueModal(true)}>
+                <TouchableOpacity
+                  style={styles.reportBtn}
+                  onPress={() => {
+                    resetIssueReportFields();
+                    setShowIssueModal(true);
+                  }}
+                >
                   <Ionicons name="warning-outline" size={18} color="#f59e0b" />
                   <Text style={styles.reportBtnText}>Report Issue / Refund</Text>
                 </TouchableOpacity>
@@ -289,7 +470,12 @@ export default function OrdersScreen() {
           <View style={[styles.modalContent, { height: '80%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Refund / Issue</Text>
-              <TouchableOpacity onPress={() => setShowIssueModal(false)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowIssueModal(false);
+                  resetIssueReportFields();
+                }}
+              >
                 <Ionicons name="close-circle" size={32} color="#cbd5e1" />
               </TouchableOpacity>
             </View>
@@ -312,13 +498,34 @@ export default function OrdersScreen() {
 
               <Text style={styles.label}>Upload Evidence</Text>
               <TouchableOpacity style={styles.pickerBox} onPress={pickImage}>
-                {issueImage ? <Image source={{ uri: issueImage }} style={styles.previewImg} /> : <Ionicons name="camera" size={30} color="#94a3b8" />}
+                {issueImage ? (
+                  <View style={styles.previewWrap}>
+                    <Image source={{ uri: issueImage }} style={styles.previewImg} />
+                    {isUploadingEvidence && (
+                      <View style={styles.previewLoading}>
+                        <ActivityIndicator color="#ffffff" />
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <Ionicons name="camera" size={30} color="#94a3b8" />
+                )}
               </TouchableOpacity>
+              {issueImage && isUploadingEvidence && (
+                <Text style={styles.uploadHint}>Uploading evidence…</Text>
+              )}
+              {issueImage && evidenceUrl && !isUploadingEvidence && (
+                <Text style={styles.uploadHintReady}>Evidence uploaded — you can submit.</Text>
+              )}
 
-              <TouchableOpacity 
-                style={[styles.primaryBtn, { marginTop: 30 }, isSubmittingReport && { opacity: 0.6 }]} 
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  { marginTop: 30 },
+                  (isSubmittingReport || isUploadingEvidence || !evidenceUrl || !selectedReason) && { opacity: 0.6 },
+                ]}
                 onPress={submitFinalReport}
-                disabled={isSubmittingReport}
+                disabled={isSubmittingReport || isUploadingEvidence || !evidenceUrl || !selectedReason}
               >
                 {isSubmittingReport ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Submit the issue</Text>}
               </TouchableOpacity>
@@ -339,6 +546,61 @@ export default function OrdersScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.alertPrimary} onPress={() => { confirmConfig?.action(); setShowConfirmModal(false); }}>
                 <Text style={styles.alertPrimaryText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* RATING MODAL */}
+      <Modal visible={!!ratingOrder} transparent animationType="fade" onRequestClose={skipRating}>
+        <View style={styles.alertOverlay}>
+          <View style={[styles.alertBox, { paddingBottom: 28 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={styles.alertTitle}>Rate Your Order</Text>
+              <TouchableOpacity onPress={skipRating}>
+                <Ionicons name="close" size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.alertMsg, { marginBottom: 20 }]}>
+              How was your experience with order #{String(ratingOrder?._id ?? ratingOrder?.id).slice(-6)}?
+            </Text>
+
+            {/* Star selector */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <TouchableOpacity key={s} onPress={() => { setStarValue(s); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Ionicons
+                    name={s <= starValue ? 'star' : 'star-outline'}
+                    size={36}
+                    color={s <= starValue ? '#f59e0b' : '#d1d5db'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Optional comment */}
+            <TextInput
+              style={[styles.inputArea, { marginBottom: 20, minHeight: 70 }]}
+              placeholder="Any comments? (optional)"
+              multiline
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              maxLength={300}
+            />
+
+            <View style={styles.alertButtons}>
+              <TouchableOpacity style={styles.alertSecondary} onPress={skipRating}>
+                <Text style={styles.alertSecondaryText}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.alertPrimary, isSubmittingRating && { opacity: 0.6 }]}
+                onPress={submitRating}
+                disabled={isSubmittingRating}
+              >
+                {isSubmittingRating
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.alertPrimaryText}>Submit</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -401,7 +663,16 @@ const styles = StyleSheet.create({
   reasonChipTextActive: { color: '#fff' },
   inputArea: { backgroundColor: '#f8fafc', borderRadius: 16, padding: 16, height: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: '#e2e8f0' },
   pickerBox: { height: 120, borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center', marginTop: 10, overflow: 'hidden' },
+  previewWrap: { width: '100%', height: '100%' },
   previewImg: { width: '100%', height: '100%' },
+  previewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadHint: { marginTop: 8, fontSize: 13, color: '#64748b', fontWeight: '600' },
+  uploadHintReady: { marginTop: 8, fontSize: 13, color: '#059669', fontWeight: '600' },
 
   alertOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   alertBox: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', alignItems: 'center' },
@@ -446,4 +717,43 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: 12,
   },
+
+  // Rating
+  rateBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#fcd34d',
+    backgroundColor: '#fffbeb',
+  },
+  rateBtnText: { color: '#b45309', fontWeight: '800', fontSize: 13 },
+  ratingDisplay: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#fffbeb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingStars: { fontSize: 16, color: '#f59e0b', letterSpacing: 1 },
+  ratingCommentSmall: { fontSize: 12, color: '#78716c', flex: 1, fontStyle: 'italic' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, paddingVertical: 10, marginTop: 8 },
+  sectionHeaderText: { fontSize: 13, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionBadge: { backgroundColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  sectionBadgeText: { fontSize: 11, fontWeight: '700', color: '#64748b' },
+  deliveryInfoBox: { backgroundColor: '#f0f7ff', borderRadius: 12, padding: 12, marginBottom: 16, gap: 8 },
+  deliveryInfoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  deliveryInfoText: { fontSize: 13, color: '#334155', flex: 1, lineHeight: 18 },
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#64748b' },
+  emptySubtitle: { fontSize: 13, color: '#94a3b8', textAlign: 'center', paddingHorizontal: 32 },
 });

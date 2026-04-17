@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   MapPin, Plus, ArrowLeft, Loader2, CheckCircle2, 
-  Gift, User, Users, X, Phone, UserCircle, MessageSquare 
+  Gift, User, Users, X, Phone, UserCircle
 } from 'lucide-react';
-import { getAddresses, createOrder } from '../api/addresses';
+import { getAddresses } from '../api/addresses';
 import AddressModal from '../components/layout/AddressModal';
 
 const Addresses = ({ items, onSelect }: any) => {
@@ -12,8 +12,6 @@ const Addresses = ({ items, onSelect }: any) => {
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   // App Logic States
   const [orderMode, setOrderMode] = useState<'self' | 'others'>('self');
   const [isModalOpen, setIsModalOpen] = useState(false); 
@@ -51,42 +49,24 @@ const Addresses = ({ items, onSelect }: any) => {
     console.log("Current Items in Cart:", items); // Debugging total price issues
   }, [items]);
 
-  const handleFinalConfirm = async () => {
-    // If Self mode, find and pass address back to parent
+  const handleFinalConfirm = () => {
     if (orderMode === 'self') {
       const selected = addresses.find(a => a.id === selectedId);
-      if (selected) onSelect(selected);
-      else return; // Don't proceed if nothing selected in self mode
+      if (!selected) return;
+      onSelect(selected);
+    } else {
+      // Build a synthetic address object for gift/others orders
+      onSelect({
+        id: 'others',
+        label: `For ${othersForm.recipientName}`,
+        full: othersForm.fullAddress,
+        landmark: othersForm.landmark,
+        phone: othersForm.recipientPhone,
+        lat: 0,
+        lng: 0,
+      });
     }
-
-    setIsSubmitting(true);
-    try {
-      // SHARED BACKEND PAYLOAD STRUCTURE
-      const orderPayload = {
-        items: items,
-        total: totalAmount,
-        orderType: orderMode,
-        addressId: orderMode === 'self' ? selectedId : null,
-        recipientDetails: orderMode === 'others' ? othersForm : null,
-        timestamp: new Date().toISOString()
-      };
-
-      const result: any = await createOrder(orderPayload);
-      
-      if (result.success) {
-        // Navigate with state for the Success Page to pick up
-        navigate('/success', { 
-          state: { 
-            orderId: result.orderId,
-            total: totalAmount 
-          } 
-        });
-      }
-    } catch (error) {
-      console.error("Order Creation Error:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    navigate('/checkout');
   };
 
   return (
@@ -176,15 +156,15 @@ const Addresses = ({ items, onSelect }: any) => {
             <span className="text-2xl font-black text-slate-900 italic">₹{totalAmount}</span>
           </div>
           <button 
-            disabled={isSubmitting || (orderMode === 'self' && !selectedId) || (orderMode === 'others' && !othersConfirmed)}
+            disabled={(orderMode === 'self' && !selectedId) || (orderMode === 'others' && !othersConfirmed)}
             onClick={handleFinalConfirm}
             className={`flex-1 py-5 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${
-              ((orderMode === 'self' && selectedId) || (orderMode === 'others' && othersConfirmed)) && !isSubmitting
+              (orderMode === 'self' && selectedId) || (orderMode === 'others' && othersConfirmed)
               ? 'bg-[#1e293b] text-white shadow-2xl' 
               : 'bg-slate-100 text-slate-400 cursor-not-allowed'
             }`}
           >
-            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : 'Place Order'}
+            Continue to Checkout
           </button>
         </div>
       </div>

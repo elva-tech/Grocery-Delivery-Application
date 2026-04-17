@@ -1,18 +1,55 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import DataTable from '../../components/shared/DataTable';
+import { apiService } from '../../services/apiService';
 import CustomButton from '../../components/shared/CustomButton';
 import { TrendingUp, ShoppingBag, FileText, Search, X, Download } from 'lucide-react';
+import Pagination from '../../components/shared/Pagination';
+import usePagination from '../../hooks/usePagination';
 
 const ReportsPage = () => {
-  const { orders, products } = useAppState();
+  const { orders } = useAppState();
+
   const [activeTab, setActiveTab] = useState('REVENUE');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. TOTAL REVENUE - FIXED: Now looks for totalAmount from Mock Data
+const [inventory, setInventory] = useState([]);
+const [loading, setLoading] = useState(false);
+
+useEffect(() => {
+  const fetchInventory = async () => {
+    try {
+      setLoading(true);
+
+      const res = await apiService.getInventory();
+
+      console.log("Inventory API:", res);
+
+      if (res.success) {
+        setInventory(res.data);
+      } else {
+        setInventory([]);
+      }
+
+    } catch (err) {
+      console.error("Inventory error:", err);
+      setInventory([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchInventory();
+}, []);
+
+  // 1. TOTAL REVENUE - count DELIVERED or PAID orders, exclude CANCELLED
   const totalRevenue = useMemo(() => {
     return (orders || [])
-      .filter(o => o.status?.toUpperCase() !== 'CANCELLED')
+      .filter(o => {
+        const status = o.status?.toUpperCase();
+        const paymentStatus = o.paymentStatus?.toUpperCase();
+        return status !== 'CANCELLED' && (paymentStatus === 'PAID' || status === 'DELIVERED');
+      })
       .reduce((sum, order) => sum + (Number(order.totalAmount || order.total) || 0), 0);
   }, [orders]);
 
@@ -71,23 +108,45 @@ const revenueData = useMemo(() => {
       });
   }, [orders]);
 
-  const inventoryReport = useMemo(() => {
-    return (products || []).map(p => ({
-      item: p.name,
-      stock: p.stock,
-      price: `₹${p.price}`,
-      status: p.stock < 10 ? 'RESTOCK SOON' : 'HEALTHY'
-    }));
-  }, [products]);
+ const inventoryReport = useMemo(() => {
+  return (inventory || []).map(p => ({
+    item: p.name,
+    stock: p.availableQty,
+    price: `₹${p.price}`,
+    status: p.availableQty < p.thresholdQty ? "RESTOCK SOON" : "HEALTHY"
+  }));
+}, [inventory]);
 
-  const getFilteredData = () => {
-    const currentData = activeTab === 'REVENUE' ? revenueData : 
-                        activeTab === 'ORDERS' ? orders : inventoryReport;
-    if (!searchTerm) return currentData;
-    return currentData.filter(item => 
-      (item.customer || item.customerName || item.item || item.id || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
+const getFilteredData = () => {
+  const currentData =
+    activeTab === 'REVENUE'
+      ? revenueData
+      : activeTab === 'ORDERS'
+      ? orders
+      : inventoryReport;
+
+  if (!searchTerm) return currentData;
+
+  return currentData.filter(item =>
+    (item.customer ||
+      item.customerName ||
+      item.item ||
+      item.id ||
+      '')
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase())
+  );
+};
+
+const filteredData = useMemo(() => getFilteredData(), [activeTab, searchTerm, orders, inventory]);
+
+const {
+  currentPage,
+  pageSize,
+  setCurrentPage,
+  setPageSize,
+  paginatedItems
+} = usePagination(filteredData);
 
   const reportConfigs = {
     REVENUE: { title: 'Earnings Report', columns: [
@@ -100,23 +159,34 @@ const revenueData = useMemo(() => {
         </span>
       )}
     ]},
-    // UPDATED: replaced delivered to PAID 
-  ORDERS: { title: 'Order History', columns: [
-      { header: 'Order ID', accessor: 'id' },
-      { header: 'Customer', accessor: 'customerName' },
-      { header: 'Status', accessor: 'status', render: (v) => {
-        const status = v?.toUpperCase();
-        if (status === 'DELIVERED') {
-          return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black uppercase">PAID</span>;
-        }
-        return (
-          <span className={`font-bold ${status === 'CANCELLED' ? 'text-red-500' : 'text-slate-600'}`}>
-            {v}
-          </span>
-        );
-      }},
-      { header: 'Total', accessor: 'totalAmount', render: (v) => `₹${(Number(v) || 0).toLocaleString('en-IN')}` }
-    ]},
+   ORDERS: { 
+  title: 'Order History', 
+  columns: [
+    { header: 'Order ID', accessor: 'id' },
+
+    { 
+      header: 'Customer',
+      accessor: 'customerName',
+      render: (_, row) => row.customerName || row.customer || 'Unknown'
+    },
+
+    { 
+      header: 'Status', 
+      accessor: 'status', 
+      render: (v) => (
+        <span className={`font-bold ${v?.toUpperCase() === 'CANCELLED' ? 'text-red-500' : 'text-slate-600'}`}>
+          {v}
+        </span>
+      )
+    },
+
+    { 
+      header: 'Total', 
+      accessor: 'totalAmount', 
+      render: (v) => `₹${(Number(v) || 0).toLocaleString('en-IN')}`
+    }
+  ]
+},
     INVENTORY: { title: 'Stock Audit', columns: [
       { header: 'Item Name', accessor: 'item' },
       { header: 'Current Stock', accessor: 'stock' },
@@ -145,7 +215,10 @@ const revenueData = useMemo(() => {
           {['REVENUE', 'ORDERS', 'INVENTORY'].map(tab => (
             <button 
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+  setActiveTab(tab);
+  setCurrentPage(1);
+}}
               className={`px-6 py-3 rounded-xl font-bold transition-all ${activeTab === tab ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {tab}
@@ -158,14 +231,27 @@ const revenueData = useMemo(() => {
             type="text" 
             placeholder="Search..." 
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+  setSearchTerm(e.target.value);
+  setCurrentPage(1);
+}}
             className="pl-10 pr-4 py-2 border rounded-xl outline-none w-64"
           />
         </div>
       </div>
 
       <div className="bg-white p-8 rounded-[32px] border shadow-sm">
-        <DataTable columns={reportConfigs[activeTab].columns} data={getFilteredData()} />
+        <DataTable 
+  columns={reportConfigs[activeTab].columns} 
+  data={paginatedItems} 
+/>
+<Pagination
+  totalItems={filteredData.length}
+  pageSize={pageSize}
+  currentPage={currentPage}
+  onPageChange={setCurrentPage}
+  onPageSizeChange={setPageSize}
+/>
       </div>
     </div>
   );

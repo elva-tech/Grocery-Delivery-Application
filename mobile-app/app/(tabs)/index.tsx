@@ -17,11 +17,12 @@ import * as Haptics from 'expo-haptics';
 
 
 // Domain Imports
-import { useGetCategoriesQuery, useGetProductsQuery } from '@/api/apiSlice';
+import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
 import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
-import { PROMO_BANNERS, APP_CONFIG } from '@/api/mockData'; // Added APP_CONFIG
+import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
+import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 // Constants for UI consistency
 const { width } = Dimensions.get('window');
@@ -31,14 +32,6 @@ const COLUMN_COUNT = 3;
 /* ========================================================================
    UTILITY HELPER FUNCTIONS
    ======================================================================== */
-
-const resolveImage = (img: any) => {
-  if (!img) return null;
-  if (Array.isArray(img)) return img[0] || null;
-  if (typeof img === 'string') return img;
-  if (typeof img === 'object' && img.url) return img.url;
-  return null;
-};
 
 const getFitMode = (img: string | null) => {
   if (!img) return "contain";
@@ -80,21 +73,30 @@ const StaticBannerCarousel = React.memo(({ banners }: { banners: any[] }) => {
           setIndex(newIndex);
         }}
       >
-        {banners.map((banner) => (
-          <TouchableOpacity key={banner.id} activeOpacity={0.9} style={styles.promoCard}>
-            <Image
-              source={{ uri: banner.image }}
-              style={styles.promoImage}
-              contentFit="cover"
-              transition={200}
-            />
-            {banner.title && (
-              <View style={styles.bannerOverlay}>
-                <Text style={styles.bannerPromoText}>{banner.title}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
+        {banners.map((banner) => {
+          const imageSrc = resolveProductImageUri(banner);
+          return (
+            <TouchableOpacity key={banner.id} activeOpacity={0.9} style={styles.promoCard}>
+              {imageSrc ? (
+                <Image
+                  source={{ uri: imageSrc }}
+                  style={styles.promoImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={[styles.promoImage, styles.bannerPlaceholder]}>
+                  <Text style={styles.bannerPlaceholderText}>No Image</Text>
+                </View>
+              )}
+              {banner.title && (
+                <View style={styles.bannerOverlay}>
+                  <Text style={styles.bannerPromoText}>{banner.title}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
       <View style={styles.dotContainer}>
         {banners.map((_, i) => (
@@ -118,17 +120,27 @@ export default function HomeScreen() {
   const searchInputRef = useRef<TextInput>(null);
 
   /**
-   * GENERIC BRANDING LOGIC
-   * Fetches configuration from mockData (intended for Backend transition).
+   * Brand name (static fallback while backend config endpoint is not yet implemented)
    */
-  const [branding, setBranding] = useState({
-    name: APP_CONFIG.brandName || "Enandi",
-    logo: APP_CONFIG.logoUrl || null
-  });
+  const [branding] = useState({ name: 'Enandi', logo: null });
+
+  // Banners — fetched from backend
+  const [banners, setBanners] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`${API_BASE_URL.DEVELOPMENT}/api/banners`, { headers: { 'x-tenant-id': TENANT_ID } })
+      .then(r => r.json())
+      .then(json => {
+        const list = json.banners ?? json ?? [];
+        if (list.length) setBanners(list.map((b: any) => ({ id: b._id ?? b.id, imageUrl: b.imageUrl, image: b.image, title: b.title })));
+      })
+      .catch(() => {});
+  }, []);
 
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
   const { data: allProducts = [] } = useGetProductsQuery();
+  const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 30000 });
+  const isStoreClosed = storeStatus?.isClosed ?? false;
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -137,14 +149,18 @@ export default function HomeScreen() {
   }, [searchQuery, allProducts]);
 
   const handleAddToCart = useCallback((product: any) => {
+    if (isStoreClosed) {
+      showToast('error', 'Store Closed', 'We are not accepting orders right now.');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const productForCart = {
       ...product,
-      image: Array.isArray(product.image) ? product.image[0] : product.image
+      image: resolveProductImageUri(product) ?? undefined
     };
     dispatch(addToCart(productForCart));
     showToast('success', 'Added!', `${product.name} added to basket`);
-  }, [dispatch]);
+  }, [dispatch, isStoreClosed]);
 
   const renderHeader = () => (
     <View style={styles.headerWrapper}>
@@ -201,7 +217,7 @@ export default function HomeScreen() {
 
       {!searchQuery && (
         <>
-          <StaticBannerCarousel banners={PROMO_BANNERS || []} />
+          <StaticBannerCarousel banners={banners} />
 
           <View style={styles.leafBanner}>
             <View style={styles.leafContent}>
@@ -222,7 +238,7 @@ export default function HomeScreen() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catList}>
             {(categories || []).filter((c: any) => c.parentId === null).map((item: any) => {
-              const img = resolveImage(item.image);
+              const img = resolveProductImageUri(item);
               return (
                 <TouchableOpacity
                   key={item.id}
@@ -247,6 +263,15 @@ export default function HomeScreen() {
       <Text style={styles.productsTitle}>
         {searchQuery ? `Results for "${searchQuery}"` : 'Curated for You'}
       </Text>
+
+      {isStoreClosed && (
+        <View style={styles.closedBanner}>
+          <Ionicons name="lock-closed" size={16} color="#fff" />
+          <Text style={styles.closedBannerText}>
+            Store is currently CLOSED · Orders are paused
+          </Text>
+        </View>
+      )}
     </View>
   );
 
@@ -265,27 +290,36 @@ export default function HomeScreen() {
         maxToRenderPerBatch={12}
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
-        renderItem={({ item }) => (
+        renderItem={({ item }) => {
+          const thumb = resolveProductImageUri(item);
+          return (
           <TouchableOpacity
             style={styles.productCard}
             onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
           >
             <View style={styles.imageWrapper}>
-              <Image
-                source={{ uri: item.image?.[0] }}
-                style={styles.productImage}
-                contentFit={getFitMode(item.image?.[0])}
-              />
+              {thumb ? (
+                <Image
+                  source={{ uri: thumb }}
+                  style={styles.productImage}
+                  contentFit={getFitMode(thumb)}
+                />
+              ) : (
+                <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="image-outline" size={28} color="#94a3b8" />
+                </View>
+              )}
             </View>
             <View style={styles.productInfo}>
               <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
               <Text style={styles.productPrice}>₹{item.price}</Text>
-              <TouchableOpacity style={styles.addButton} onPress={() => handleAddToCart(item)}>
+              <TouchableOpacity style={[styles.addButton, isStoreClosed && { backgroundColor: '#94a3b8' }]} onPress={() => handleAddToCart(item)}>
                 <Text style={styles.addText}>ADD</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
-        )}
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -312,6 +346,8 @@ const styles = StyleSheet.create({
   promoContainer: { marginBottom: 12 },
   promoCard: { width: width - 32, height: 160, borderRadius: 20, overflow: 'hidden', marginRight: 16 },
   promoImage: { width: '100%', height: '100%' },
+  bannerPlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#e2e8f0' },
+  bannerPlaceholderText: { color: '#475569', fontSize: 12, fontWeight: '700' },
   bannerOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.4)', padding: 12 },
   bannerPromoText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   dotContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 10 },
@@ -355,4 +391,6 @@ const styles = StyleSheet.create({
   productPrice: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginVertical: 4 },
   addButton: { width: '100%', paddingVertical: 5, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: BRAND_BLUE },
   addText: { color: BRAND_BLUE, fontWeight: '800', fontSize: 11, textAlign: 'center' },
+  closedBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#dc2626', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginTop: 8, marginBottom: 4 },
+  closedBannerText: { color: '#fff', fontWeight: '700', fontSize: 13, flexShrink: 1 },
 });

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingVi
 import { useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
 import { Colors, Fonts } from "@/theme/theme";
-import { requestOtp } from "@/api/addresses"; // Import API
+import { sendOtp } from "@/api/authApi";
 
 export default function Register() {
   const router = useRouter();
@@ -11,16 +11,16 @@ export default function Register() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Validation: Starts with 6-9 and is exactly 10 digits
   const indiaRegex = /^[6-9]\d{9}$/;
   const isValid = indiaRegex.test(phone) && name.length >= 2;
 
   const handleNext = async () => {
+    console.log("CLICKED SEND OTP");
     if (!isValid) return;
 
     setLoading(true);
     try {
-      await requestOtp(phone); // Hit Backend
+      await sendOtp(phone as string); // ✅ FIXED
       router.push({
         pathname: '/auth/otp',
         params: { phone, name }
@@ -56,7 +56,6 @@ export default function Register() {
 
         <View style={styles.inputWrapper}>
           <Text style={styles.inputLabel}>Mobile Number</Text>
-          {/* ✅ FIXED: Changed <div> to <View> */}
           <View style={styles.inputRow}>
             <View style={styles.countryCodeBox}>
               <Text style={styles.countryCodeText}>+91</Text>
