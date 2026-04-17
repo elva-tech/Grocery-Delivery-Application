@@ -22,6 +22,7 @@ import Schedule from './modules/Settings/Schedule';
 const AppRoutes = () => {
   return (
     <Routes>
+      <Route path="/signup" element={<Signup/>} />
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
         <Route index element={<DashboardHome />} /> 
