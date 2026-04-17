@@ -7,9 +7,14 @@ const BannerSchema = new mongoose.Schema(
     required: true
   },
 
-  image: {
+  imageUrl: {
     type: String,
     required: true
+  },
+  
+  // Deprecated — keep optional for backward compatibility
+  image: {
+    type: String
   },
   
   tenantId: {

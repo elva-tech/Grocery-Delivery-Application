@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Product = require("../models/Product.model");
 const Inventory = require("../models/Inventory.model");
+// TODO: 'image' field is deprecated. Use 'imageUrl' only.
 
 /* ================= ADD PRODUCT ================= */
 

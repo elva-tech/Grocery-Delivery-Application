@@ -9,6 +9,7 @@ import Pagination from '../../components/shared/Pagination';
 import usePagination from '../../hooks/usePagination';
 import { APP_CONFIG } from '../../config/appConfig';
 import { apiService } from '../../services/apiService';
+import resolveImageUrl from '../../utils/resolveImageUrl';
 
 const ProductList = () => {
 
@@ -26,12 +27,6 @@ const ProductList = () => {
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState(null);
-
-  const getImageUrl = (imgData) => {
-    if (!imgData) return null;
-    if (Array.isArray(imgData)) return imgData[0];
-    return imgData;
-  };
 
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -66,8 +61,10 @@ const ProductList = () => {
       accessor: 'name',
       render: (val, row) => {
 
-        const displayImg =
-          getImageUrl(row.imageUrl || row.images || row.image);
+        const displayImg = resolveImageUrl({
+          imageUrl: row.imageUrl,
+          image: row.images ?? row.image,
+        });
 
         const subCat = row.subCategoryId
           ? categories.find(c => String(c.id) === String(row.subCategoryId))
@@ -256,7 +253,7 @@ const ProductList = () => {
                 unit: `${v.unitValue} ${v.unitType}`,
                 stocks: Number(v.stock),
                 threshold: v.threshold != null ? Number(v.threshold) : 10,
-                imageUrl: Array.isArray(v.image) ? (v.image[0] || '') : (v.image || '')
+                imageUrl: resolveImageUrl({ image: v.image }) || ''
               };
 
               if (editingItem) {

@@ -7,7 +7,13 @@ const Order = require("../models/Order.model");
 exports.createReturnRequest = async (req, res) => {
   try {
 
-    const { orderId, reason, customerComment, comment, evidenceUrl } = req.body;
+    const { orderId, reason, customerComment, comment } = req.body;
+    // Primary: evidenceUrl (mobile / standard). Alias: evidenceImage when it is a URL string.
+    const evidenceUrl =
+      req.body.evidenceUrl ||
+      (typeof req.body.evidenceImage === "string" && req.body.evidenceImage.trim().startsWith("http")
+        ? req.body.evidenceImage.trim()
+        : null);
 
     // Validation
     if (!orderId || !reason) {

@@ -6,6 +6,33 @@ const Settings = require("../models/Settings.model");
 const Coupon = require("../models/Coupon.model");
 const { recordOrderBilling, reverseOrderBilling } = require("../services/billing.service");
 
+/** Resolve display URL from Product.imageUrl (string or legacy array). */
+function resolveProductImageUrl(product) {
+  if (!product) return "/placeholder.png";
+  const raw = product.imageUrl;
+  if (Array.isArray(raw)) {
+    const first = raw.find((u) => typeof u === "string" && u.trim());
+    return first ? first.trim() : "/placeholder.png";
+  }
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return "/placeholder.png";
+}
+
+/** Line item image for responses (prefers imageUrl; supports legacy `image`). */
+function resolveOrderItemImageUrl(item) {
+  if (!item) return "/placeholder.png";
+  if (item.imageUrl) {
+    if (Array.isArray(item.imageUrl)) {
+      const first = item.imageUrl.find((u) => typeof u === "string" && u.trim());
+      return first ? first.trim() : "/placeholder.png";
+    }
+    if (typeof item.imageUrl === "string" && item.imageUrl.trim()) {
+      return item.imageUrl.trim();
+    }
+  }
+  if (typeof item.image === "string" && item.image.trim()) return item.image.trim();
+  return "/placeholder.png";
+}
 
 const PAYMENT_MODES = ["COD", "ONLINE"];
 
@@ -54,13 +81,13 @@ exports.placeCustomerOrder = async (req, res) => {
       }
 
       orderItems.push({
-  productId: inventory.productId._id,
-  name: inventory.productId.name,
-  qty: item.qty,
-  price: inventory.productId.price,
-  unit: inventory.productId.unit || "pcs",          // ✅ ADD
-  image: inventory.productId.image || "/placeholder.png" // ✅ ADD
-});
+        productId: inventory.productId._id,
+        name: inventory.productId.name,
+        qty: item.qty,
+        price: inventory.productId.price,
+        unit: inventory.productId.unit || "pcs",
+        imageUrl: resolveProductImageUrl(inventory.productId),
+      });
 
       totalAmount += inventory.productId.price * item.qty;
     }
@@ -212,15 +239,19 @@ exports.getCustomerOrderHistory = async (req, res) => {
       deliverySlot: order.deliverySlot || "Standard Delivery",
 
       // ✅ SEND ITEMS PROPERLY
-     items: order.items.map(item => ({
-  productId: item.productId,
-  id: item.productId,              // ✅ IMPORTANT for frontend reorder
-  name: item.name,
-  quantity: item.qty,
-  price: item.price,
-  unit: item.unit || "pcs",
-  image: item.image || "/placeholder.png"
-}))
+      items: order.items.map((item) => {
+        const imageUrl = resolveOrderItemImageUrl(item);
+        return {
+          productId: item.productId,
+          id: item.productId,
+          name: item.name,
+          quantity: item.qty,
+          price: item.price,
+          unit: item.unit || "pcs",
+          imageUrl,
+          image: imageUrl,
+        };
+      }),
     }));
 
     res.status(200).json({
@@ -322,12 +353,18 @@ exports.getCustomerOrderById = async (req, res) => {
     }
 
     const safeItems = Array.isArray(order.items)
-      ? order.items.map(item => ({
-          productId: item.productId,
-          name: item.name,
-          qty: item.qty,
-          price: item.price
-        }))
+      ? order.items.map((item) => {
+          const imageUrl = resolveOrderItemImageUrl(item);
+          return {
+            productId: item.productId,
+            name: item.name,
+            qty: item.qty,
+            price: item.price,
+            unit: item.unit || "pcs",
+            imageUrl,
+            image: imageUrl,
+          };
+        })
       : [];
 
     return res.status(200).json({

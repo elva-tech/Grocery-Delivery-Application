@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useGetCategoriesQuery } from '../../api/apiSlice';
+import { resolveImageUrl } from '../../utils/resolveImageUrl';
 
 interface SidebarProps {
   selectedParentId: string | null;
@@ -49,7 +50,11 @@ const CategorySidebar: React.FC<SidebarProps> = ({ selectedParentId, selectedSub
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-10 bg-[#4b6f9e] rounded-r-full shadow-md" />
                 )}
                 <div className={`w-12 h-12 rounded-[1.25rem] mb-2 flex items-center justify-center p-2 transition-all duration-500 ${isParentActive ? 'bg-white shadow-xl scale-110 rotate-2' : 'bg-[#f8fafc]'}`}>
-                  <img src={Array.isArray(parent.image) ? parent.image[0] : parent.image} className="w-full h-full object-contain" alt={parent.name} />
+                  {resolveImageUrl(parent) ? (
+                    <img src={resolveImageUrl(parent)} className="w-full h-full object-contain" alt={parent.name} />
+                  ) : (
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-300">No Image</span>
+                  )}
                 </div>
                 <span className={`text-[9px] font-black text-center px-2 uppercase tracking-tighter ${isParentActive ? 'text-[#4b6f9e]' : 'text-slate-500'}`}>
                   {parent.name}
@@ -64,7 +69,11 @@ const CategorySidebar: React.FC<SidebarProps> = ({ selectedParentId, selectedSub
                   className={`flex flex-col items-center py-4 cursor-pointer transition-all border-l-4 ${selectedSubId === sub.id ? 'border-[#4b6f9e] bg-white' : 'border-transparent bg-slate-50/20'}`}
                 >
                   <div className={`w-8 h-8 rounded-lg mb-1 flex items-center justify-center overflow-hidden bg-white shadow-sm border ${selectedSubId === sub.id ? 'border-[#4b6f9e]/30' : 'border-transparent'}`}>
-                    <img src={Array.isArray(sub.image) ? sub.image[0] : sub.image} className="w-full h-full object-cover" alt={sub.name} />
+                    {resolveImageUrl(sub) ? (
+                      <img src={resolveImageUrl(sub)} className="w-full h-full object-cover" alt={sub.name} />
+                    ) : (
+                      <span className="text-[7px] font-black uppercase tracking-widest text-slate-300">No</span>
+                    )}
                   </div>
                   <span className={`text-[7px] font-bold text-center px-1 uppercase tracking-tight ${selectedSubId === sub.id ? 'text-[#4b6f9e]' : 'text-slate-400'}`}>
                     {sub.name}

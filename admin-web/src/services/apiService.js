@@ -185,13 +185,22 @@ getBanners: async () => {
   }
 },
 
-createBanner: async (formData) => {
+createBanner: async (payload) => {
   try {
-    const res = await api.post(
-      "/api/banners/create-banner",
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
+    const res = await api.post("/api/banners/create-banner", payload);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
+uploadFile: async (file) => {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post("/api/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
     return res.data;
   } catch (error) {
     throw error.response?.data || error;

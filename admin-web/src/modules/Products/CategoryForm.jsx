@@ -3,6 +3,7 @@ import { Formik, Form, Field } from 'formik';
 import * as Yup from 'yup';
 import { X, Camera } from 'lucide-react';
 import { useAppState } from '../../context/AppStateContext';
+import resolveImageUrl from '../../utils/resolveImageUrl';
 
 const CategorySchema = Yup.object().shape({
   name: Yup.string().required('Required'),
@@ -39,12 +40,14 @@ const CategoryForm = ({ initialValues, onSubmit, onCancel }) => {
           onSubmit(submission);
         }}
       >
-        {({ setFieldValue, values }) => (
+        {({ setFieldValue, values }) => {
+          const imageSrc = resolveImageUrl({ image: values.image });
+          return (
           <Form className="space-y-6">
             <div className="flex flex-col items-center gap-4">
               <div onClick={() => fileInputRef.current.click()} className="relative w-32 h-32 rounded-3xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer">
-                {values.image.length > 0 ? (
-                  <img src={values.image[0]} className="w-full h-full object-cover" alt="" />
+                {imageSrc ? (
+                  <img src={imageSrc} className="w-full h-full object-cover" alt="" />
                 ) : (
                   <Camera className="text-gray-300" size={32} />
                 )}
@@ -71,7 +74,8 @@ const CategoryForm = ({ initialValues, onSubmit, onCancel }) => {
               <button type="submit" className="w-full bg-[#1A4D2E] text-white py-4 rounded-xl font-bold shadow-lg">Save Category</button>
             </div>
           </Form>
-        )}
+          );
+        }}
       </Formik>
     </div>
   );

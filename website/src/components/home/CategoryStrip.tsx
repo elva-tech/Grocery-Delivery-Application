@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useGetCategoriesQuery } from '../../api/apiSlice';
+import { resolveImageUrl } from '../../utils/resolveImageUrl';
 
 interface CategoryStripProps {
   selectedId: string | null;      // Parent Pillar ID
@@ -58,11 +59,15 @@ const CategoryStrip: React.FC<CategoryStripProps> = ({
                   ? 'bg-white border-2 border-[#4b6f9e] shadow-xl scale-110 rotate-3' 
                   : 'bg-white border border-gray-100 group-hover:bg-gray-50 group-hover:-translate-y-1'}`}
               >
-                <img 
-                  src={Array.isArray(cat.image) ? cat.image[0] : cat.image} 
-                  className="w-full h-full object-contain mix-blend-multiply" 
-                  alt={cat.name}
-                />
+                {resolveImageUrl(cat) ? (
+                  <img
+                    src={resolveImageUrl(cat)}
+                    className="w-full h-full object-contain mix-blend-multiply"
+                    alt={cat.name}
+                  />
+                ) : (
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">No Image</span>
+                )}
               </div>
               <span className={`text-[11px] mt-3 font-black transition-colors uppercase tracking-tighter text-center
                 ${isActive ? 'text-[#4b6f9e]' : 'text-[#94a3b8] group-hover:text-slate-800'}`}>
@@ -87,11 +92,15 @@ const CategoryStrip: React.FC<CategoryStripProps> = ({
                     ? 'bg-[#4b6f9e] border-[#4b6f9e] text-white shadow-lg shadow-blue-100' 
                     : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200 hover:bg-slate-50'}`}
               >
-                <img 
-                  src={Array.isArray(sub.image) ? sub.image[0] : sub.image} 
-                  className="w-6 h-6 object-contain rounded-md" 
-                  alt={sub.name} 
-                />
+                {resolveImageUrl(sub) ? (
+                  <img
+                    src={resolveImageUrl(sub)}
+                    className="w-6 h-6 object-contain rounded-md"
+                    alt={sub.name}
+                  />
+                ) : (
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-300">No</span>
+                )}
                 <span className="text-[10px] font-bold uppercase tracking-wide">{sub.name}</span>
               </button>
             );

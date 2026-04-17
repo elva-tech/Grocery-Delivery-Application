@@ -3,7 +3,7 @@
  * @description Order history management with Admin Feedback Loop integrated.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, Modal, ScrollView, TextInput, Alert
@@ -23,6 +23,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 // INTEGRATED: Import settings hook
 import { useGetAppSettingsQuery } from '@/api/apiSlice';
+import { API_BASE_URL } from '@/src/config/constants';
+import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 const STATUS_THEME: any = {
   PLACED: { color: '#64748b', label: 'Order Placed' },
@@ -59,7 +61,12 @@ export default function OrdersScreen() {
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState('');
   const [issueComment, setIssueComment] = useState('');
+  /** Local file:// URI for preview only (not sent to returns API). */
   const [issueImage, setIssueImage] = useState<string | null>(null);
+  /** Cloudinary URL from POST /api/upload — sent as evidenceUrl on submit. */
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
+  const evidenceUploadSeq = useRef(0);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -104,6 +111,15 @@ export default function OrdersScreen() {
     }
   }, []);
 
+  const resetIssueReportFields = useCallback(() => {
+    setIssueImage(null);
+    setEvidenceUrl(null);
+    setSelectedReason('');
+    setIssueComment('');
+    evidenceUploadSeq.current += 1;
+    setIsUploadingEvidence(false);
+  }, []);
+
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -118,8 +134,42 @@ export default function OrdersScreen() {
       quality: 0.6,
     });
 
-    if (!result.canceled) {
-      setIssueImage(result.assets[0].uri);
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    const localUri = asset.uri;
+    setIssueImage(localUri);
+    setEvidenceUrl(null);
+
+    const seq = ++evidenceUploadSeq.current;
+    setIsUploadingEvidence(true);
+
+    const formData = new FormData();
+    const name =
+      asset.fileName ??
+      `evidence_${Date.now()}.${localUri.split('.').pop()?.split('?')[0] || 'jpg'}`;
+    const mime = asset.mimeType ?? 'image/jpeg';
+    // @ts-ignore React Native FormData file part
+    formData.append('file', { uri: localUri, name, type: mime });
+
+    try {
+      const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (seq !== evidenceUploadSeq.current) return;
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.message || 'Upload failed');
+      }
+      setEvidenceUrl(String(data.url));
+      showToast('success', 'Photo uploaded', 'Evidence is ready to submit.');
+    } catch (e: any) {
+      if (seq !== evidenceUploadSeq.current) return;
+      setEvidenceUrl(null);
+      showToast('error', 'Upload failed', e?.message || 'Could not upload evidence. Try again.');
+    } finally {
+      if (seq === evidenceUploadSeq.current) setIsUploadingEvidence(false);
     }
   };
 
@@ -143,27 +193,19 @@ export default function OrdersScreen() {
   };
 
   const submitFinalReport = async () => {
-    if (!selectedReason || !issueImage) {
-      return Alert.alert("Required Fields", "Please select a reason and upload a photo.");
+    if (!selectedReason) {
+      return Alert.alert('Required Fields', 'Please select a reason.');
+    }
+    if (!evidenceUrl) {
+      return Alert.alert(
+        'Required Fields',
+        isUploadingEvidence
+          ? 'Please wait for the photo to finish uploading.'
+          : 'Please select a photo and wait for upload to complete.',
+      );
     }
 
     setIsSubmittingReport(true);
-    const formData = new FormData();
-    formData.append('orderId', selectedOrder.id);
-    formData.append('reason', selectedReason);
-    formData.append('comment', issueComment || "No comment");
-
-    const uriParts = issueImage.split('.');
-    const fileType = uriParts[uriParts.length - 1];
-    const fileName = issueImage.split('/').pop();
-
-    // @ts-ignore
-    formData.append('evidence', {
-      uri: issueImage,
-      name: fileName || `report_${Date.now()}.${fileType}`,
-      type: `image/${fileType}`,
-    });
-
     try {
       if (!token) throw new Error('Not authenticated');
       await reportOrderIssueApi(
@@ -171,6 +213,7 @@ export default function OrdersScreen() {
         selectedReason,
         issueComment || 'No comment',
         token,
+        evidenceUrl,
       );
       // Optimistic local update
       setOrders(prev =>
@@ -185,9 +228,7 @@ export default function OrdersScreen() {
       
       setShowIssueModal(false);
       setSelectedOrder(null);
-      setIssueImage(null);
-      setSelectedReason('');
-      setIssueComment('');
+      resetIssueReportFields();
       fetchOrders(true);
     } catch (err) {
       showToast('error', 'Error', 'Submission failed.');
@@ -356,16 +397,25 @@ export default function OrdersScreen() {
                   )}
                 </View>
               )}
-              {selectedOrder?.items?.map((product: any, idx: number) => (
+              {selectedOrder?.items?.map((product: any, idx: number) => {
+                const thumb = resolveProductImageUri(product);
+                return (
                 <View key={idx} style={styles.productRow}>
-                  <Image source={{ uri: Array.isArray(product.image) ? product.image[0] : product.image }} style={styles.productImage} />
+                  {thumb ? (
+                    <Image source={{ uri: thumb }} style={styles.productImage} />
+                  ) : (
+                    <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                      <Ionicons name="image-outline" size={22} color="#94a3b8" />
+                    </View>
+                  )}
                   <View style={styles.productInfo}>
                     <Text style={styles.productName}>{product.name}</Text>
                     <Text style={styles.productMeta}>{product.quantity} x {product.unit}</Text>
                   </View>
                   <Text style={styles.productPrice}>₹{product.price * product.quantity}</Text>
                 </View>
-              ))}
+                );
+              })}
 
               {selectedOrder?.adminComment && (
                 <View style={styles.adminResponseBox}>
@@ -398,7 +448,13 @@ export default function OrdersScreen() {
 
               {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
               {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && (
-                <TouchableOpacity style={styles.reportBtn} onPress={() => setShowIssueModal(true)}>
+                <TouchableOpacity
+                  style={styles.reportBtn}
+                  onPress={() => {
+                    resetIssueReportFields();
+                    setShowIssueModal(true);
+                  }}
+                >
                   <Ionicons name="warning-outline" size={18} color="#f59e0b" />
                   <Text style={styles.reportBtnText}>Report Issue / Refund</Text>
                 </TouchableOpacity>
@@ -414,7 +470,12 @@ export default function OrdersScreen() {
           <View style={[styles.modalContent, { height: '80%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Refund / Issue</Text>
-              <TouchableOpacity onPress={() => setShowIssueModal(false)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowIssueModal(false);
+                  resetIssueReportFields();
+                }}
+              >
                 <Ionicons name="close-circle" size={32} color="#cbd5e1" />
               </TouchableOpacity>
             </View>
@@ -437,13 +498,34 @@ export default function OrdersScreen() {
 
               <Text style={styles.label}>Upload Evidence</Text>
               <TouchableOpacity style={styles.pickerBox} onPress={pickImage}>
-                {issueImage ? <Image source={{ uri: issueImage }} style={styles.previewImg} /> : <Ionicons name="camera" size={30} color="#94a3b8" />}
+                {issueImage ? (
+                  <View style={styles.previewWrap}>
+                    <Image source={{ uri: issueImage }} style={styles.previewImg} />
+                    {isUploadingEvidence && (
+                      <View style={styles.previewLoading}>
+                        <ActivityIndicator color="#ffffff" />
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <Ionicons name="camera" size={30} color="#94a3b8" />
+                )}
               </TouchableOpacity>
+              {issueImage && isUploadingEvidence && (
+                <Text style={styles.uploadHint}>Uploading evidence…</Text>
+              )}
+              {issueImage && evidenceUrl && !isUploadingEvidence && (
+                <Text style={styles.uploadHintReady}>Evidence uploaded — you can submit.</Text>
+              )}
 
-              <TouchableOpacity 
-                style={[styles.primaryBtn, { marginTop: 30 }, isSubmittingReport && { opacity: 0.6 }]} 
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  { marginTop: 30 },
+                  (isSubmittingReport || isUploadingEvidence || !evidenceUrl || !selectedReason) && { opacity: 0.6 },
+                ]}
                 onPress={submitFinalReport}
-                disabled={isSubmittingReport}
+                disabled={isSubmittingReport || isUploadingEvidence || !evidenceUrl || !selectedReason}
               >
                 {isSubmittingReport ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Submit the issue</Text>}
               </TouchableOpacity>
@@ -581,7 +663,16 @@ const styles = StyleSheet.create({
   reasonChipTextActive: { color: '#fff' },
   inputArea: { backgroundColor: '#f8fafc', borderRadius: 16, padding: 16, height: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: '#e2e8f0' },
   pickerBox: { height: 120, borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center', marginTop: 10, overflow: 'hidden' },
+  previewWrap: { width: '100%', height: '100%' },
   previewImg: { width: '100%', height: '100%' },
+  previewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadHint: { marginTop: 8, fontSize: 13, color: '#64748b', fontWeight: '600' },
+  uploadHintReady: { marginTop: 8, fontSize: 13, color: '#059669', fontWeight: '600' },
 
   alertOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   alertBox: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', alignItems: 'center' },
