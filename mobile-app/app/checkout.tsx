@@ -17,6 +17,7 @@ import {
 import { getCartCalculation } from '@/api/cartApi';
 import { getAddresses } from '@/api/addresses';
 import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
+import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
   const { items, totalAmount } = useSelector((state: RootState) => state.cart);
@@ -31,6 +32,9 @@ export default function CheckoutScreen() {
   const [couponError, setCouponError] = useState('');
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isPlacing, setIsPlacing] = useState(false);
+
+  const { data: storeStatus } = useGetStoreStatusQuery();
+  const isStoreClosed = storeStatus?.isClosed ?? false;
 
   useEffect(() => {
     if (items.length === 0) { router.replace('/(tabs)'); return; }
@@ -59,6 +63,7 @@ export default function CheckoutScreen() {
   };
 
   const handlePlaceOrder = async () => {
+    if (isStoreClosed) { showToast('error', 'Store Closed', 'We are not accepting orders right now.'); return; }
     if (items.length === 0) { showToast('error', 'Empty Cart', 'Add items first.'); return; }
     if (!token) { showToast('error', 'Session Expired', 'Please log in again.'); router.push('/auth/landing'); return; }
 
@@ -210,16 +215,16 @@ export default function CheckoutScreen() {
       </ScrollView>
 
       <TouchableOpacity
-        style={[styles.placeOrderBtn, (items.length === 0 || isPlacing) && styles.btnDisabled]}
+        style={[styles.placeOrderBtn, (items.length === 0 || isPlacing || isStoreClosed) && styles.btnDisabled]}
         onPress={handlePlaceOrder}
         activeOpacity={0.85}
-        disabled={items.length === 0 || isPlacing}
+        disabled={items.length === 0 || isPlacing || isStoreClosed}
       >
         {isPlacing ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.btnText}>
-            {items.length === 0 ? 'Your Basket is Empty' : `Confirm & Pay ₹${finalAmount}`}
+            {isStoreClosed ? '🔴 Store Closed' : items.length === 0 ? 'Your Basket is Empty' : `Confirm & Pay ₹${finalAmount}`}
           </Text>
         )}
       </TouchableOpacity>

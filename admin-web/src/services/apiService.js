@@ -237,5 +237,57 @@ deleteBanner: async (id) => {
     return res.data;
   },
 
+  /* -------- BILLING APIs -------- */
+
+  getPlans: async () => {
+    const res = await api.get("/api/billing/plans");
+    return res.data;
+  },
+
+  getSubscription: async () => {
+    const res = await api.get("/api/billing/subscription");
+    return res.data;
+  },
+
+  getUsage: async () => {
+    const res = await api.get("/api/billing/usage");
+    return res.data;
+  },
+
+  getCurrentInvoice: async () => {
+    const res = await api.get("/api/billing/invoice/current");
+    return res.data;
+  },
+
+  triggerBillingGeneration: async (tenantId) => {
+    const res = await api.post("/api/billing/generate", tenantId ? { tenantId } : {});
+    return res.data;
+  },
+
+  changePlan: async (planId) => {
+    const res = await api.put("/api/billing/subscription/plan", { planId });
+    return res.data;
+  },
+
+  createInvoicePayment: async (invoiceId) => {
+    const res = await api.post(`/api/billing/invoice/${invoiceId}/pay`);
+    return res.data;
+  },
+
+  verifyInvoicePayment: async (payload) => {
+    const res = await api.post(`/api/billing/invoice/${payload.invoiceId}/verify`, payload);
+    return res.data;
+  },
+
+  initiatePlanPayment: async (planId) => {
+    const res = await api.post("/api/billing/plan/initiate-payment", { planId });
+    return res.data;
+  },
+
+  activatePlanNow: async (payload) => {
+    const res = await api.post("/api/billing/plan/activate", payload);
+    return res.data;
+  },
+
 };
 

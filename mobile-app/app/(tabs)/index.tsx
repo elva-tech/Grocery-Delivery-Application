@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 
 
 // Domain Imports
-import { useGetCategoriesQuery, useGetProductsQuery } from '@/api/apiSlice';
+import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
 import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
@@ -137,6 +137,8 @@ export default function HomeScreen() {
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
   const { data: allProducts = [] } = useGetProductsQuery();
+  const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 30000 });
+  const isStoreClosed = storeStatus?.isClosed ?? false;
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -145,6 +147,10 @@ export default function HomeScreen() {
   }, [searchQuery, allProducts]);
 
   const handleAddToCart = useCallback((product: any) => {
+    if (isStoreClosed) {
+      showToast('error', 'Store Closed', 'We are not accepting orders right now.');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const productForCart = {
       ...product,
@@ -152,7 +158,7 @@ export default function HomeScreen() {
     };
     dispatch(addToCart(productForCart));
     showToast('success', 'Added!', `${product.name} added to basket`);
-  }, [dispatch]);
+  }, [dispatch, isStoreClosed]);
 
   const renderHeader = () => (
     <View style={styles.headerWrapper}>
@@ -255,6 +261,15 @@ export default function HomeScreen() {
       <Text style={styles.productsTitle}>
         {searchQuery ? `Results for "${searchQuery}"` : 'Curated for You'}
       </Text>
+
+      {isStoreClosed && (
+        <View style={styles.closedBanner}>
+          <Ionicons name="lock-closed" size={16} color="#fff" />
+          <Text style={styles.closedBannerText}>
+            Store is currently CLOSED · Orders are paused
+          </Text>
+        </View>
+      )}
     </View>
   );
 
@@ -288,7 +303,7 @@ export default function HomeScreen() {
             <View style={styles.productInfo}>
               <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
               <Text style={styles.productPrice}>₹{item.price}</Text>
-              <TouchableOpacity style={styles.addButton} onPress={() => handleAddToCart(item)}>
+              <TouchableOpacity style={[styles.addButton, isStoreClosed && { backgroundColor: '#94a3b8' }]} onPress={() => handleAddToCart(item)}>
                 <Text style={styles.addText}>ADD</Text>
               </TouchableOpacity>
             </View>
@@ -363,4 +378,6 @@ const styles = StyleSheet.create({
   productPrice: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginVertical: 4 },
   addButton: { width: '100%', paddingVertical: 5, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: BRAND_BLUE },
   addText: { color: BRAND_BLUE, fontWeight: '800', fontSize: 11, textAlign: 'center' },
+  closedBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#dc2626', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginTop: 8, marginBottom: 4 },
+  closedBannerText: { color: '#fff', fontWeight: '700', fontSize: 13, flexShrink: 1 },
 });

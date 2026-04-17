@@ -1,0 +1,52 @@
+{
+  "_comment": "Edit this file to add/modify/remove plans. Changes take effect on next server start (seedPlans re-upserts). Do NOT remove the FREE plan — it is the default for new tenants.",
+
+  "defaultPlans": [
+    {
+      "name": "FREE",
+      "pricingType": "PER_ORDER",
+      "monthlyPrice": 0,
+      "includedOrders": null,
+      "pricePerExtraOrder": 0,
+      "pricePerOrder": 10,
+      "isDefault": true,
+      "isActive": true
+    },
+    {
+      "name": "BASIC",
+      "pricingType": "SUBSCRIPTION",
+      "monthlyPrice": 999,
+      "includedOrders": 100,
+      "pricePerExtraOrder": 5,
+      "pricePerOrder": 0,
+      "isDefault": false,
+      "isActive": true
+    },
+    {
+      "name": "PREMIUM",
+      "pricingType": "SUBSCRIPTION",
+      "monthlyPrice": 2499,
+      "includedOrders": 500,
+      "pricePerExtraOrder": 3,
+      "pricePerOrder": 0,
+      "isDefault": false,
+      "isActive": true
+    }
+  ],
+
+  "tenantOverrides": {
+    "_comment": "Add tenant-specific plans here. Key = tenantId (string). These plans are only visible to that tenant.",
+    "example_tenant_id": [
+      {
+        "name": "ENTERPRISE",
+        "pricingType": "SUBSCRIPTION",
+        "monthlyPrice": 4999,
+        "includedOrders": 2000,
+        "pricePerExtraOrder": 1,
+        "pricePerOrder": 0,
+        "isDefault": false,
+        "isActive": true
+      }
+    ]
+  }
+}

@@ -14,6 +14,7 @@ const SettingsPage = () => {
     freeDeliveryAbove: 500,
     discountType: 'NONE',
     discountValue: 0,
+    thresholdDistance: 10,
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -29,6 +30,7 @@ const SettingsPage = () => {
           freeDeliveryAbove: data.freeDeliveryAbove ?? 500,
           discountType: data.discountType ?? 'NONE',
           discountValue: data.discountValue ?? 0,
+          thresholdDistance: data.thresholdDistance ?? 10,
         });
       } catch (err) {
         console.error('Failed to load settings:', err);
@@ -54,6 +56,7 @@ const SettingsPage = () => {
         freeDeliveryAbove: Number(form.freeDeliveryAbove),
         discountType: form.discountType,
         discountValue: Number(form.discountValue),
+        thresholdDistance: Number(form.thresholdDistance),
       });
       setStatus('success');
     } catch (err) {
@@ -126,6 +129,31 @@ const SettingsPage = () => {
               />
               <p className="text-[10px] text-gray-400 mt-1.5">
                 Orders at or above this amount get free delivery
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* THRESHOLD DISTANCE SECTION */}
+        <div className="px-8 py-6 border-b border-gray-100">
+          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-5">
+            Delivery Radius
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wider">
+                Threshold Distance (km)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.thresholdDistance}
+                onChange={e => handleChange('thresholdDistance', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D]"
+                placeholder="e.g. 10"
+              />
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                Maximum delivery radius from the store (in kilometres)
               </p>
             </div>
           </div>
