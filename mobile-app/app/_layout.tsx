@@ -23,7 +23,15 @@ function RootLayoutNav() {
   const dispatch = useDispatch();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [mounted, setMounted] = useState(false);
-  const [animationFinished, setAnimationFinished] = useState(false);
+const [animationFinished, setAnimationFinished] = useState(false);
+
+useEffect(() => {
+  const timeout = setTimeout(() => {
+    setAnimationFinished(true);
+  }, 3000); // max wait 3s
+
+  return () => clearTimeout(timeout);
+}, []);
   const [authRestored, setAuthRestored] = useState(false);
 
   const [fontsLoaded, fontError] = useFonts({
@@ -84,7 +92,7 @@ function RootLayoutNav() {
     return (
       <View style={styles.animationContainer}>
         <LottieView
-          source={require('../assets/animations/Welcome.json')}
+          source={require('../assets/animations/Loading_car.json')}
           autoPlay
           loop={false}
           onAnimationFinish={() => setAnimationFinished(true)}
