@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { useDispatch } from 'react-redux';
 import { X, User, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { setCredentials } from '../../store/slices/authSlice';
@@ -23,7 +23,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const otpInputs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (step === 'otp' && timer > 0) {
       interval = setInterval(() => setTimer((prev: number) => prev - 1), 1000);
     }
@@ -34,7 +34,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
 
   if (!isOpen) return null;
 
-  const handleSendOtp = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSendOtp = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     
@@ -95,7 +95,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     }
   };
 
-  const handleVerify = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleVerify = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     
@@ -240,7 +240,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                         type="text"
                         placeholder="John Doe"
                         value={name}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                         className="w-full h-16 bg-slate-50 border-2 border-slate-200 focus:border-[#4b6f9e] focus:bg-white rounded-2xl pl-12 pr-4 font-bold outline-none transition-all"
                         required
                       />
@@ -254,7 +254,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                     type="tel"
                     placeholder="Enter 10 digit number"
                     value={phone}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => {
                       const val = e.target.value.replace(/\D/g, '');
                       if (val.length <= 10) setPhone(val);
                     }}
@@ -268,12 +268,14 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                 {otp.map((digit: string, idx: number) => (
                   <input
                     key={idx}
-                    ref={(el: HTMLInputElement | null) => (otpInputs.current[idx] = el)}
+                    ref={(el: HTMLInputElement | null) => {
+                      otpInputs.current[idx] = el;
+                    }}
                     type="text"
                     maxLength={1}
                     value={digit}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleOtpChange(e.target.value, idx)}
-                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleOtpChange(e.target.value, idx)}
+                    onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                       if (e.key === 'Backspace' && !otp[idx] && idx > 0) {
                         otpInputs.current[idx - 1]?.focus();
                       }

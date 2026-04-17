@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   MapPin, Plus, ArrowLeft, Loader2, CheckCircle2, 
-  Gift, User, Users, X, Phone, UserCircle, MessageSquare 
+  Gift, User, Users, X, Phone, UserCircle
 } from 'lucide-react';
 import { getAddresses } from '../api/addresses';
 import AddressModal from '../components/layout/AddressModal';
