@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || 'https://grocery-delivery-application-2kc4.onrender.com';
+const API = import.meta.env.VITE_API_URL || 'https://grocery-delivery-application-6n3w.onrender.com';
 
 const authHeader = () => ({
   'Content-Type': 'application/json',
