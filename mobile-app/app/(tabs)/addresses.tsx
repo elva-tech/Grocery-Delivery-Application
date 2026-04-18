@@ -72,7 +72,7 @@ export default function AddressesScreen() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false); // New state for API call
   const [label, setLabel] = useState('');
   const [full, setFull] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState((user?.phone || '').replace(/^\+91\s*/, ''));
   const [landmark, setLandmark] = useState('');
 
   const [showMap, setShowMap] = useState(false);
@@ -114,7 +114,7 @@ export default function AddressesScreen() {
       setAddresses(prev => [...prev, newAddr]);
       setSelectedId(newAddr.id);
       setAdding(false);
-      setLabel(''); setFull(''); setPhone(''); setLandmark('');
+      setLabel(''); setFull(''); setPhone((user?.phone || '').replace(/^\+91\s*/, '')); setLandmark('');
     } catch (e: any) {
       showToast('error', 'Save Failed', e?.message || 'Error');
     } finally {

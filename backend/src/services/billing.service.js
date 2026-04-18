@@ -1,4 +1,5 @@
-const Plan             = require("../models/Plan.model");
+const Plan              = require("../models/Plan.model");
+const Tenant            = require("../models/Tenant.model");
 const StoreSubscription = require("../models/StoreSubscription.model");
 const StoreUsage       = require("../models/StoreUsage.model");
 const Invoice          = require("../models/Invoice.model");
@@ -255,6 +256,14 @@ async function _generateForTenant(tenantId) {
 
   // Apply scheduled plan change (if any)
   const newPlanId = sub.nextPlanId || sub.planId._id;
+
+  // Sync Tenant.plan label when plan actually changes
+  if (sub.nextPlanId) {
+    const newPlanDoc = await Plan.findById(sub.nextPlanId).lean();
+    if (newPlanDoc) {
+      await Tenant.updateOne({ tenantId }, { plan: newPlanDoc.name }).catch(() => {});
+    }
+  }
 
   await StoreSubscription.findByIdAndUpdate(sub._id, {
     $set: {

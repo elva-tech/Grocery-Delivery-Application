@@ -23,6 +23,7 @@ import confetti from 'canvas-confetti';
 import Footer from './components/layout/Footer';
 import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
+import ContactUs from './pages/ContactUs';
 
 import { useGetStoreStatusQuery } from './api/apiSlice';
 
@@ -35,7 +36,12 @@ const App = () => {
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
 
-  const [selectedAddress, setSelectedAddress] = useState<any>(null);
+  const [selectedAddress, setSelectedAddress] = useState<any>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('user_addresses') || '[]');
+      return saved[0] || null;
+    } catch { return null; }
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showFreeToast, setShowFreeToast] = useState(false);
   const [wasFree, setWasFree] = useState(false);
@@ -352,7 +358,7 @@ const App = () => {
               element={<Orders openCart={() => setIsCartOpen(true)} />}
             />
             <Route path="/about" element={<LegalPage />} />
-            <Route path="/contact" element={<LegalPage />} />
+            <Route path="/contact" element={<ContactUs />} />
             <Route path="/faqs" element={<LegalPage />} />
             <Route path="/privacy" element={<LegalPage />} />
             <Route path="/terms" element={<LegalPage />} />

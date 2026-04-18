@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2, Banknote, CreditCard } from 'lucide-react';
 import type { RootState } from '../store/store';
 import { logout } from '../store/slices/authSlice';
 import { useCalculateCartMutation } from '../api/apiSlice';
@@ -25,6 +25,9 @@ const Checkout = ({ address }: any) => {
     saved: 0,
     amountToFree: 0,
   });
+
+  // Payment method
+  const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
 
   // Coupon state
   const [couponInput, setCouponInput] = useState('');
@@ -74,17 +77,28 @@ const finalTotal = bill.grandTotal - couponDiscount;
 const handlePlaceOrder = async () => {
   if (items.length === 0) return;
   setIsProcessing(true);
+
+  const orderPayload = {
+    items: items.map(item => ({ productId: item.id, qty: item.quantity })),
+    paymentMode: paymentMethod,
+    deliveryAddress: {
+      line1: address?.full || '',
+      lat: typeof address?.lat === 'number' ? address.lat : 0,
+      lng: typeof address?.lng === 'number' ? address.lng : 0,
+    },
+    couponCode: appliedCoupon?.code ?? null,
+  };
+
   try {
-    const order = await placeOrderApi({
-      items: items.map(item => ({ productId: item.id, qty: item.quantity })),
-      paymentMode: 'ONLINE',
-      deliveryAddress: {
-        line1: address?.full || '',
-        lat: typeof address?.lat === 'number' ? address.lat : 0,
-        lng: typeof address?.lng === 'number' ? address.lng : 0,
-      },
-      couponCode: appliedCoupon?.code ?? null,
-    });
+    if (paymentMethod === 'COD') {
+      // COD: place order directly, skip Razorpay
+      const order = await placeOrderApi(orderPayload);
+      navigate('/success', { state: { fromCheckout: true, orderId: order.orderId, orderItems: items } });
+      return;
+    }
+
+    // ONLINE: existing Razorpay flow
+    const order = await placeOrderApi(orderPayload);
 
     const scriptLoaded = await loadRazorpay();
     if (!scriptLoaded) {
@@ -285,17 +299,62 @@ const handlePlaceOrder = async () => {
                 )}
               </div>
 
+              {/* Payment Method Selector */}
+              <div className="mb-6 space-y-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Payment Method</p>
+                <button
+                  onClick={() => setPaymentMethod('ONLINE')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all ${
+                    paymentMethod === 'ONLINE'
+                      ? 'border-[#4b6f9e] bg-blue-50'
+                      : 'border-slate-100 bg-white hover:border-slate-200'
+                  }`}
+                >
+                  <CreditCard size={18} className={paymentMethod === 'ONLINE' ? 'text-[#4b6f9e]' : 'text-slate-400'} />
+                  <div className="flex-1 text-left">
+                    <p className={`text-xs font-black ${ paymentMethod === 'ONLINE' ? 'text-[#4b6f9e]' : 'text-slate-600'}`}>Online Payment</p>
+                    <p className="text-[10px] text-slate-400">UPI, Cards, Net Banking</p>
+                  </div>
+                  {paymentMethod === 'ONLINE' && <CheckCircle2 size={16} className="text-[#4b6f9e]" />}
+                </button>
+
+                <button
+                  onClick={() => setPaymentMethod('COD')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all ${
+                    paymentMethod === 'COD'
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-slate-100 bg-white hover:border-slate-200'
+                  }`}
+                >
+                  <Banknote size={18} className={paymentMethod === 'COD' ? 'text-emerald-600' : 'text-slate-400'} />
+                  <div className="flex-1 text-left">
+                    <p className={`text-xs font-black ${ paymentMethod === 'COD' ? 'text-emerald-700' : 'text-slate-600'}`}>Cash on Delivery</p>
+                    <p className="text-[10px] text-slate-400">Pay when your order arrives</p>
+                  </div>
+                  {paymentMethod === 'COD' && <CheckCircle2 size={16} className="text-emerald-500" />}
+                </button>
+              </div>
+
               <button 
                 onClick={handlePlaceOrder} 
                 disabled={isProcessing || items.length === 0} 
-                className="w-full bg-[#1e293b] hover:bg-[#4b6f9e] text-white h-16 rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:cursor-not-allowed"
+                className={`w-full text-white h-16 rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:cursor-not-allowed ${
+                  paymentMethod === 'COD'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-[#1e293b] hover:bg-[#4b6f9e]'
+                }`}
               >
-                {isProcessing ? <Loader2 className="animate-spin" size={20} /> : "Confirm Order"}
+                {isProcessing
+                  ? <Loader2 className="animate-spin" size={20} />
+                  : paymentMethod === 'COD'
+                  ? 'Place Order (COD)'
+                  : 'Confirm & Pay'}
               </button>
               
               <div className="mt-6 flex items-center justify-center gap-2 text-[#94a3b8]">
-                <ShieldCheck size={14} />
-                <span className="text-[9px] font-black uppercase tracking-widest">Encrypted Payment</span>
+                {paymentMethod === 'COD'
+                  ? <><Banknote size={14} /><span className="text-[9px] font-black uppercase tracking-widest">Pay on Delivery</span></>
+                  : <><ShieldCheck size={14} /><span className="text-[9px] font-black uppercase tracking-widest">Encrypted Payment</span></>}
               </div>
             </div>
           </div>

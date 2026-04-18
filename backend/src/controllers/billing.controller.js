@@ -1,6 +1,7 @@
 const Razorpay          = require("razorpay");
 const crypto            = require("crypto");
 const Plan              = require("../models/Plan.model");
+const Tenant            = require("../models/Tenant.model");
 const StoreSubscription = require("../models/StoreSubscription.model");
 const StoreUsage        = require("../models/StoreUsage.model");
 const Invoice           = require("../models/Invoice.model");
@@ -248,10 +249,14 @@ exports.activatePlanNow = async (req, res) => {
     const plan = await Plan.findById(planId);
     if (!plan) return res.status(404).json({ success: false, message: "Plan not found" });
 
-    const tenantId      = req.user.tenantId;
-    const cycleStart    = new Date();
-    const cycleEnd      = new Date();
+    const tenantId   = req.user.tenantId;
+
+    // Normalize to start of today for consistent billing cycle matching
+    const now        = new Date();
+    const cycleStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const cycleEnd   = new Date(cycleStart);
     cycleEnd.setDate(cycleEnd.getDate() + 30);
+    cycleEnd.setHours(23, 59, 59, 999);
 
     // Immediately switch plan and reset billing cycle
     const sub = await StoreSubscription.findOneAndUpdate(
@@ -269,11 +274,14 @@ exports.activatePlanNow = async (req, res) => {
 
     if (!sub) return res.status(404).json({ success: false, message: "No active subscription" });
 
-    // Reset usage for new cycle
+    // Keep Tenant.plan label in sync with the activated subscription plan
+    await Tenant.updateOne({ tenantId }, { plan: plan.name }).catch(() => {});
+
+    // Reset usage for new cycle — always overwrite so counts start at 0
     await StoreUsage.findOneAndUpdate(
       { tenantId, billingCycleStart: cycleStart },
       {
-        $setOnInsert: {
+        $set: {
           planId:           plan._id,
           billingCycleEnd:  cycleEnd,
           ordersCount:      0,
@@ -285,11 +293,11 @@ exports.activatePlanNow = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Create a PAID invoice for this activation payment
+    // Create / overwrite the PAID invoice for this activation payment
     await Invoice.findOneAndUpdate(
       { tenantId, billingCycleStart: cycleStart },
       {
-        $setOnInsert: {
+        $set: {
           billingCycleEnd:  cycleEnd,
           baseAmount:       plan.monthlyPrice,
           extraCharges:     0,

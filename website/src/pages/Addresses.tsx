@@ -39,8 +39,12 @@ const Addresses = ({ items, onSelect }: any) => {
 
   const fetchAddresses = async () => {
     setLoading(true);
-    const data = await getAddresses();
-    setAddresses(data as any[]);
+    const data = await getAddresses() as any[];
+    setAddresses(data);
+    // Auto-select first saved address so user can go straight to checkout
+    if (data.length > 0 && !selectedId) {
+      setSelectedId(data[0].id);
+    }
     setLoading(false);
   };
 

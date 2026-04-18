@@ -8,7 +8,8 @@ const {
   blockOrUnblockUser,
   getActiveOrders,
   getRevenue,
-  getPendingOrders
+  getPendingOrders,
+  markCODPaid,
 } = require("../controllers/admin.controller");
 
 const {
@@ -74,6 +75,17 @@ router.put(
   authMiddleware,
   adminOnly,
   updateOrderStatus
+);
+
+//////////////////////////////////////////////////////
+// MARK COD ORDER AS PAID
+//////////////////////////////////////////////////////
+
+router.patch(
+  "/orders/:id/mark-paid",
+  authMiddleware,
+  adminOnly,
+  markCODPaid
 );
 
 //////////////////////////////////////////////////////

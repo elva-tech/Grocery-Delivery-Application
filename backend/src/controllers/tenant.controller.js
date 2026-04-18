@@ -2,6 +2,7 @@ const Tenant   = require("../models/Tenant.model");
 const User     = require("../models/User.model");
 const Store    = require("../models/Store.model");
 const Settings = require("../models/Settings.model");
+const bcrypt   = require("bcryptjs");
 const { seedPlans, getOrCreateSubscription } = require("../services/billing.service");
 
 /* ─────────────────────────────────────────────
@@ -109,6 +110,72 @@ async function rollback(tenantId) {
 }
 
 /* ─────────────────────────────────────────────
+   GET /api/tenant/details
+   Public — returns brand info for the current tenant
+───────────────────────────────────────────── */
+exports.getTenantDetails = async (req, res) => {
+  const tenantId = req.headers["x-tenant-id"];
+  if (!tenantId) {
+    return res.status(400).json({ success: false, message: "x-tenant-id header is required" });
+  }
+
+  const tenant = await Tenant.findOne({ tenantId })
+    .select("tenantId name logo storeAddress contactEmail phoneNumber plan customerDomain adminDomain ownerName")
+    .lean();
+
+  if (!tenant) {
+    return res.status(404).json({ success: false, message: "Tenant not found" });
+  }
+
+  // Fetch the real active billing subscription plan
+  let activePlan = tenant.plan || "FREE";
+  try {
+    const sub = await getOrCreateSubscription(tenantId);
+    if (sub?.planId?.name) activePlan = sub.planId.name;
+  } catch (_) { /* fall back to Tenant.plan */ }
+
+  return res.json({
+    success: true,
+    tenantId:      tenant.tenantId,
+    storeName:     tenant.name,
+    ownerName:     tenant.ownerName || "",
+    logo:          tenant.logo || "",
+    storeAddress:  tenant.storeAddress || "",
+    contactEmail:  tenant.contactEmail || "",
+    phoneNumber:   tenant.phoneNumber || "",
+    plan:          activePlan,
+    status:        tenant.status || "ACTIVE",
+  });
+};
+
+/* ─────────────────────────────────────────────
+   GET /api/tenant/account-status
+   Auth required — returns suspension state for the logged-in admin's tenant
+───────────────────────────────────────────── */
+exports.getAccountStatus = async (req, res) => {
+  const tenantId = req.user?.tenantId || req.headers["x-tenant-id"];
+  if (!tenantId) {
+    return res.status(400).json({ success: false, message: "tenantId not found" });
+  }
+
+  const tenant = await Tenant.findOne({ tenantId })
+    .select("status isActive")
+    .lean();
+
+  if (!tenant) {
+    return res.status(404).json({ success: false, message: "Tenant not found" });
+  }
+
+  const suspended = tenant.status === "SUSPENDED";
+  return res.json({
+    success: true,
+    status:         tenant.status,
+    suspended,
+    superAdminEmail: suspended ? (process.env.SUPER_ADMIN_EMAIL || "") : undefined,
+  });
+};
+
+/* ─────────────────────────────────────────────
    POST /api/tenant/create
 ───────────────────────────────────────────── */
 
@@ -121,6 +188,11 @@ exports.createTenant = async (req, res) => {
       ownerName,
       phoneNumber,
       tenantId: rawTenantId, // optional
+      logo,
+      storeAddress,
+      contactEmail,
+      plan: requestedPlan,
+      password,
     } = req.body;
 
     // ── Input validation ────────────────────────────────────────────────
@@ -138,6 +210,26 @@ exports.createTenant = async (req, res) => {
     if (phoneError) {
       return res.status(400).json({ success: false, message: phoneError });
     }
+
+    // ── Optional email validation ───────────────────────────────────────
+    if (contactEmail && contactEmail.trim()) {
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(contactEmail.trim())) {
+        return res.status(400).json({ success: false, message: "contactEmail format is invalid" });
+      }
+    }
+
+    // ── Password validation ─────────────────────────────────────────────
+    if (!password || password.length < 8) {
+      return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+    }
+
+    // ── Resolve plan ────────────────────────────────────────────────────
+    const VALID_PLANS = ["FREE", "BASIC", "PREMIUM", "ENTERPRISE"];
+    const plan = VALID_PLANS.includes(requestedPlan) ? requestedPlan : "FREE";
+
+    // ── Hash password ───────────────────────────────────────────────────
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     const phone = String(phoneNumber).trim();
 
@@ -172,11 +264,15 @@ exports.createTenant = async (req, res) => {
       name:           storeName.trim(),
       ownerName:      ownerName.trim(),
       phoneNumber:    phone,
-      plan:           "FREE",
+      plan,
       status:         "ACTIVE",
       isActive:       true,
       customerDomain,
       adminDomain,
+      logo:           logo ? logo.trim() : "",
+      storeAddress:   storeAddress ? storeAddress.trim() : "",
+      contactEmail:   contactEmail ? contactEmail.trim().toLowerCase() : "",
+      adminPassword:  hashedPassword,
     });
 
     // ── 2. Create Admin User ────────────────────────────────────────────
@@ -186,6 +282,7 @@ exports.createTenant = async (req, res) => {
       name:        ownerName.trim(),
       role:        "ADMIN",
       isActive:    true,
+      password:    hashedPassword,
     });
 
     // ── 3. Create Store ─────────────────────────────────────────────────

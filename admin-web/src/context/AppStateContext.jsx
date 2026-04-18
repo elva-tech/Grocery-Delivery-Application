@@ -157,63 +157,60 @@ export const AppStateProvider = ({ children }) => {
   };
 
   /* ---------- FETCH ORDERS ---------- */
-  useEffect(() => {
+  const fetchOrders = useCallback(async () => {
 
-    const fetchOrders = async () => {
+    // Only fetch if user has a token
+    const token = localStorage.getItem('jwtToken');
+    if (!token) {
+      return;
+    }
 
-      // Only fetch if user has a token
-      const token = localStorage.getItem('jwtToken');
-      if (!token) {
+    setLoading(true);
+    setError(null);
+
+    try {
+
+      const data = await apiService.getOrders();
+
+      const normalized = (data.orders || []).map(o => ({
+        ...o,
+        id: o._id,
+        status: o.orderStatus,
+        total: o.totalAmount,
+        date: o.createdAt,
+        assignment: o.riderId?.name || o.riderName || "Pending",
+        customer: o.customerName || o.userId?.name || "Guest User",
+        customerName: o.customerName || o.userId?.name || "Guest User",
+        address: {
+          full: o.deliveryAddress?.line1 || "No Address"
+        },
+        paymentMode: o.paymentMode || "ONLINE",
+        paymentStatus: o.paymentStatus || "PENDING",
+        itemsText: (o.items || [])
+          .map(i => `${i.name} x${i.qty}`)
+          .join(", ")
+      }));
+
+      setOrders(normalized);
+
+    } catch (err) {
+
+      // Handle 401 - redirect to login
+      if (err.response?.status === 401) {
+        localStorage.removeItem('jwtToken');
+        localStorage.removeItem('freshroot_user');
+        window.location.href = '/login';
         return;
       }
 
-      setLoading(true);
-      setError(null);
+      console.error("Failed to fetch orders:", err);
+      setError("Failed to load orders");
 
-      try {
+    } finally {
 
-        const data = await apiService.getOrders();
+      setLoading(false);
 
-        const normalized = (data.orders || []).map(o => ({
-          ...o,
-          id: o._id,
-          status: o.orderStatus,
-          total: o.totalAmount,
-          date: o.createdAt,
-          assignment: o.riderId?.name || o.riderName || "Pending",
-          customer: o.userId?.name || "Guest User",
-          address: {
-            full: o.deliveryAddress?.line1 || "No Address"
-          },
-          itemsText: (o.items || [])
-            .map(i => `${i.name} x${i.qty}`)
-            .join(", ")
-        }));
-
-        setOrders(normalized);
-
-      } catch (err) {
-
-        // Handle 401 - redirect to login
-        if (err.response?.status === 401) {
-          localStorage.removeItem('jwtToken');
-          localStorage.removeItem('freshroot_user');
-          window.location.href = '/login';
-          return;
-        }
-
-        console.error("Failed to fetch orders:", err);
-        setError("Failed to load orders");
-
-      } finally {
-
-        setLoading(false);
-
-      }
-
-    };
-
-    fetchOrders();
+    }
 
   }, []);
 
@@ -320,10 +317,13 @@ export const AppStateProvider = ({ children }) => {
         total: o.totalAmount,
         date: o.createdAt,
         assignment: o.riderId?.name || o.riderName || "Pending",
-        customer: o.userId?.name || "Guest User",
+        customer: o.customerName || o.userId?.name || "Guest User",
+        customerName: o.customerName || o.userId?.name || "Guest User",
         address: {
           full: o.deliveryAddress?.line1 || "No Address"
         },
+        paymentMode: o.paymentMode || "ONLINE",
+        paymentStatus: o.paymentStatus || "PENDING",
         itemsText: (o.items || [])
           .map(i => `${i.name} x${i.qty}`)
           .join(", ")
@@ -353,10 +353,13 @@ export const AppStateProvider = ({ children }) => {
         total: o.totalAmount,
         date: o.createdAt,
         assignment: o.riderName || "Pending",
-        customer: o.userId?.name || "Guest User",
+        customer: o.customerName || o.userId?.name || "Guest User",
+        customerName: o.customerName || o.userId?.name || "Guest User",
         address: {
           full: o.deliveryAddress?.line1 || "No Address"
         },
+        paymentMode: o.paymentMode || "ONLINE",
+        paymentStatus: o.paymentStatus || "PENDING",
         itemsText: (o.items || [])
           .map(i => `${i.name} x${i.qty}`)
           .join(", ")
@@ -401,6 +404,7 @@ export const AppStateProvider = ({ children }) => {
         }
       },
       refreshProducts: fetchProductsFromAPI,
+      refreshOrders: fetchOrders,
 
       addCategory: c => {
         const id = c.parentId ? toSubId(c.name) : toCatId(c.name);
@@ -416,6 +420,14 @@ export const AppStateProvider = ({ children }) => {
         setCategories(prev => prev.filter(c => c.id !== id)),
 
       updateOrderStatus,
+      markCODPaid: async (orderId) => {
+        await apiService.markCODPaid(orderId);
+        setOrders(prev => prev.map(o =>
+          (o.id === orderId || o._id === orderId)
+            ? { ...o, paymentStatus: 'PAID' }
+            : o
+        ));
+      },
       addRider,
       toggleRiderStatus,
       assignRider,
