@@ -4,6 +4,9 @@ const router = express.Router();
 
 const returnController = require("../controllers/return.controller");
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
+const { resolveTenant } = require("../middleware/tenant.middleware");
+
+router.use(resolveTenant);
 
 
 /* CUSTOMER */

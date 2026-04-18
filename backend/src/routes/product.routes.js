@@ -5,6 +5,9 @@ const {
   authMiddleware,
   adminOnly
 } = require("../middleware/auth.middleware");
+const { resolveTenant } = require("../middleware/tenant.middleware");
+
+router.use(resolveTenant);
 
 const {
   addProduct,

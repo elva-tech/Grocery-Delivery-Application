@@ -47,6 +47,8 @@ const unitRoutes       = require('./routes/unit.routes');
 const uploadRoutes     = require("./routes/upload.routes");
 const billingRoutes           = require('./routes/billing.routes');
 const storeAvailabilityRoutes = require('./routes/storeAvailability.routes');
+const tenantRoutes            = require('./routes/tenant.routes');
+const superRoutes             = require('./routes/super.routes');
 const { startStoreScheduler } = require('./services/storeScheduler.service');
 
 
@@ -58,6 +60,8 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/units",    unitRoutes);
 app.use("/api/upload",   uploadRoutes);
 app.use("/api/store",    storeAvailabilityRoutes); // GET /api/store/status is public
+app.use("/api/tenant",   tenantRoutes);           // POST /api/tenant/create is public (pre-auth onboarding)
+app.use("/api/super",    superRoutes);             // Super admin — own JWT, no resolveTenant
 // Protected routes
 app.use(authMiddleware);
 

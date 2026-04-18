@@ -2,8 +2,11 @@ const express = require("express");
 const router = express.Router();
 const bannerController = require("../controllers/banner.controller");
 const upload = require("../middleware/uploadBanner");
+const { resolveTenant } = require("../middleware/tenant.middleware");
 
 const { authMiddleware } = require("../middleware/auth.middleware");
+
+router.use(resolveTenant);
 
 
 /**

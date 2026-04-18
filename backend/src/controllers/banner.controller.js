@@ -69,8 +69,8 @@ exports.createBanner = async (req, res) => {
  */
 exports.getBanners = async (req, res) => {
   try {
-    // ✅ Support both cases (with auth OR without auth)
-    const tenantId = req.user?.tenantId || req.headers['x-tenant-id'];
+    // tenantId is set by resolveTenant middleware
+    const tenantId = req.tenantId;
 
     if (!tenantId) {
       return res.status(400).json({
