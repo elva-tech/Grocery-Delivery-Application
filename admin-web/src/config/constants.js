@@ -8,9 +8,9 @@
 // ============================================
 
 export const API_BASE_URL = {
-  DEVELOPMENT: 'https://grocery-delivery-application-2kc4.onrender.com',
+  DEVELOPMENT: 'https://grocery-delivery-application-6n3w.onrender.com',
   STAGING: 'https://staging-api.egrocery.com',
-  PRODUCTION: 'https://grocery-delivery-application-2kc4.onrender.com',
+  PRODUCTION: 'https://grocery-delivery-application-6n3w.onrender.com',
 };
 
 // ============================================

@@ -2,7 +2,7 @@ import axios from "axios";
 
 /* -------- CREATE AXIOS INSTANCE -------- */
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "https://grocery-delivery-application-2kc4.onrender.com",
+  baseURL: import.meta.env.VITE_API_URL || "https://grocery-delivery-application-6n3w.onrender.com",
   headers: {
     "Content-Type": "application/json",
   },
