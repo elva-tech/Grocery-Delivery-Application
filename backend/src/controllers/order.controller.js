@@ -46,6 +46,9 @@ exports.placeCustomerOrder = async (req, res) => {
     const userId = req.user.userId;
     const tenantId = req.user.tenantId;
 
+    const placingUser = await User.findById(userId).select("name").lean();
+    const customerName = placingUser?.name || "";
+
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Please add items to place order" });
     }
@@ -163,6 +166,7 @@ exports.placeCustomerOrder = async (req, res) => {
     const order = await Order.create({
       tenantId,
       userId,
+      customerName,
       items: orderItems,
       totalAmount: grandTotal,
       deliveryCharge,

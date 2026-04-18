@@ -1,5 +1,6 @@
-const jwt = require("jsonwebtoken");
-const User = require("../models/User.model");
+const jwt    = require("jsonwebtoken");
+const User   = require("../models/User.model");
+const Tenant = require("../models/Tenant.model");
 
 //  AUTH MIDDLEWARE (Verifies Token)
 const authMiddleware = async (req, res, next) => {
@@ -50,6 +51,20 @@ const authMiddleware = async (req, res, next) => {
         success: false,
         message: "User is blocked",
       });
+    }
+
+    //  Block suspended tenants (admin users only)
+    if (user.role === "ADMIN" && user.tenantId) {
+      const tenant = await Tenant.findOne({ tenantId: user.tenantId })
+        .select("status").lean();
+      if (tenant && tenant.status === "SUSPENDED") {
+        return res.status(403).json({
+          success: false,
+          suspended: true,
+          message: "Your account has been suspended. Please contact the super admin.",
+          superAdminEmail: process.env.SUPER_ADMIN_EMAIL || "",
+        });
+      }
     }
 
     // Attach user to request

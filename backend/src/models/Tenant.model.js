@@ -48,6 +48,27 @@ const tenantSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    logo: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    storeAddress: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    contactEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+    },
+    adminPassword: {
+      type: String,
+      default: "",
+      select: false, // never returned in queries by default
+    },
   },
   { timestamps: true }
 );

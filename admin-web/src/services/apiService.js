@@ -104,6 +104,11 @@ updateProduct: async (productId, payload) => {
     return res.data;
   },
 
+  markCODPaid: async (orderId) => {
+    const res = await api.patch(`/api/admin/orders/${orderId}/mark-paid`);
+    return res.data;
+  },
+
   /* -------- RIDER APIs -------- */
 
   getRiders: async () => {
@@ -295,6 +300,18 @@ deleteBanner: async (id) => {
 
   activatePlanNow: async (payload) => {
     const res = await api.post("/api/billing/plan/activate", payload);
+    return res.data;
+  },
+
+  /* -------- STORE PROFILE -------- */
+
+  getStoreProfile: async () => {
+    const res = await api.get("/api/tenant/details");
+    return res.data;
+  },
+
+  getAccountStatus: async () => {
+    const res = await api.get("/api/tenant/account-status");
     return res.data;
   },
 

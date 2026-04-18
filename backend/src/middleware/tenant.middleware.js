@@ -5,9 +5,18 @@ const resolveTenant = async (req, res, next) => {
     const hostname = (req.hostname || "").toLowerCase();
     let tenantId = null;
 
+    // ── HEADER (always highest priority) ────────────
+    const headerTenant = (req.headers["x-tenant-id"] || "").trim().toLowerCase();
+    if (headerTenant) {
+      tenantId = headerTenant;
+    }
+
     // ── LOCALHOST (DEV) ─────────────────────────────
     if (hostname.includes("localhost")) {
-      tenantId = "demo-tenant";
+      if (!tenantId) tenantId = "demo-tenant";
+      req.tenantId = tenantId;
+      console.log("Resolved Tenant (local dev, no DB check):", tenantId);
+      return next();
     }
 
     // ── SUBDOMAIN (ROBUST LOGIC) ────────────────────
@@ -27,14 +36,6 @@ const resolveTenant = async (req, res, next) => {
       } else {
         // Otherwise first part is tenant
         tenantId = cleanParts[0];
-      }
-    }
-
-    // ── HEADER FALLBACK ─────────────────────────────
-    if (!tenantId) {
-      const headerTenant = (req.headers["x-tenant-id"] || "").trim().toLowerCase();
-      if (headerTenant) {
-        tenantId = headerTenant;
       }
     }
 

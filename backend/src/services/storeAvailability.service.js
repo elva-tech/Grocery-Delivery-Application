@@ -1,4 +1,5 @@
-const Store = require("../models/Store.model");
+const Store  = require("../models/Store.model");
+const Tenant = require("../models/Tenant.model");
 
 /* ─────────────────────────────────────────────
    GET STORE STATUS
@@ -6,6 +7,19 @@ const Store = require("../models/Store.model");
 async function getStoreStatus(tenantId) {
   const store = await Store.findOne({ tenantId });
   if (!store) throw new Error("Store not found");
+
+  // If tenant account is suspended, show as closed regardless of schedule
+  const tenant = await Tenant.findOne({ tenantId }).select("status").lean();
+  if (tenant && tenant.status === "SUSPENDED") {
+    return {
+      isOpen:         false,
+      reason:         "This store is currently unavailable. Please try again later.",
+      nextChange:     null,
+      schedule:       store.schedule,
+      manualOverride: store.manualOverride,
+      suspended:      true,
+    };
+  }
 
   let reason = "SCHEDULE";
   let nextChange = null;

@@ -14,6 +14,11 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
+    customerName: {
+      type: String,
+      default: "",
+    },
+
     items: [
       {
         productId: {

@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import DataTable from '../../components/shared/DataTable';
 import {
   Bike, CheckCircle, PackageCheck, Truck, X, User, CheckCircle2,
   Eye, Phone, Smartphone, Hash, MapPin, MapPinned, ShoppingBag,
   XCircle, AlertTriangle, UserPlus, AlertCircle, Image as ImageIcon,
-  Star, MessageSquare, Filter, Search, Calendar
+  Star, MessageSquare, Filter, Search, Calendar, Banknote, CreditCard
 } from 'lucide-react';
 
 /** Renders filled/empty star row */
@@ -20,15 +20,21 @@ const StarRating = ({ value }) => (
 );
 
 const OrderList = () => {
-  const { orders, riders, updateOrderStatus, assignRider } = useAppState();
+  const { orders, riders, updateOrderStatus, assignRider, markCODPaid, refreshOrders } = useAppState();
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [assigningLoading, setAssigningLoading] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
   const [ratingFilter, setRatingFilter] = useState('ALL'); // ALL | RATED | LOW
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  // Fetch fresh orders every time this tab is visited
+  useEffect(() => {
+    refreshOrders();
+  }, [refreshOrders]);
 
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
@@ -137,6 +143,28 @@ const OrderList = () => {
           <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${colors[statusKey] || 'bg-gray-100'}`}>
             {statusKey.replace(/_/g, ' ')}
           </span>
+        );
+      }
+    },
+    {
+      header: 'Payment',
+      render: (_, row) => {
+        const mode = (row.paymentMode || 'ONLINE').toUpperCase();
+        const pStatus = (row.paymentStatus || 'PENDING').toUpperCase();
+        return (
+          <div className="flex flex-col gap-1">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase w-fit ${
+              mode === 'COD' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+            }`}>
+              {mode === 'COD' ? <Banknote size={10} /> : <CreditCard size={10} />}
+              {mode === 'COD' ? 'COD' : 'Online'}
+            </span>
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase w-fit ${
+              pStatus === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'
+            }`}>
+              {pStatus}
+            </span>
+          </div>
         );
       }
     },
@@ -297,9 +325,24 @@ const OrderList = () => {
                 </>
               )}
 
-              {/* NEW FEATURE: Show Paid badge after delivery */}
-              {status === 'DELIVERED' && (
-                <div className="flex items-center gap-1 bg-blue-50 text-blue-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase border border-blue-100">
+              {/* COD: Mark Paid button — show for any COD order still PENDING */}
+              {(row.paymentMode === 'COD' || row.paymentMode === 'cod') && (row.paymentStatus || 'PENDING').toUpperCase() === 'PENDING' && status !== 'CANCELLED' && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await markCODPaid(row.id);
+                    } catch {
+                      alert('Failed to mark as paid. Please try again.');
+                    }
+                  }}
+                  className="flex items-center gap-1 bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-600 transition-all shadow-sm"
+                >
+                  <Banknote size={14} /> Mark Paid
+                </button>
+              )}
+              {/* Show Paid badge when already paid */}
+              {(row.paymentStatus || '').toUpperCase() === 'PAID' && (
+                <div className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase border border-emerald-100">
                    <PackageCheck size={14} /> Paid
                 </div>
               )}
@@ -363,7 +406,51 @@ const OrderList = () => {
                   <p className="text-[10px] uppercase font-bold text-gray-400">Total Bill</p>
                   <p className="font-black text-emerald-600 text-2xl">₹{viewingOrder.totalAmount || viewingOrder.total}</p>
                 </div>
+                <div className="text-right space-y-1">
+                  <div className="flex items-center justify-end gap-1.5">
+                    {viewingOrder.paymentMode === 'COD'
+                      ? <Banknote size={14} className="text-amber-500" />
+                      : <CreditCard size={14} className="text-blue-500" />}
+                    <span className={`text-xs font-black uppercase ${viewingOrder.paymentMode === 'COD' ? 'text-amber-600' : 'text-blue-600'}`}>
+                      {viewingOrder.paymentMode === 'COD' ? 'Cash on Delivery' : 'Online Payment'}
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                    viewingOrder.paymentStatus === 'PAID'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : viewingOrder.paymentStatus === 'FAILED'
+                      ? 'bg-red-100 text-red-600'
+                      : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {viewingOrder.paymentStatus || 'PENDING'}
+                  </span>
+                </div>
               </div>
+
+              {/* Mark COD as Paid action inside modal */}
+              {viewingOrder.paymentMode === 'COD' && viewingOrder.paymentStatus !== 'PAID' && (
+                <button
+                  disabled={markingPaid}
+                  onClick={async () => {
+                    setMarkingPaid(true);
+                    try {
+                      await markCODPaid(viewingOrder.id);
+                      setViewingOrder(prev => ({ ...prev, paymentStatus: 'PAID' }));
+                    } catch {
+                      alert('Failed to mark as paid. Please try again.');
+                    } finally {
+                      setMarkingPaid(false);
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-black py-3 rounded-2xl transition-all text-sm"
+                >
+                  {markingPaid ? (
+                    <span className="animate-pulse">Updating…</span>
+                  ) : (
+                    <><Banknote size={16} /> Mark COD as Paid</>
+                  )}
+                </button>
+              )}
 
               {/* Rating section */}
               {viewingOrder.rating?.value && (

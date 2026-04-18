@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchTenants, updateTenantPlan, updateTenantStatus } from '../api/superApi';
+import { fetchTenants, updateTenantPlan, updateTenantStatus, fetchBillingOverview, markTenantInvoicePaid } from '../api/superApi';
 import CreateStoreModal from '../components/CreateStoreModal';
+import EditStoreModal from '../components/EditStoreModal';
 
 const PLANS    = ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'];
 const STATUSES = ['ACTIVE', 'SUSPENDED', 'INACTIVE'];
@@ -22,17 +23,24 @@ const PLAN_BADGE = {
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  const [tenants, setTenants]     = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
+  const [tenants, setTenants]         = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState('');
+  const [showModal, setShowModal]         = useState(false);
+  const [editingTenant, setEditingTenant] = useState(null);
+  const [successMsg, setSuccessMsg]       = useState('');
 
   // per-row editing state
   const [selectedPlans,    setSelectedPlans]    = useState({});
   const [planSaving,       setPlanSaving]       = useState({});
   const [statusSaving,     setStatusSaving]     = useState({});
   const [rowError,         setRowError]         = useState({});
+
+  // billing
+  const [revenueDays,   setRevenueDays]   = useState(30);
+  const [billingMap,    setBillingMap]    = useState({}); // tenantId → { invoice, revenue }
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [markingPaid,   setMarkingPaid]   = useState({}); // tenantId → bool
 
   const load = async () => {
     setLoading(true);
@@ -55,7 +63,22 @@ export default function Dashboard() {
     }
   };
 
+  const loadBilling = async (days) => {
+    setBillingLoading(true);
+    try {
+      const data = await fetchBillingOverview(days);
+      const map = {};
+      data.forEach((row) => { map[row.tenantId] = row; });
+      setBillingMap(map);
+    } catch {
+      // non-fatal — billing overlay just shows empty
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
   useEffect(() => { load(); }, []);
+  useEffect(() => { loadBilling(revenueDays); }, [revenueDays]);
 
   const handleLogout = () => {
     localStorage.removeItem('super_admin_token');
@@ -97,6 +120,29 @@ export default function Dashboard() {
     }
   };
 
+  const handleMarkPaid = async (tenant) => {
+    const id = tenant._id;
+    setMarkingPaid((s) => ({ ...s, [tenant.tenantId]: true }));
+    try {
+      await markTenantInvoicePaid(id);
+      // Refresh billing row for this tenant
+      setBillingMap((prev) => ({
+        ...prev,
+        [tenant.tenantId]: {
+          ...prev[tenant.tenantId],
+          invoice: prev[tenant.tenantId]?.invoice
+            ? { ...prev[tenant.tenantId].invoice, status: 'PAID', paidAt: new Date().toISOString() }
+            : null,
+        },
+      }));
+      setSuccessMsg(`Invoice for "${tenant.name}" marked as paid`);
+    } catch (err) {
+      setRowError((e) => ({ ...e, [id]: err.message }));
+    } finally {
+      setMarkingPaid((s) => ({ ...s, [tenant.tenantId]: false }));
+    }
+  };
+
   const fmt = (iso) =>
     iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
@@ -126,21 +172,32 @@ export default function Dashboard() {
 
       <main className="px-6 py-6">
         {/* Stats bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
           {[
-            { label: 'Total Stores',   value: tenants.length },
-            { label: 'Active',         value: tenants.filter((t) => t.status === 'ACTIVE').length },
-            { label: 'Suspended',      value: tenants.filter((t) => t.status === 'SUSPENDED').length },
-            { label: 'Premium+',       value: tenants.filter((t) => ['PREMIUM', 'ENTERPRISE'].includes(t.plan)).length },
+            { label: 'Total Stores',   value: tenants.length, prefix: '' },
+            { label: 'Active',         value: tenants.filter((t) => t.status === 'ACTIVE').length, prefix: '' },
+            { label: 'Suspended',      value: tenants.filter((t) => t.status === 'SUSPENDED').length, prefix: '' },
+            { label: 'Premium+',       value: tenants.filter((t) => ['PREMIUM', 'ENTERPRISE'].includes(t.plan)).length, prefix: '' },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3">
               <p className="text-xs text-gray-500">{s.label}</p>
               <p className="text-2xl font-bold text-gray-800">{loading ? '—' : s.value}</p>
             </div>
           ))}
-        </div>
-
-        {/* Success banner */}
+          {/* Total Subscription Revenue card — sums paid invoices across all tenants */}
+          <div className="bg-white rounded-lg border border-indigo-200 px-4 py-3">
+            <p className="text-xs text-gray-500">
+              Subscription Revenue {revenueDays === 0 ? '(All time)' : `(${revenueDays}d)`}
+            </p>
+            <p className="text-2xl font-bold text-indigo-700">
+              {billingLoading
+                ? '…'
+                : `₹${Object.values(billingMap)
+                    .reduce((sum, row) => sum + (row.revenue || 0), 0)
+                    .toLocaleString('en-IN')}`}
+            </p>
+          </div>
+        </div>        {/* Success banner */}
         {successMsg && (
           <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm flex justify-between">
             <span>{successMsg}</span>
@@ -158,15 +215,35 @@ export default function Dashboard() {
 
         {/* Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-sm font-semibold text-gray-700">All Tenants</h2>
-            <button
-              onClick={load}
-              disabled={loading}
-              className="text-xs text-indigo-600 hover:underline disabled:opacity-40"
-            >
-              Refresh
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Revenue days filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500">Revenue:</span>
+                {[7, 30, 90, 0].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setRevenueDays(d)}
+                    className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                      revenueDays === d
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {d === 0 ? 'All' : `${d}d`}
+                  </button>
+                ))}
+                {billingLoading && <span className="text-xs text-gray-400 ml-1">loading…</span>}
+              </div>
+              <button
+                onClick={() => { load(); loadBilling(revenueDays); }}
+                disabled={loading}
+                className="text-xs text-indigo-600 hover:underline disabled:opacity-40"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -188,8 +265,12 @@ export default function Dashboard() {
                     <th className="px-4 py-3 text-left">Plan</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Created</th>
+                    <th className="px-4 py-3 text-right">Sub. Revenue ({revenueDays === 0 ? 'All' : `${revenueDays}d`})</th>
+                    <th className="px-4 py-3 text-right">Current Bill</th>
+                    <th className="px-4 py-3 text-left">Payment</th>
                     <th className="px-4 py-3 text-left">Change Plan</th>
                     <th className="px-4 py-3 text-left">Toggle Status</th>
+                    <th className="px-4 py-3 text-left">Edit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -225,6 +306,49 @@ export default function Dashboard() {
 
                       {/* Created date */}
                       <td className="px-4 py-3 text-gray-500 text-xs">{fmt(tenant.createdAt)}</td>
+
+                      {/* Revenue */}
+                      <td className="px-4 py-3 text-right text-gray-700 text-xs font-medium">
+                        {billingMap[tenant.tenantId]
+                          ? `₹${(billingMap[tenant.tenantId].revenue || 0).toLocaleString('en-IN')}`
+                          : '—'}
+                      </td>
+
+                      {/* Current Bill */}
+                      <td className="px-4 py-3 text-right text-gray-700 text-xs font-semibold">
+                        {billingMap[tenant.tenantId]?.invoice
+                          ? `₹${(billingMap[tenant.tenantId].invoice.totalAmount || 0).toLocaleString('en-IN')}`
+                          : '—'}
+                      </td>
+
+                      {/* Payment status + Mark Paid */}
+                      <td className="px-4 py-3">
+                        {billingMap[tenant.tenantId]?.invoice ? (
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              billingMap[tenant.tenantId].invoice.status === 'PAID'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {billingMap[tenant.tenantId].invoice.status}
+                            </span>
+                            {billingMap[tenant.tenantId].invoice.status !== 'PAID' && (
+                              <button
+                                onClick={() => handleMarkPaid(tenant)}
+                                disabled={markingPaid[tenant.tenantId]}
+                                className="px-2 py-0.5 text-xs rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 transition-colors"
+                              >
+                                {markingPaid[tenant.tenantId] ? '…' : 'Mark Paid'}
+                              </button>
+                            )}
+                            {billingMap[tenant.tenantId].invoice.status === 'PAID' && billingMap[tenant.tenantId].invoice.paidAt && (
+                              <span className="text-xs text-gray-400">{fmt(billingMap[tenant.tenantId].invoice.paidAt)}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">No invoice</span>
+                        )}
+                      </td>
 
                       {/* Change plan */}
                       <td className="px-4 py-3">
@@ -271,6 +395,16 @@ export default function Dashboard() {
                             : 'Activate'}
                         </button>
                       </td>
+
+                      {/* Edit */}
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => setEditingTenant(tenant)}
+                          className="px-3 py-1 text-xs rounded font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -299,6 +433,18 @@ export default function Dashboard() {
           onCreated={() => {
             setSuccessMsg('Store created successfully');
             load();
+          }}
+        />
+      )}
+
+      {editingTenant && (
+        <EditStoreModal
+          tenant={editingTenant}
+          onClose={() => setEditingTenant(null)}
+          onUpdated={(updated) => {
+            setTenants((ts) => ts.map((t) => (t._id === updated._id ? { ...t, ...updated } : t)));
+            setSuccessMsg(`Store "${updated.name}" updated successfully`);
+            setEditingTenant(null);
           }}
         />
       )}
