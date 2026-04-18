@@ -11,9 +11,9 @@ import { getTenantId } from '../utils/getTenantId';
 
 export const API_BASE_URL = {
   // DEVELOPMENT: 'http://localhost:5000',
-  DEVELOPMENT: 'https://grocery-delivery-application-2kc4.onrender.com',
+  DEVELOPMENT: 'https://grocery-delivery-application-6n3w.onrender.com',
   STAGING: 'https://staging-api.egrocery.com',
-  PRODUCTION: 'https://grocery-delivery-application-2kc4.onrender.com',
+  PRODUCTION: 'https://grocery-delivery-application-6n3w.onrender.com',
 };
 
 export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;
