@@ -181,79 +181,29 @@ export const apiSlice = createApi({
       },
     }),
 
+    /* ----------- STORE STATUS ----------- */
     getStoreStatus: builder.query<{
       isClosed: boolean;
       reason: string;
-      type: "TIME" | "DATE";
-      startTime?: string;
-      endTime?: string;
-      startDate?: string;
-      endDate?: string;
+      nextChange: string | null;
     }, void>({
       queryFn: async () => {
         try {
-          const now = new Date();
-
-          // MOCK (same as website)
-          const schedule = {
-            type: "DATE" as "TIME" | "DATE",
-            startDate: "2026-01-01",
-            endDate: "2099-12-31",
-            startTime: "00:00",
-            endTime: "23:59",
-            reason: "Store closed for maintenance",
-            isActive: false // TODO: Change to true when store is closed
-          };
-
-          let isClosed = false;
-
-          if (schedule.isActive) {
-            if (schedule.type === "TIME") {
-              const current = now.getHours() * 60 + now.getMinutes();
-
-              const [sh, sm] = schedule.startTime.split(":").map(Number);
-              const [eh, em] = schedule.endTime.split(":").map(Number);
-
-              const start = sh * 60 + sm;
-              const end = eh * 60 + em;
-
-              isClosed =
-                start < end
-                  ? current >= start && current <= end
-                  : current >= start || current <= end;
-            }
-
-            if (schedule.type === "DATE") {
-              const start = new Date(
-                schedule.startDate + "T" + (schedule.startTime || "00:00") + ":00"
-              );
-
-              const end = new Date(
-                schedule.endDate + "T" + (schedule.endTime || "23:59") + ":59"
-              );
-
-              isClosed = now >= start && now <= end;
-            }
-          }
-
+          const res = await fetch(`${BASE}/api/store/status`, { headers: TENANT_HEADERS });
+          if (!res.ok) throw new Error('store status fetch failed');
+          const data = await res.json();
           return {
             data: {
-              isClosed,
-              reason: schedule.reason,
-              type: schedule.type,
-              startTime: formatTime12(schedule.startTime),
-              endTime: formatTime12(schedule.endTime),
-              startDate: schedule.startDate,
-              endDate: schedule.endDate,
-            }
+              isClosed:   !data.isOpen,
+              reason:     data.reason ?? 'SCHEDULE',
+              nextChange: data.nextChange ?? null,
+            },
           };
-
         } catch {
-          return {
-            error: { status: 500, data: "Store status error" }
-          };
+          // Fail open – don't block the app if the API is unreachable
+          return { data: { isClosed: false, reason: 'UNAVAILABLE', nextChange: null } };
         }
-      }
+      },
     }),
 
   }),

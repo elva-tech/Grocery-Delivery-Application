@@ -1,74 +1,66 @@
-// MOCK DB
-let scheduleDB = {
-  type: null,
-  startTime: null,
-  endTime: null,
-  startDate: null,
-  endDate: null,
-  reason: "",
-  isActive: false
-};
+import axios from "axios";
 
-// SAVE
-export const saveSchedule = async (data) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      scheduleDB = {
-        type: data.type || null,
-        startTime: data.startTime || null,
-        endTime: data.endTime || null,
-        startDate: data.startDate || null,
-        endDate: data.endDate || null,
-        reason: data.reason || "",
-        isActive: false
-      };
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || "https://grocery-delivery-application-6n3w.onrender.com",
+  headers: { "Content-Type": "application/json" },
+  timeout: 10000,
+});
 
-      resolve({ success: true });
-    }, 300);
-  });
-};
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("jwtToken");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      if (payload.tenantId) config.headers["x-tenant-id"] = payload.tenantId;
+    } catch { /* malformed token */ }
+  }
+  return config;
+});
 
-// GET
+// GET store status (isOpen, schedule, manualOverride)
 export const getSchedule = async () => {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(scheduleDB), 300);
-  });
+  try {
+    const res = await api.get("/api/store/status");
+    const data = res.data;
+    // Map backend shape to what Schedule.jsx expects
+    return {
+      isActive:  data.schedule?.openTime != null && !data.manualOverride,
+      isOpen:    data.isOpen,
+      reason:    data.reason,
+      nextChange: data.nextChange,
+      schedule:  data.schedule,
+      manualOverride: data.manualOverride,
+      // Legacy-compat fields used by Schedule.jsx active-schedule display
+      type:      "TIME",
+      startTime: data.schedule?.openTime
+        ? new Date(data.schedule.openTime).toTimeString().slice(0, 5)
+        : null,
+      endTime: data.schedule?.closeTime
+        ? new Date(data.schedule.closeTime).toTimeString().slice(0, 5)
+        : null,
+    };
+  } catch {
+    return { isActive: false, isOpen: true };
+  }
 };
 
-// CHECK LOGIC
-export const isStoreClosed = (schedule) => {
-  if (!schedule || !schedule.isActive) return false;
-
-  const now = new Date();
-
-  // TIME BASED
-  if (schedule.type === "TIME") {
-    if (!schedule.startTime || !schedule.endTime) return false;
-
-    const current = now.getHours() * 60 + now.getMinutes();
-
-    const startParts = schedule.startTime.split(':');
-    const endParts = schedule.endTime.split(':');
-
-    const start = Number(startParts[0]) * 60 + Number(startParts[1]);
-    const end = Number(endParts[0]) * 60 + Number(endParts[1]);
-
-    if (start < end) {
-      return current >= start && current <= end;
-    } else {
-      return current >= start || current <= end;
-    }
+// SAVE schedule  { openTime: ISO, closeTime: ISO }
+export const saveSchedule = async (data) => {
+  // If isActive: false, caller wants to stop schedule → manual override open
+  if (data.isActive === false) {
+    await api.patch("/api/store/status", { isOpen: true });
+    return { success: true };
   }
+  const res = await api.patch("/api/store/schedule", {
+    openTime:  data.openTime,
+    closeTime: data.closeTime,
+  });
+  return res.data;
+};
 
-  // DATE BASED
-  if (schedule.type === "DATE") {
-    if (!schedule.startDate || !schedule.endDate) return false;
-
-    const start = new Date(schedule.startDate);
-    const end = new Date(schedule.endDate);
-
-    return now >= start && now <= end;
-  }
-
-  return false;
+// TOGGLE store manually
+export const toggleStore = async (isOpen) => {
+  const res = await api.patch("/api/store/status", { isOpen });
+  return res.data;
 };

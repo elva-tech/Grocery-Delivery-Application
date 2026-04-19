@@ -1,4 +1,3 @@
-import React from 'react';
 import { Gift, Sparkles, ChevronRight } from 'lucide-react';
 
 export const FreeDeliveryToast = ({ show, onClick }: { show: boolean, onClick: () => void }) => {

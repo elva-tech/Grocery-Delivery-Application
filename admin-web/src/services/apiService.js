@@ -2,7 +2,7 @@ import axios from "axios";
 
 /* -------- CREATE AXIOS INSTANCE -------- */
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
+  baseURL: import.meta.env.VITE_API_URL || "https://grocery-delivery-application-6n3w.onrender.com",
   headers: {
     "Content-Type": "application/json",
   },
@@ -105,6 +105,11 @@ updateProduct: async (productId, payload) => {
     return res.data;
   },
 
+  markCODPaid: async (orderId) => {
+    const res = await api.patch(`/api/admin/orders/${orderId}/mark-paid`);
+    return res.data;
+  },
+
   /* -------- RIDER APIs -------- */
 
   getRiders: async () => {
@@ -186,13 +191,22 @@ getBanners: async () => {
   }
 },
 
-createBanner: async (formData) => {
+createBanner: async (payload) => {
   try {
-    const res = await api.post(
-      "/api/banners/create-banner",
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
+    const res = await api.post("/api/banners/create-banner", payload);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
+
+uploadFile: async (file) => {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post("/api/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
     return res.data;
   } catch (error) {
     throw error.response?.data || error;
@@ -235,6 +249,70 @@ deleteBanner: async (id) => {
   updateCoupon: async (id, payload) => {
     if (!id) throw new Error("Invalid coupon ID");
     const res = await api.patch(`/api/coupons/${id}`, payload);
+    return res.data;
+  },
+
+  /* -------- BILLING APIs -------- */
+
+  getPlans: async () => {
+    const res = await api.get("/api/billing/plans");
+    return res.data;
+  },
+
+  getSubscription: async () => {
+    const res = await api.get("/api/billing/subscription");
+    return res.data;
+  },
+
+  getUsage: async () => {
+    const res = await api.get("/api/billing/usage");
+    return res.data;
+  },
+
+  getCurrentInvoice: async () => {
+    const res = await api.get("/api/billing/invoice/current");
+    return res.data;
+  },
+
+  triggerBillingGeneration: async (tenantId) => {
+    const res = await api.post("/api/billing/generate", tenantId ? { tenantId } : {});
+    return res.data;
+  },
+
+  changePlan: async (planId) => {
+    const res = await api.put("/api/billing/subscription/plan", { planId });
+    return res.data;
+  },
+
+  createInvoicePayment: async (invoiceId) => {
+    const res = await api.post(`/api/billing/invoice/${invoiceId}/pay`);
+    return res.data;
+  },
+
+  verifyInvoicePayment: async (payload) => {
+    const res = await api.post(`/api/billing/invoice/${payload.invoiceId}/verify`, payload);
+    return res.data;
+  },
+
+  initiatePlanPayment: async (planId) => {
+    const res = await api.post("/api/billing/plan/initiate-payment", { planId });
+    return res.data;
+  },
+
+  activatePlanNow: async (payload) => {
+    const res = await api.post("/api/billing/plan/activate", payload);
+    return res.data;
+  },
+
+  /* -------- STORE PROFILE -------- */
+
+  getStoreProfile: async () => {
+    const res = await api.get("/api/tenant/details");
+    return res.data;
+  },
+
+  getAccountStatus: async () => {
+    const res = await api.get("/api/tenant/account-status");
     return res.data;
   },
 

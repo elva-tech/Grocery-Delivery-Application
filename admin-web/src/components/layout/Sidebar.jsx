@@ -21,6 +21,7 @@ import { DollarSign } from 'lucide-react';
 
 const Sidebar = () => {
   const { appSettings } = useAppState();
+  const location = useLocation();
 
   const menuSections = [
     {

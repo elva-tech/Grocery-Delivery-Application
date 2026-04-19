@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { X, Navigation, MapPin, Loader2, AlertCircle, Search, Check } from 'lucide-react';
+import { useState } from 'react';
+import { useSelector } from 'react-redux';
+import { X, MapPin, Loader2, AlertCircle, Search, Check } from 'lucide-react';
+import type { RootState } from '../../store/store';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import L, { type LeafletMouseEvent } from 'leaflet';
 import { getAddressFromCoords, addAddress } from '../../api/addresses';
 
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -22,7 +24,9 @@ function ChangeView({ center }: { center: [number, number] }) {
 }
 
 const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose }) => {
-  const [form, setForm] = useState({ label: '', full: '', phone: '', altPhone: '', landmark: '' });
+  const { user } = useSelector((state: RootState) => state.auth);
+  const userPhone = (user?.phone || '').replace(/^\+91\s*/, '');
+  const [form, setForm] = useState({ label: '', full: '', phone: userPhone, altPhone: '', landmark: '' });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
@@ -50,7 +54,7 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose }) => {
       } else {
         showError("Location not found.");
       }
-    } catch (err) {
+    } catch {
       showError("Search failed.");
     } finally {
       setLoading(false);
@@ -59,7 +63,7 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose }) => {
 
   const MapEvents = () => {
     useMapEvents({
-      click(e) {
+      click(e: LeafletMouseEvent) {
         setCoords([e.latlng.lat, e.latlng.lng]);
         fetchAddressFromMap(e.latlng.lat, e.latlng.lng);
       },
@@ -72,7 +76,7 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose }) => {
     try {
       const formatted = await getAddressFromCoords(lat, lng);
       setForm(prev => ({ ...prev, full: formatted }));
-    } catch (err) {
+    } catch {
       showError("Could not fetch address.");
     } finally {
       setLoading(false);
@@ -104,7 +108,7 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose }) => {
       setForm({ label: '', full: '', phone: '', altPhone: '', landmark: '' });
       setShowMap(false);
       onClose();
-    } catch (e) {
+    } catch {
       showError("Failed to save address.");
     } finally {
       setLoading(false);

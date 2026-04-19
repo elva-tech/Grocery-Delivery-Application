@@ -17,6 +17,7 @@ import {
 import { getCartCalculation } from '@/api/cartApi';
 import { getAddresses } from '@/api/addresses';
 import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
+import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
   const { items, totalAmount } = useSelector((state: RootState) => state.cart);
@@ -26,11 +27,15 @@ export default function CheckoutScreen() {
 
   const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number }>({ grandTotal: totalAmount, deliveryFee: 0 });
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
   const [couponError, setCouponError] = useState('');
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isPlacing, setIsPlacing] = useState(false);
+
+  const { data: storeStatus } = useGetStoreStatusQuery();
+  const isStoreClosed = storeStatus?.isClosed ?? false;
 
   useEffect(() => {
     if (items.length === 0) { router.replace('/(tabs)'); return; }
@@ -59,23 +64,32 @@ export default function CheckoutScreen() {
   };
 
   const handlePlaceOrder = async () => {
+    if (isStoreClosed) { showToast('error', 'Store Closed', 'We are not accepting orders right now.'); return; }
     if (items.length === 0) { showToast('error', 'Empty Cart', 'Add items first.'); return; }
     if (!token) { showToast('error', 'Session Expired', 'Please log in again.'); router.push('/auth/landing'); return; }
 
     try {
       setIsPlacing(true);
 
-      const order = await placeOrderBackend(
-        {
-          items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
-          paymentMode: 'ONLINE',
-          deliveryAddress: selectedAddress
-            ? { line1: selectedAddress.full || selectedAddress.label, lat: 0, lng: 0 }
-            : { line1: 'Address not selected', lat: 0, lng: 0 },
-          couponCode: appliedCoupon?.code ?? null,
-        },
-        token,
-      );
+      const orderPayload = {
+        items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
+        paymentMode: paymentMethod,
+        deliveryAddress: selectedAddress
+          ? { line1: selectedAddress.full || selectedAddress.label, lat: 0, lng: 0 }
+          : { line1: 'Address not selected', lat: 0, lng: 0 },
+        couponCode: appliedCoupon?.code ?? null,
+      };
+
+      if (paymentMethod === 'COD') {
+        // COD: place order directly, skip Razorpay
+        await placeOrderBackend(orderPayload, token);
+        dispatch(clearCart());
+        router.replace('/(tabs)/order-success');
+        return;
+      }
+
+      // ONLINE: existing Razorpay flow
+      const order = await placeOrderBackend(orderPayload, token);
 
       const paymentData = await createMobilePaymentOrder(order.orderId, token);
       const rawPhone = ((user as any)?.phone || '').replace(/^\+91\s?/, '').slice(-10);
@@ -207,19 +221,71 @@ export default function CheckoutScreen() {
             </>
           )}
         </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <View style={styles.paymentOptions}>
+            <TouchableOpacity
+              style={[styles.paymentOption, paymentMethod === 'ONLINE' && styles.paymentOptionSelected]}
+              onPress={() => setPaymentMethod('ONLINE')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="card-outline"
+                size={20}
+                color={paymentMethod === 'ONLINE' ? '#4b6f9e' : '#94a3b8'}
+              />
+              <View style={styles.paymentOptionText}>
+                <Text style={[styles.paymentOptionLabel, paymentMethod === 'ONLINE' && styles.paymentOptionLabelSelected]}>
+                  Online Payment
+                </Text>
+                <Text style={styles.paymentOptionSub}>UPI, Cards, Net Banking</Text>
+              </View>
+              {paymentMethod === 'ONLINE' && (
+                <Ionicons name="checkmark-circle" size={18} color="#4b6f9e" />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.paymentOption, paymentMethod === 'COD' && styles.paymentOptionSelected]}
+              onPress={() => setPaymentMethod('COD')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="cash-outline"
+                size={20}
+                color={paymentMethod === 'COD' ? '#16a34a' : '#94a3b8'}
+              />
+              <View style={styles.paymentOptionText}>
+                <Text style={[styles.paymentOptionLabel, paymentMethod === 'COD' && styles.paymentOptionLabelCOD]}>
+                  Cash on Delivery
+                </Text>
+                <Text style={styles.paymentOptionSub}>Pay when your order arrives</Text>
+              </View>
+              {paymentMethod === 'COD' && (
+                <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
 
       <TouchableOpacity
-        style={[styles.placeOrderBtn, (items.length === 0 || isPlacing) && styles.btnDisabled]}
+        style={[styles.placeOrderBtn, (items.length === 0 || isPlacing || isStoreClosed) && styles.btnDisabled]}
         onPress={handlePlaceOrder}
         activeOpacity={0.85}
-        disabled={items.length === 0 || isPlacing}
+        disabled={items.length === 0 || isPlacing || isStoreClosed}
       >
         {isPlacing ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.btnText}>
-            {items.length === 0 ? 'Your Basket is Empty' : `Confirm & Pay ₹${finalAmount}`}
+            {isStoreClosed
+              ? '🔴 Store Closed'
+              : items.length === 0
+              ? 'Your Basket is Empty'
+              : paymentMethod === 'COD'
+              ? `Place Order (COD) ₹${finalAmount}`
+              : `Confirm & Pay ₹${finalAmount}`}
           </Text>
         )}
       </TouchableOpacity>
@@ -250,5 +316,13 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 18, fontWeight: '700', color: '#4b6f9e' },
   placeOrderBtn: { margin: 20, backgroundColor: '#4b6f9e', padding: 18, borderRadius: 16, alignItems: 'center' },
   btnDisabled: { backgroundColor: '#cbd5e1' },
-  btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' }
+  btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+  paymentOptions: { gap: 10 },
+  paymentOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', padding: 14, borderRadius: 14, gap: 12, borderWidth: 1.5, borderColor: '#dbe4ef' },
+  paymentOptionSelected: { borderColor: '#4b6f9e', backgroundColor: '#eef3fb' },
+  paymentOptionText: { flex: 1 },
+  paymentOptionLabel: { fontSize: 14, fontWeight: '700', color: '#64748b' },
+  paymentOptionLabelSelected: { color: '#4b6f9e' },
+  paymentOptionLabelCOD: { color: '#16a34a' },
+  paymentOptionSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
 });

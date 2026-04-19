@@ -2,6 +2,7 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
 const connectDB = require("./src/config/db");
+const Tenant = require("./src/models/Tenant.model");
 const User = require("./src/models/User.model");
 const Product = require("./src/models/Product.model");
 const Inventory = require("./src/models/Inventory.model");
@@ -148,6 +149,13 @@ const CATALOGUE = [
 async function seed() {
   await connectDB();
   const tenantId = "demo-tenant";
+
+  // Ensure the demo tenant exists in the Tenant registry
+  await Tenant.findOneAndUpdate(
+    { tenantId },
+    { tenantId, name: "Demo Store", isActive: true },
+    { upsert: true, new: true }
+  );
 
   // Clear existing data
   await User.deleteMany({ tenantId });

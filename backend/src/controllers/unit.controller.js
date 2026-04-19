@@ -5,8 +5,8 @@ const DEFAULT_UNITS = ['KG', 'G', 'L', 'ML', 'PCS', 'PAIR', 'DOZEN', 'METER', 'B
 /** GET /api/units — list all units for tenant */
 exports.getUnits = async (req, res) => {
   try {
-    const tenantId = req.headers['x-tenant-id'];
-    if (!tenantId) return res.status(400).json({ message: 'x-tenant-id header required' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant context is missing' });
 
     let units = await Unit.find({ tenantId }).sort({ name: 1 }).lean();
 
@@ -26,8 +26,8 @@ exports.getUnits = async (req, res) => {
 /** POST /api/units — create a new unit */
 exports.createUnit = async (req, res) => {
   try {
-    const tenantId = req.headers['x-tenant-id'];
-    if (!tenantId) return res.status(400).json({ message: 'x-tenant-id header required' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant context is missing' });
 
     const rawName = (req.body.name || '').trim().toUpperCase();
     if (!rawName) return res.status(400).json({ message: 'Unit name is required' });
@@ -45,7 +45,7 @@ exports.createUnit = async (req, res) => {
 /** DELETE /api/units/:id — delete a unit */
 exports.deleteUnit = async (req, res) => {
   try {
-    const tenantId = req.headers['x-tenant-id'];
+    const tenantId = req.tenantId;
     await Unit.findOneAndDelete({ _id: req.params.id, tenantId });
     res.json({ success: true });
   } catch (err) {

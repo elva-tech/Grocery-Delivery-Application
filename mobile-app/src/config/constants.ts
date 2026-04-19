@@ -1,3 +1,5 @@
+import { getTenantId } from '../utils/getTenantId';
+
 /**
  * Mobile App Constants
  * Configuration for API environment URLs and settings
@@ -10,12 +12,15 @@
 export const API_BASE_URL = {
   // DEVELOPMENT: 'http://localhost:5000',
   DEVELOPMENT: 'http://192.168.254.226:5000',
+  // DEVELOPMENT: 'https://grocery-delivery-application-6n3w.onrender.com',
   STAGING: 'https://staging-api.egrocery.com',
-  PRODUCTION: 'https://api.egrocery.com',
+  PRODUCTION: 'https://grocery-delivery-application-6n3w.onrender.com',
 };
 
 export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;
-export const TENANT_ID = 'demo-tenant';
+
+// Dynamically resolved — configure EXPO_PUBLIC_TENANT_ID in eas.json per build profile.
+export const TENANT_ID = getTenantId();
 export const RAZORPAY_KEY_ID = 'rzp_test_SaHmJpDs42QvIp';
 export const APP_BRAND = 'Enandi';
 export const SUPPORT_PHONE = '+919876543210';

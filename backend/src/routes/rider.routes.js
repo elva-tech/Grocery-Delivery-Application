@@ -18,6 +18,9 @@ const {
 
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
 const { riderOnly, canAccessRider, canAssignRider } = require("../middleware/rider.middleware");
+const { resolveTenant } = require("../middleware/tenant.middleware");
+
+router.use(resolveTenant);
 
 //////////////////////////////////////////////////////
 // GET ALL RIDERS

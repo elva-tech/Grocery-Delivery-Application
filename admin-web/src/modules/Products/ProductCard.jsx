@@ -1,4 +1,5 @@
 import React from 'react';
+import resolveImageUrl from '../../utils/resolveImageUrl';
 
 const ProductCard = ({ product }) => {
   // Define colors based on category
@@ -11,16 +12,26 @@ const ProductCard = ({ product }) => {
   };
 
   const badgeStyle = categoryColors[product.category] || 'bg-gray-100 text-gray-700 border-gray-200';
+  const imageSrc = resolveImageUrl({
+    imageUrl: product.imageUrl,
+    image: product.images ?? product.image,
+  });
 
   return (
     <div className="group relative bg-white rounded-[24px] border border-slate-100 p-4 hover:shadow-xl transition-all duration-300">
       {/* IMAGE CONTAINER */}
       <div className="relative aspect-square rounded-[18px] overflow-hidden mb-4 bg-slate-50">
-        <img 
-          src={product.images[0]} 
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-        />
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-400">
+            No Image
+          </div>
+        )}
         
         {/* CATEGORY BADGE - OVERLAY */}
         <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm ${badgeStyle}`}>

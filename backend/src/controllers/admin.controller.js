@@ -473,3 +473,45 @@ exports.getPendingOrders = async (req, res) => {
     });
   }
 };
+
+//////////////////////////////////////////////////////////////
+// MARK COD ORDER AS PAID
+//////////////////////////////////////////////////////////////
+
+exports.markCODPaid = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.user.tenantId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid order ID" });
+    }
+
+    const order = await Order.findOne({ _id: id, tenantId });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    if (order.paymentMode !== "COD") {
+      return res.status(400).json({ success: false, message: "Only COD orders can be marked as paid this way" });
+    }
+
+    if (order.paymentStatus === "PAID") {
+      return res.status(400).json({ success: false, message: "Order is already marked as paid" });
+    }
+
+    order.paymentStatus = "PAID";
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "COD order marked as paid",
+      orderId: order._id,
+      paymentStatus: order.paymentStatus,
+    });
+  } catch (error) {
+    console.error("markCODPaid error:", error);
+    return res.status(500).json({ success: false, message: "Failed to mark order as paid" });
+  }
+};

@@ -8,7 +8,8 @@ const {
   blockOrUnblockUser,
   getActiveOrders,
   getRevenue,
-  getPendingOrders
+  getPendingOrders,
+  markCODPaid,
 } = require("../controllers/admin.controller");
 
 const {
@@ -17,6 +18,9 @@ const {
 } = require("../controllers/product.controller");
 
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
+const { resolveTenant } = require("../middleware/tenant.middleware");
+
+router.use(resolveTenant);
 
 //////////////////////////////////////////////////////
 // ACTIVE ORDERS
@@ -71,6 +75,17 @@ router.put(
   authMiddleware,
   adminOnly,
   updateOrderStatus
+);
+
+//////////////////////////////////////////////////////
+// MARK COD ORDER AS PAID
+//////////////////////////////////////////////////////
+
+router.patch(
+  "/orders/:id/mark-paid",
+  authMiddleware,
+  adminOnly,
+  markCODPaid
 );
 
 //////////////////////////////////////////////////////

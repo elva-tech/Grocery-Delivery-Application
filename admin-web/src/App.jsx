@@ -1,6 +1,5 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
 import { AppStateProvider, useAppState } from './context/AppStateContext'; // Added useAppState
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import AdminLayout from './components/layout/AdminLayout';
@@ -62,13 +61,11 @@ const ReturnManagementWrapper = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppStateProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AppStateProvider>
-    </AuthProvider>
+    <AppStateProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AppStateProvider>
   );
 }
 

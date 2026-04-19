@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2, Star } from 'lucide-react';
 import type { RootState } from '../store/store';
@@ -6,8 +6,8 @@ import { getUserOrders, cancelOrderApi, rateOrderApi } from '../api/ordersApi';
 import { addToCart } from '../store/slices/cartSlice';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ReportIssueModal from './ReportIssueModal';
-import { MOCK_ORDERS } from '../api/mockdata';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
+import { resolveImageUrl } from '../utils/resolveImageUrl';
 
 const STATUS_THEME: any = {
   PLACED: { color: 'text-slate-500', bg: 'bg-slate-50', label: 'Order Placed' },
@@ -20,11 +20,11 @@ const STATUS_THEME: any = {
   REFUND_REJECTED: { color: 'text-red-700', bg: 'bg-red-100', label: 'Refund Rejected' },
 };
 
-const Orders = ({ openCart }) => {
+const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
-  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   
   // NEW: Fetch remote features
   const { data: settings } = useGetAppSettingsQuery();
@@ -94,7 +94,8 @@ const loadOrders = async () => {
       name: item.name,
       price: item.price,
       quantity: item.quantity,
-      image: item.image,
+      image: resolveImageUrl(item),
+      imageUrl: item.imageUrl ?? item.image,
     }));
   });
 
@@ -244,7 +245,11 @@ const loadOrders = async () => {
               <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {selectedOrder.items.map((item: any, idx: number) => (
                   <div key={idx} className="flex items-center gap-4 hover:bg-slate-50 p-2 rounded-2xl transition-colors">
-                    <img src={item.image} className="w-14 h-14 rounded-xl object-cover" alt="" />
+                    {resolveImageUrl(item) ? (
+                      <img src={resolveImageUrl(item)} className="w-14 h-14 rounded-xl object-cover" alt={item.name} />
+                    ) : (
+                      <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-[8px] font-black uppercase tracking-widest text-slate-300">No Image</div>
+                    )}
                     <div className="flex-1">
                       <h4 className="font-black text-slate-800 text-sm leading-tight">{item.name}</h4>
                       <p className="text-[10px] font-bold text-slate-400 uppercase">{item.quantity} x {item.unit}</p>

@@ -49,6 +49,12 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
+    password: {
+      type: String,
+      default: "",
+      select: false, // never returned in queries by default
+    },
+
     riderProfile: {
       licenseNumber: String,
       vehicle: String,

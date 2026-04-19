@@ -2,7 +2,10 @@ const Settings = require("../models/Settings.model");
 
 exports.getSettings = async (req, res) => {
   try {
-    const tenantId = req.headers["x-tenant-id"] || req.user?.tenantId || "default";
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ message: "Tenant context is missing" });
+    }
     let settings = await Settings.findOne({ tenantId });
 
     if (!settings) {
@@ -19,7 +22,7 @@ exports.getSettings = async (req, res) => {
 exports.updateSettings = async (req, res) => {
   try {
     const tenantId = req.user?.tenantId;
-    const { deliveryCharge, freeDeliveryAbove, discountType, discountValue } = req.body;
+    const { deliveryCharge, freeDeliveryAbove, discountType, discountValue, thresholdDistance } = req.body;
 
     if (deliveryCharge !== undefined && deliveryCharge < 0) {
       return res.status(400).json({ message: "deliveryCharge must be >= 0" });
@@ -30,10 +33,13 @@ exports.updateSettings = async (req, res) => {
     if (discountValue !== undefined && discountValue < 0) {
       return res.status(400).json({ message: "discountValue must be >= 0" });
     }
+    if (thresholdDistance !== undefined && thresholdDistance < 0) {
+      return res.status(400).json({ message: "thresholdDistance must be >= 0" });
+    }
 
     const settings = await Settings.findOneAndUpdate(
       { tenantId },
-      { $set: { deliveryCharge, freeDeliveryAbove, discountType, discountValue } },
+      { $set: { deliveryCharge, freeDeliveryAbove, discountType, discountValue, thresholdDistance } },
       { new: true, upsert: true, runValidators: true }
     );
 
