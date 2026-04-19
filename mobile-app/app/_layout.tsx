@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState } from '@/store/store';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setCredentials } from '@/store/slices/authSlice';
 import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
+import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,6 +34,10 @@ useEffect(() => {
   return () => clearTimeout(timeout);
 }, []);
   const [authRestored, setAuthRestored] = useState(false);
+
+  // Store Status - fetched from backend
+  const { data: storeStatus } = useGetStoreStatusQuery();
+const isClosed = storeStatus?.isClosed;
 
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
@@ -105,13 +110,65 @@ useEffect(() => {
   return (
     <>
       <StatusBar style="dark" translucent />
+  
       <Stack screenOptions={{ headerShown: false }}>
-        {/* Fixed: Use redirect or simple stack config without 'href' */}
-        {/* <Stack.Screen name="index" />  */}
         <Stack.Screen name="auth/landing" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="product/[id]" options={{ headerShown: true, headerTransparent: true, headerTitle: '' }} />
       </Stack>
+  
+      {/* 🔥 GLOBAL STORE CLOSED POPUP */}
+      {isClosed && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          zIndex: 9999,
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <View style={{
+            backgroundColor: '#fff',
+            padding: 28,
+            borderRadius: 24,
+            width: '85%',
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.2,
+            shadowRadius: 10,
+            elevation: 10
+          }}>
+            <Text style={{ fontSize: 22, fontWeight: '900' }}>
+              Store Closed
+            </Text>
+  
+            <Text style={{ marginTop: 10, textAlign: 'center', color: '#555' }}>
+              {storeStatus?.reason}
+            </Text>
+  
+            {storeStatus?.type === "TIME" && (
+              <Text style={{ marginTop: 12, fontWeight: '600' }}>
+                {storeStatus.startTime} - {storeStatus.endTime}
+              </Text>
+            )}
+  
+            {storeStatus?.type === "DATE" && (
+              <>
+                <Text style={{ marginTop: 12 }}>
+                  {storeStatus.startDate} → {storeStatus.endDate}
+                </Text>
+  
+                <Text style={{ marginTop: 4, fontWeight: '600' }}>
+                  {storeStatus.startTime} - {storeStatus.endTime}
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+      )}
     </>
   );
 }

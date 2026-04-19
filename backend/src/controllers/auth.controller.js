@@ -183,19 +183,29 @@ module.exports = { sendOtp, verifyOtp, updateProfile };
 ================================ */
 async function updateProfile(req, res) {
   try {
-    const { name } = req.body;
+    const { name, email, address, alternatePhone } = req.body;
+
     if (!name || name.trim().length < 2) {
       return res.status(400).json({ success: false, message: 'Name must be at least 2 characters' });
     }
+    
+    const updateData = {
+      name: name.trim(),
+    };
+    
+    if (email !== undefined) updateData.email = email;
+    if (address !== undefined) updateData.address = address;
+    if (alternatePhone !== undefined) updateData.alternatePhone = alternatePhone;
+    
     const user = await User.findByIdAndUpdate(
       req.user.userId,
-      { name: name.trim() },
+      updateData,
       { new: true }
     );
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     return res.status(200).json({
       success: true,
-      user: { id: user._id, phoneNumber: user.phoneNumber, name: user.name, role: user.role, tenantId: user.tenantId },
+      user: { id: user._id, phoneNumber: user.phoneNumber, name: user.name, email: user.email, address: user.address, alternatePhone: user.alternatePhone,  role: user.role, tenantId: user.tenantId },
     });
   } catch (error) {
     console.error('updateProfile error:', error);

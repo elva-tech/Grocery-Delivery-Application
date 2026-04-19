@@ -12,6 +12,7 @@ const api = axios.create({
 /* -------- ATTACH TOKEN AUTOMATICALLY -------- */
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("jwtToken");
+  console.log('[AUTH DEBUG] Using token:', token);
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

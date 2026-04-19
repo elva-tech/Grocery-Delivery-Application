@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ACTIVE_API_URL, TENANT_ID } from '@/src/config/constants';
 
 export interface SendOtpResponse {
@@ -13,6 +14,9 @@ export interface VerifyOtpResponse {
     id: string;
     phoneNumber: string;
     name?: string;
+    email?: string;
+    address?: string;
+    alternatePhone?: string;
   };
 }
 
@@ -65,4 +69,32 @@ export const verifyOtp = async (
   }
 
   return data;
+};
+export const updateProfile = async (
+  data: {
+    name?: string;
+    email?: string;
+    address?: string;
+    alternatePhone?: string;
+  }
+) => {
+  const token = await AsyncStorage.getItem('token');
+
+  const response = await fetch(`${ACTIVE_API_URL}/api/auth/update-profile`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-platform': 'mobile',
+    },
+    body: JSON.stringify(data),
+  });
+
+  const resData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(resData.message || 'Failed to update profile');
+  }
+
+  return resData;
 };

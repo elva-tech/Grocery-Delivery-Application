@@ -179,7 +179,17 @@ export default function OrdersScreen() {
       msg: "Are you sure you want to cancel this order?",
       action: async () => {
         try {
+          // #region agent log
+          fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H2',location:'orders.tsx:cancelAction',message:'Calling cancel API',data:{orderId:orderToCancel?.id??null},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           await cancelOrderApi(orderToCancel.id);
+          setOrders(prev =>
+            prev.map(o =>
+              o.id === orderToCancel.id || o._id === orderToCancel._id
+                ? { ...o, status: 'CANCELLED' }
+                : o
+            )
+          );
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           showToast('success', 'Order Cancelled', 'Success.');
           setSelectedOrder(null);
@@ -248,6 +258,9 @@ export default function OrdersScreen() {
     if (starValue === 0) return showToast('error', 'Select Stars', 'Please tap a star to rate.');
     setIsSubmittingRating(true);
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H2',location:'orders.tsx:submitRating',message:'Submitting rating',data:{orderId:ratingOrder?._id??ratingOrder?.id??null,rating:starValue},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       await rateOrderApi(ratingOrder._id ?? ratingOrder.id, starValue, ratingComment);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('success', 'Thank you!', 'Your feedback helps us improve.');
@@ -303,7 +316,7 @@ export default function OrdersScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View>
-            <Text style={styles.orderId}>Order #{item.id}</Text>
+            <Text style={styles.orderId}>Order #{item.id?.slice(0, 10)}</Text>
             <Text style={styles.dateText}>
               {new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
             </Text>
@@ -317,7 +330,12 @@ export default function OrdersScreen() {
           <Text style={styles.totalPrice}>₹{item.totalAmount}</Text>
         </View>
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setSelectedOrder(item)}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => {
+            // #region agent log
+            fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H1',location:'orders.tsx:viewButton',message:'View button pressed',data:{orderId:item?.id??null,orderMongoId:item?._id??null,status:item?.status??null},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            setSelectedOrder(item);
+          }}>
             <Text style={styles.secondaryBtnText}>View Items</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => handleReorder(item.items)}>
@@ -329,7 +347,12 @@ export default function OrdersScreen() {
         {item.status === 'DELIVERED' && !item.rating?.value && (
           <TouchableOpacity
             style={styles.rateBtn}
-            onPress={() => { setStarValue(0); setRatingComment(''); setRatingOrder(item); }}
+            onPress={() => {
+              // #region agent log
+              fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H1',location:'orders.tsx:rateButton',message:'Rate button pressed',data:{orderId:item?.id??null,orderMongoId:item?._id??null,hasRating:Boolean(item?.rating?.value)},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+              setStarValue(0); setRatingComment(''); setRatingOrder(item);
+            }}
           >
             <Ionicons name="star-outline" size={15} color="#f59e0b" />
             <Text style={styles.rateBtnText}>Rate this order</Text>
@@ -373,12 +396,26 @@ export default function OrdersScreen() {
       <Modal visible={!!selectedOrder && !showIssueModal} animationType="slide" transparent onRequestClose={() => setSelectedOrder(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Order Summary</Text>
-              <TouchableOpacity onPress={() => setSelectedOrder(null)}>
-                <Ionicons name="close-circle" size={32} color="#cbd5e1" />
-              </TouchableOpacity>
-            </View>
+          <View style={styles.modalHeader}>
+  <View style={{ flex: 1 }}>
+    <Text style={styles.modalTitle}>Order Summary</Text>
+    <Text
+      numberOfLines={1}
+      style={{
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#64748b',
+        marginTop: 2
+      }}
+    >
+      Order #{(selectedOrder?._id ?? selectedOrder?.id)}
+    </Text>
+  </View>
+
+  <TouchableOpacity onPress={() => setSelectedOrder(null)}>
+    <Ionicons name="close-circle" size={32} color="#cbd5e1" />
+  </TouchableOpacity>
+</View>
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {/* Delivery info row */}
               {(selectedOrder?.address || selectedOrder?.deliverySlot) && (

@@ -81,6 +81,19 @@ const deriveCategories = (products: Product[]): Category[] => {
 
 /* ---------------- API SLICE ---------------- */
 
+// Helper function to format time to 12-hour format
+const formatTime12 = (time?: string) => {
+  if (!time) return undefined;
+
+  const [h, m] = time.split(":").map(Number);
+
+  const hour = h % 12 || 12;
+  const ampm = h >= 12 ? "PM" : "AM";
+
+  return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
+};
+
+
 export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
