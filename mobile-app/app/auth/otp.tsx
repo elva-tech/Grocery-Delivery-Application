@@ -7,11 +7,20 @@ import { Colors, Fonts } from "@/theme/theme";
 import { sendOtp, verifyOtp } from "@/api/authApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from "lottie-react-native";
+import { updateProfile } from "@/api/authApi";
+import { showToast } from "@/utils/toast";
 
 export default function OTP() {
   const router = useRouter();
   const dispatch = useDispatch();
-  const { phone, name } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+
+  const phone = params.phone as string;
+  const name = (params.name as string) || "";
+  const email = (params.email as string) || "";
+  const address = (params.address as string) || "";
+  const alternatePhone = (params.alternatePhone as string) || "";
+  const mode = (params.mode as "signup" | "login") || "login";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(30);
@@ -49,7 +58,7 @@ export default function OTP() {
       setTimer(30);
       inputs.current[0]?.focus();
     } catch (e) {
-      alert("Resend failed");
+      showToast("error", "Error", "Resend failed");
     } finally {
       setLoading(false);
     }
@@ -60,46 +69,47 @@ export default function OTP() {
     setLoading(true);
 
     try {
-     const modeToUse = name ? 'signup' : 'login';
-
-let result;
-
-try {
-  result = await verifyOtp(
-    phone as string,
-    otp.join(""),
-    name as string,
-    'signup'
-  );
-} catch (e) {
-  result = await verifyOtp(
-    phone as string,
-    otp.join(""),
-    undefined,
-    'login'
-  );
-}
+      const result = await verifyOtp(
+        phone as string,
+        otp.join(""),
+        mode === "signup" ? (name as string) : undefined,
+        mode as "signup" | "login"
+      );
+      if (mode === "signup") {
+        await updateProfile({
+          name,
+          email,
+          address,
+          alternatePhone
+        });
+      }
       if (!result.token || !result.user) throw new Error(result.message || 'Verification failed');
 
       await AsyncStorage.setItem('token', result.token);
       await AsyncStorage.setItem('user', JSON.stringify({
         id: result.user.id,
         phone: result.user.phoneNumber,
-        name: result.user.name || (name as string),
+        name: result.user.name,
+        email: email || result.user.email,
+        address: address || result.user.address,
+        alternatePhone: alternatePhone || result.user.alternatePhone,
       }));
 
       dispatch(setCredentials({
         user: {
           id: result.user.id,
           phone: result.user.phoneNumber,
-          name: result.user.name || (name as string),
+          name: result.user.name,
+email: email || result.user.email,
+address: address || result.user.address,
+alternatePhone: alternatePhone || result.user.alternatePhone,
         },
         token: result.token,
       }));
 
       router.replace('/(tabs)');
     } catch (e: any) {
-      alert(e.message || "Verification failed. Please try again.");
+      showToast("error", "Verification Failed", e.message || "Please try again");
     } finally {
       setLoading(false);
     }
@@ -114,8 +124,12 @@ try {
 
       <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Verification</Text>
       <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>
-        Enter the 4-digit code sent to <Text style={{ color: Colors.PRIMARY }}>+91 {phone}</Text>
-      </Text>
+  Enter the 6-digit code sent to
+</Text>
+
+<Text style={[styles.subtitle, { color: Colors.PRIMARY, fontFamily: Fonts.medium }]}>
+  +91 {phone}
+</Text>
 
       <View style={styles.otpContainer}>
         {otp.map((d, i) => (

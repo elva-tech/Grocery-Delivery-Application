@@ -9,7 +9,7 @@
 
 export const API_BASE_URL = {
   // DEVELOPMENT: 'http://localhost:5000',
-  DEVELOPMENT: 'http://192.168.6.31:5000',
+  DEVELOPMENT: 'http://192.168.254.226:5000',
   STAGING: 'https://staging-api.egrocery.com',
   PRODUCTION: 'https://api.egrocery.com',
 };

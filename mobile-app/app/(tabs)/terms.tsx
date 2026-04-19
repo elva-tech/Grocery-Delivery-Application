@@ -2,7 +2,7 @@ import React from 'react';
 import { ScrollView, Text, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { APP_BRAND } from '@/src/config/constants';
-
+import { Linking } from 'react-native';
 const BRAND = APP_BRAND;
 
 const PAGES: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
@@ -109,10 +109,20 @@ const PAGES: Record<string, { title: string; sections: { heading: string; body: 
         heading: 'Our Mission',
         body: 'To foster a culture where every product delivered is handled with utmost care, maintaining its natural nutritional profile.',
       },
+      
+    ],
+  },
+  support: {
+    title: 'Customer Support',
+    sections: [
       {
-        heading: 'Contact Us',
-        body: 'Email: support@kmfgrocery.com\nPhone: +91 98765 43210\n\nOur support team is available during standard business hours.',
+        heading: 'Get in touch',
+        body: 'Email: support@kmfgrocery.com\nPhone: +91 98765 43210',
       },
+      {
+        heading: 'Support Hours',
+        body: 'Monday – Saturday, 8:00 AM – 8:00 PM',
+      }
     ],
   },
 };
@@ -132,7 +142,29 @@ export default function LegalScreen() {
       {content.sections.map((s, i) => (
         <View key={i} style={styles.section}>
           <Text style={styles.title}>{s.heading}</Text>
-          <Text style={styles.body}>{s.body}</Text>
+          <Text style={styles.body}>
+  {s.body.split('\n').map((line, index) => {
+    if (line.startsWith('Phone:')) {
+      const phone = line.replace('Phone: ', '');
+      return (
+        <Text key={index} onPress={() => Linking.openURL(`tel:${phone}`)}>
+          {line + '\n'}
+        </Text>
+      );
+    }
+
+    if (line.startsWith('Email:')) {
+      const email = line.replace('Email: ', '');
+      return (
+        <Text key={index} onPress={() => Linking.openURL(`mailto:${email}`)}>
+          {line + '\n'}
+        </Text>
+      );
+    }
+
+    return <Text key={index}>{line + '\n'}</Text>;
+  })}
+</Text>
         </View>
       ))}
 

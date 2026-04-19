@@ -24,10 +24,16 @@ export default function Landing() {
 
       <TouchableOpacity
         style={styles.button}
-        activeOpacity={0.85}
+        onPress={() => router.push('/auth/login')}
+      >
+        <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Login</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, { marginTop: 10 }]}
         onPress={() => router.push('/auth/register')}
       >
-        <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Get Started</Text>
+        <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Sign Up</Text>
       </TouchableOpacity>
     </View>
   );

@@ -81,6 +81,19 @@ const deriveCategories = (products: Product[]): Category[] => {
 
 /* ---------------- API SLICE ---------------- */
 
+// Helper function to format time to 12-hour format
+const formatTime12 = (time?: string) => {
+  if (!time) return undefined;
+
+  const [h, m] = time.split(":").map(Number);
+
+  const hour = h % 12 || 12;
+  const ampm = h >= 12 ? "PM" : "AM";
+
+  return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
+};
+
+
 export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
@@ -168,6 +181,81 @@ export const apiSlice = createApi({
       },
     }),
 
+    getStoreStatus: builder.query<{
+      isClosed: boolean;
+      reason: string;
+      type: "TIME" | "DATE";
+      startTime?: string;
+      endTime?: string;
+      startDate?: string;
+      endDate?: string;
+    }, void>({
+      queryFn: async () => {
+        try {
+          const now = new Date();
+
+          // MOCK (same as website)
+          const schedule = {
+            type: "DATE" as "TIME" | "DATE",
+            startDate: "2026-01-01",
+            endDate: "2099-12-31",
+            startTime: "00:00",
+            endTime: "23:59",
+            reason: "Store closed for maintenance",
+            isActive: false // TODO: Change to true when store is closed
+          };
+
+          let isClosed = false;
+
+          if (schedule.isActive) {
+            if (schedule.type === "TIME") {
+              const current = now.getHours() * 60 + now.getMinutes();
+
+              const [sh, sm] = schedule.startTime.split(":").map(Number);
+              const [eh, em] = schedule.endTime.split(":").map(Number);
+
+              const start = sh * 60 + sm;
+              const end = eh * 60 + em;
+
+              isClosed =
+                start < end
+                  ? current >= start && current <= end
+                  : current >= start || current <= end;
+            }
+
+            if (schedule.type === "DATE") {
+              const start = new Date(
+                schedule.startDate + "T" + (schedule.startTime || "00:00") + ":00"
+              );
+
+              const end = new Date(
+                schedule.endDate + "T" + (schedule.endTime || "23:59") + ":59"
+              );
+
+              isClosed = now >= start && now <= end;
+            }
+          }
+
+          return {
+            data: {
+              isClosed,
+              reason: schedule.reason,
+              type: schedule.type,
+              startTime: formatTime12(schedule.startTime),
+              endTime: formatTime12(schedule.endTime),
+              startDate: schedule.startDate,
+              endDate: schedule.endDate,
+            }
+          };
+
+        } catch {
+          return {
+            error: { status: 500, data: "Store status error" }
+          };
+        }
+      }
+    }),
+
   }),
 });
 
@@ -179,4 +267,5 @@ export const {
   useGetProductsByCategoryQuery,
   useGetFeaturedProductsQuery,
   useGetAppSettingsQuery,
+  useGetStoreStatusQuery,
 } = apiSlice;

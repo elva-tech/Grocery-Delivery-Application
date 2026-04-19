@@ -99,25 +99,29 @@ export default function ProfileScreen() {
       label: 'Order History',
       onPress: () => router.push('/(tabs)/orders')
     },
-    {
-      icon: 'heart-outline',
-      label: 'Favorites',
-      onPress: () => showToast('info', 'Coming Soon', 'Favorites feature is coming soon')
-    },
+
+    // TODO: Add Favorites feature
+    // {
+    //   icon: 'heart-outline',
+    //   label: 'Favorites',
+    //   onPress: () => showToast('info', 'Coming Soon', 'Favorites feature is coming soon')
+    // },
     {
       icon: 'location-outline',
       label: 'Saved Addresses',
       onPress: () => router.push('/(tabs)/addresses')
     },
-    {
-      icon: 'notifications-outline',
-      label: 'Notifications',
-      onPress: () => showToast('info', 'Notifications', 'No new notifications')
-    },
+
+    // TODO: Add Notifications feature
+    // {
+    //   icon: 'notifications-outline',
+    //   label: 'Notifications',
+    //   onPress: () => showToast('info', 'Notifications', 'No new notifications')
+    // },
     {
       icon: 'help-circle-outline',
       label: 'Customer Support',
-      onPress: () => Linking.openURL(`tel:${SUPPORT_PHONE}`)
+      onPress: () => router.push('/(tabs)/terms?page=support')
     },
     {
       icon: 'document-text-outline',

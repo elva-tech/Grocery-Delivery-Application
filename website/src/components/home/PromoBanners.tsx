@@ -74,7 +74,7 @@ const PromoBanners = () => {
           <SwiperSlide key={banner._id}>
             <div className="relative h-full w-full group">
               <img 
-                src={`${BASE_URL}${banner.image.replace(/\\/g, "/")}`}
+                src={`${BASE_URL}${(banner.image || '').replace(/\\/g, "/")}`}
                 className="w-full h-full object-cover transition-transform duration-[5000ms] group-hover:scale-110" 
                 alt={banner.title} 
               />
