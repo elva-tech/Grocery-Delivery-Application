@@ -69,6 +69,22 @@ const tenantSchema = new mongoose.Schema(
       default: "",
       select: false, // never returned in queries by default
     },
+    storeCode: {
+      type: String,
+      unique: true,
+      sparse: true,   // allows multiple null/missing values
+      trim: true,
+      uppercase: true,
+    },
+    deepLink: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    qrCode: {
+      type: String,  // base64 data-URL of the QR PNG
+      default: "",
+    },
   },
   { timestamps: true }
 );

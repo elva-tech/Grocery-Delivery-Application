@@ -35,6 +35,15 @@ export default function Landing() {
       >
         <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Sign Up</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.storeCodeBtn}
+        onPress={() => router.push('/auth/store-code')}
+      >
+        <Text style={[styles.storeCodeText, { fontFamily: Fonts.regular }]}>
+          Enter Store Code
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -87,5 +96,14 @@ const styles = StyleSheet.create({
   buttonText: {
     color: Colors.WHITE,
     fontSize: 18,
+  },
+  storeCodeBtn: {
+    marginTop: 24,
+    padding: 10,
+  },
+  storeCodeText: {
+    fontSize: 14,
+    color: Colors.TEXT_MUTED,
+    textDecorationLine: "underline",
   },
 });

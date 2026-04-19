@@ -1,4 +1,5 @@
-﻿import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
+﻿import { API_BASE_URL } from '@/src/config/constants';
+import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 // â”€â”€ Cart Bill Calculation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -32,7 +33,7 @@ export const calculateBillBackend = (
 export const getCartCalculation = async (items: any[]) => {
   try {
     const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/settings`, {
-      headers: { 'x-tenant-id': TENANT_ID },
+      headers: { 'x-tenant-id': await getActiveTenantId() },
     });
     if (!res.ok) throw new Error('settings fetch failed');
     const s = await res.json();
