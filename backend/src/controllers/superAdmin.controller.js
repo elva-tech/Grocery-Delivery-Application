@@ -7,6 +7,7 @@ const StoreSubscription = require("../models/StoreSubscription.model");
 const StoreUsage        = require("../models/StoreUsage.model");
 const Invoice           = require("../models/Invoice.model");
 const Store             = require("../models/Store.model");
+const { uploadToCloudinary } = require("../services/cloudinary.service");
 
 const VALID_PLANS    = ["FREE", "BASIC", "PREMIUM", "ENTERPRISE"];
 const VALID_STATUSES = ["ACTIVE", "SUSPENDED", "INACTIVE"];
@@ -49,7 +50,9 @@ exports.getTenants = async (req, res) => {
   try {
     const tenants = await Tenant.find({})
       .sort({ createdAt: -1 })
-      .select("tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain")
+      .select(
+        "tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain tagline heroBadge heroTitle heroSubtitle"
+      )
       .lean();
 
     return res.json({ success: true, tenants });
@@ -171,7 +174,25 @@ exports.updateStatus = async (req, res) => {
 exports.updateTenantDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const { storeName, ownerName, phoneNumber, storeAddress, contactEmail, logo, newPassword } = req.body;
+    const {
+      storeName,
+      ownerName,
+      phoneNumber,
+      storeAddress,
+      contactEmail,
+      logo,
+      newPassword,
+      tagline,
+      heroBadge,
+      heroTitle,
+      heroSubtitle,
+    } = req.body;
+
+    const trimStr = (v, max = 500) => {
+      const s = typeof v === "string" ? v.trim() : "";
+      if (!s) return "";
+      return s.length > max ? s.slice(0, max) : s;
+    };
 
     if (!storeName || !storeName.trim()) {
       return res.status(400).json({ success: false, message: "storeName is required" });
@@ -197,6 +218,10 @@ exports.updateTenantDetails = async (req, res) => {
       contactEmail: contactEmail ? contactEmail.trim().toLowerCase() : "",
       logo:         logo ? logo.trim() : "",
     };
+    if (typeof tagline === "string") tenantUpdates.tagline = trimStr(tagline);
+    if (typeof heroBadge === "string") tenantUpdates.heroBadge = trimStr(heroBadge);
+    if (typeof heroTitle === "string") tenantUpdates.heroTitle = trimStr(heroTitle);
+    if (typeof heroSubtitle === "string") tenantUpdates.heroSubtitle = trimStr(heroSubtitle);
 
     // Hash and update password only if a new one was supplied
     if (newPassword && newPassword.trim()) {
@@ -214,7 +239,9 @@ exports.updateTenantDetails = async (req, res) => {
     }
 
     const updated = await Tenant.findByIdAndUpdate(id, tenantUpdates, { new: true })
-      .select("tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain");
+      .select(
+        "tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain tagline heroBadge heroTitle heroSubtitle"
+      );
     if (!updated) return res.status(404).json({ success: false, message: "Tenant not found" });
 
     return res.json({ success: true, tenant: updated });
@@ -307,5 +334,61 @@ exports.markInvoicePaid = async (req, res) => {
   } catch (err) {
     console.error("[super/markInvoicePaid]", err);
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const SUPER_LOGO_TENANT_REGEX = /^[a-z0-9-]+$/;
+
+function slugifyForTenantLogo(text) {
+  return String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/**
+ * POST /api/super/tenant-logo — super-admin only.
+ * Multipart: file (field "file") + tenantId (preferred) or storeName (slug used as folder key).
+ * Cloudinary: {CLOUDINARY_ASSETS_ROOT}/{tenantId}/logo/store-logo (overwrite on re-upload).
+ */
+exports.uploadTenantLogoBySuperAdmin = async (req, res) => {
+  try {
+    if (!req.file?.path) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded. Use field name "file".',
+      });
+    }
+
+    let tenantId = String(req.body?.tenantId || req.query?.tenantId || "").trim().toLowerCase();
+    if (!tenantId) {
+      const fromName = slugifyForTenantLogo(req.body?.storeName || "");
+      if (fromName && SUPER_LOGO_TENANT_REGEX.test(fromName)) tenantId = fromName;
+    }
+
+    if (!tenantId || !SUPER_LOGO_TENANT_REGEX.test(tenantId)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "tenantId is required (lowercase letters, digits, hyphens only), or pass storeName so a slug can be used as the upload folder.",
+      });
+    }
+
+    const { url, public_id } = await uploadToCloudinary(
+      req.file.path,
+      tenantId,
+      "logo",
+      "store-logo"
+    );
+    return res.json({ success: true, url, public_id });
+  } catch (err) {
+    console.error("[super/uploadTenantLogoBySuperAdmin]", err);
+    return res.status(502).json({
+      success: false,
+      message: err.message || "Failed to upload logo to storage.",
+    });
   }
 };

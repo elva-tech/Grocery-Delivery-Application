@@ -6,6 +6,8 @@ import {
 } from '../services/mockData';
 
 import { apiService } from '../services/apiService';
+import { formatDeliveryAddressSummary } from '../utils/deliveryAddress';
+import { useToast } from './ToastContext';
 
 // ── helpers to normalise backend category/subcategory strings into stable IDs ──
 const toCatId = s =>
@@ -13,15 +15,38 @@ const toCatId = s =>
 const toSubId = s =>
   'sub_' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
-const normaliseProduct = p => ({
+/** Preserve Cloudinary public_id for admin deletes / updates. */
+const imagesFromPayload = (p) => {
+  if (Array.isArray(p.images) && p.images.length) {
+    return p.images
+      .map((img) => {
+        if (!img || typeof img !== 'object') return null;
+        const url = typeof img.url === 'string' ? img.url.trim() : '';
+        if (!url) return null;
+        const public_id =
+          typeof img.public_id === 'string' ? img.public_id.trim() : '';
+        return { url, public_id };
+      })
+      .filter(Boolean);
+  }
+  if (typeof p.imageUrl === 'string' && p.imageUrl.trim()) {
+    return [{ url: p.imageUrl.trim(), public_id: '' }];
+  }
+  return [];
+};
+
+const normaliseProduct = p => {
+  const imageRows = imagesFromPayload(p);
+  const urls = imageRows.map((r) => r.url);
+  return {
   id:               String(p.productId || p._id || ''),
   productId:        String(p.productId || p._id || ''),
   name:             p.name,
   description:      p.description || '',
   price:            p.price,
   unit:             p.unit,
-  imageUrl:         p.imageUrl || '',
-  images:           p.imageUrl ? [p.imageUrl] : [],
+  imageUrl:         urls[0] || '',
+  images:           imageRows,
   stock:            p.availableQty ?? 0,
   availableQty:     p.availableQty ?? 0,
   threshold:        p.thresholdQty ?? 10,
@@ -31,7 +56,8 @@ const normaliseProduct = p => ({
   subcategory:      p.subcategory,
   parentCategoryId: toCatId(p.category || 'uncategorized'),
   subCategoryId:    p.subcategory ? toSubId(p.subcategory) : null,
-});
+};
+};
 
 const buildCategories = items => {
   const parents = new Map();
@@ -52,6 +78,7 @@ const buildCategories = items => {
 const AppStateContext = createContext();
 
 export const AppStateProvider = ({ children }) => {
+  const { showToast } = useToast();
 
   /* ---------- SETTINGS ---------- */
   const [appSettings, setAppSettings] = useState(() => {
@@ -90,7 +117,13 @@ export const AppStateProvider = ({ children }) => {
       const data = await apiService.getInventory();
       const items = data.data || [];
       setProducts(items.map(normaliseProduct));
-      setCategories(buildCategories(items));
+      // Categories are derived from products; keep in-session "New Category" rows until a product uses them
+      setCategories((prev) => {
+        const fromProducts = buildCategories(items);
+        const ids = new Set(fromProducts.map((c) => c.id));
+        const extras = prev.filter((c) => !ids.has(c.id));
+        return [...fromProducts, ...extras];
+      });
       // Remove stale cached data so re-mounts always show fresh backend data
       sessionStorage.removeItem('app_products');
       sessionStorage.removeItem('app_categories');
@@ -152,7 +185,7 @@ export const AppStateProvider = ({ children }) => {
       }));
       setReturns(normalized);
     } catch (err) {
-      alert('Failed to process return request.');
+      showToast('error', 'Failed to process return request.');
     }
   };
 
@@ -182,7 +215,7 @@ export const AppStateProvider = ({ children }) => {
         customer: o.customerName || o.userId?.name || "Guest User",
         customerName: o.customerName || o.userId?.name || "Guest User",
         address: {
-          full: o.deliveryAddress?.line1 || "No Address"
+          full: formatDeliveryAddressSummary(o.deliveryAddress),
         },
         paymentMode: o.paymentMode || "ONLINE",
         paymentStatus: o.paymentStatus || "PENDING",
@@ -320,7 +353,7 @@ export const AppStateProvider = ({ children }) => {
         customer: o.customerName || o.userId?.name || "Guest User",
         customerName: o.customerName || o.userId?.name || "Guest User",
         address: {
-          full: o.deliveryAddress?.line1 || "No Address"
+          full: formatDeliveryAddressSummary(o.deliveryAddress),
         },
         paymentMode: o.paymentMode || "ONLINE",
         paymentStatus: o.paymentStatus || "PENDING",
@@ -356,7 +389,7 @@ export const AppStateProvider = ({ children }) => {
         customer: o.customerName || o.userId?.name || "Guest User",
         customerName: o.customerName || o.userId?.name || "Guest User",
         address: {
-          full: o.deliveryAddress?.line1 || "No Address"
+          full: formatDeliveryAddressSummary(o.deliveryAddress),
         },
         paymentMode: o.paymentMode || "ONLINE",
         paymentStatus: o.paymentStatus || "PENDING",
@@ -400,7 +433,7 @@ export const AppStateProvider = ({ children }) => {
           await fetchProductsFromAPI();
         } catch (err) {
           console.error('Delete product failed:', err);
-          alert(err?.response?.data?.message || 'Failed to delete product');
+          showToast('error', err?.response?.data?.message || 'Failed to delete product');
         }
       },
       refreshProducts: fetchProductsFromAPI,

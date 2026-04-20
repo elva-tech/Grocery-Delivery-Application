@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
 import PromoBanners from './components/home/PromoBanners';
@@ -15,8 +15,15 @@ import OrderSuccess from './pages/OrderSuccess';
 import Addresses from './pages/Addresses';
 import LoginModal from './components/ui/LoginModal';
 import { getCartCalculation } from './api/ordersApi';
-import { useGetProductsQuery } from './api/apiSlice';
+import {
+  useGetProductsQuery,
+  useGetStoreStatusQuery,
+  invalidateProductsCache,
+  apiSlice,
+} from './api/apiSlice';
 import type { RootState } from './store/store';
+import { getTenantId } from './utils/getTenantId';
+import { clearCart } from './store/slices/cartSlice';
 import { ChevronRight, Search, X } from 'lucide-react';
 import Pagination from './components/ui/Pagination';
 import confetti from 'canvas-confetti';
@@ -25,9 +32,10 @@ import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
 import ContactUs from './pages/ContactUs';
 
-import { useGetStoreStatusQuery } from './api/apiSlice';
+const TENANT_SCOPE_KEY = 'website_cart_tenant_scope';
 
 const App = () => {
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,8 +58,24 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
 
-  const { data: products = [] } = useGetProductsQuery();
+  const { data: products = [] } = useGetProductsQuery(getTenantId());
   const { items } = useSelector((state: RootState) => state.cart);
+
+  /** If tenant scope changes (env / host), cart + product cache must reset or checkout uses wrong product IDs. */
+  useEffect(() => {
+    const t = getTenantId();
+    try {
+      const prev = sessionStorage.getItem(TENANT_SCOPE_KEY);
+      if (prev && prev !== t) {
+        dispatch(clearCart());
+        invalidateProductsCache();
+        dispatch(apiSlice.util.resetApiState());
+      }
+      sessionStorage.setItem(TENANT_SCOPE_KEY, t);
+    } catch {
+      /* private mode */
+    }
+  }, [dispatch]);
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const timerRef = useRef<any>(null);
 

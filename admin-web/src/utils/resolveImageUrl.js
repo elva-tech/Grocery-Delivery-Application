@@ -6,6 +6,10 @@ const getFirstNonEmptyString = (value) => {
       const trimmed = entry.trim();
       if (trimmed) return trimmed;
     }
+    if (entry && typeof entry === 'object' && typeof entry.url === 'string') {
+      const trimmed = entry.url.trim();
+      if (trimmed) return trimmed;
+    }
   }
 
   return null;

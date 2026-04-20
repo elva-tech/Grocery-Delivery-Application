@@ -4,6 +4,7 @@ import {
   X, Loader, AlertCircle, CheckCircle2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { apiService } from '../../services/apiService';
+import { useToast } from '../../context/ToastContext';
 
 const EMPTY_FORM = {
   code: '',
@@ -30,6 +31,7 @@ const toInputDate = (iso) => {
 };
 
 const CouponManagement = () => {
+  const { showToast } = useToast();
   const [coupons, setCoupons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -144,7 +146,7 @@ const CouponManagement = () => {
       await apiService.updateCoupon(coupon._id, { isActive: !coupon.isActive });
       await load();
     } catch {
-      alert('Failed to update coupon status');
+      showToast('error', 'Failed to update coupon status');
     }
   };
 

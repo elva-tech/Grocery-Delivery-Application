@@ -7,7 +7,15 @@ import { API_BASE_URL } from '../config';
 function toUrlList(value: unknown): string[] {
   if (!value) return [];
   if (Array.isArray(value)) {
-    return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+    const out: string[] = [];
+    for (const v of value) {
+      if (typeof v === 'string' && v.trim()) out.push(v.trim());
+      else if (v && typeof v === 'object' && 'url' in v) {
+        const u = (v as { url?: unknown }).url;
+        if (typeof u === 'string' && u.trim()) out.push(u.trim());
+      }
+    }
+    return out;
   }
   if (typeof value === 'string' && value.trim()) return [value];
   if (typeof value === 'object' && value !== null && 'url' in value) {

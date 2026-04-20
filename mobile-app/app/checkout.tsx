@@ -16,6 +16,7 @@ import {
 } from '@/api/ordersApi';
 import { getCartCalculation } from '@/api/cartApi';
 import { getAddresses } from '@/api/addresses';
+import { buildDeliveryAddressPayload, formatAddressSummary } from '@/utils/indiaPincode';
 import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
 import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
@@ -67,6 +68,10 @@ export default function CheckoutScreen() {
     if (isStoreClosed) { showToast('error', 'Store Closed', 'We are not accepting orders right now.'); return; }
     if (items.length === 0) { showToast('error', 'Empty Cart', 'Add items first.'); return; }
     if (!token) { showToast('error', 'Session Expired', 'Please log in again.'); router.push('/auth/landing'); return; }
+    if (!selectedAddress) {
+      showToast('error', 'Address required', 'Add a delivery address in Addresses first.');
+      return;
+    }
 
     try {
       setIsPlacing(true);
@@ -74,9 +79,7 @@ export default function CheckoutScreen() {
       const orderPayload = {
         items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
         paymentMode: paymentMethod,
-        deliveryAddress: selectedAddress
-          ? { line1: selectedAddress.full || selectedAddress.label, lat: 0, lng: 0 }
-          : { line1: 'Address not selected', lat: 0, lng: 0 },
+        deliveryAddress: buildDeliveryAddressPayload(selectedAddress),
         couponCode: appliedCoupon?.code ?? null,
       };
 
@@ -145,7 +148,7 @@ export default function CheckoutScreen() {
             <Ionicons name="location-outline" size={20} color="#4b6f9e" />
             <Text style={styles.addressText}>
               {selectedAddress
-                ? (selectedAddress.full || selectedAddress.label || 'Saved address')
+                ? (formatAddressSummary(selectedAddress) || selectedAddress.label || 'Saved address')
                 : 'No address saved — add one in Addresses'}
             </Text>
           </View>

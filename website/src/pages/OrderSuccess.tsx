@@ -4,8 +4,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { clearCart } from '../store/slices/cartSlice';
 import { Check, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useTenantBranding } from '../context/TenantBrandingContext';
 
 const OrderSuccess = () => {
+  const { storeName } = useTenantBranding();
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
@@ -48,7 +50,7 @@ const OrderSuccess = () => {
       <div className="text-center space-y-4 mb-12">
         <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic">Order Placed!</h1>
         <p className="text-slate-500 font-bold max-w-md mx-auto leading-relaxed">
-          Your fresh dairy is being packed and will arrive at your doorstep soon.
+          {storeName} is preparing your order and it will be on its way soon.
         </p>
       </div>
 

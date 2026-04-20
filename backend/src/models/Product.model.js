@@ -1,5 +1,13 @@
 const mongoose = require("mongoose");
 
+const productImageSchema = new mongoose.Schema(
+  {
+    url: { type: String, required: true, trim: true },
+    public_id: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     tenantId: {
@@ -35,10 +43,10 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    
-    imageUrl: {
-      type: String,
-      default: ""
+
+    images: {
+      type: [productImageSchema],
+      default: [],
     },
 
     description: {

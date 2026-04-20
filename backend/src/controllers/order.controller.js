@@ -1,14 +1,26 @@
 const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
+const Product = require("../models/Product.model");
 const mongoose = require("mongoose");
 const User = require("../models/User.model");
 const Settings = require("../models/Settings.model");
 const Coupon = require("../models/Coupon.model");
 const { recordOrderBilling, reverseOrderBilling } = require("../services/billing.service");
+const {
+  isValidIndianPincodeFormat,
+  lookupIndianPincode,
+} = require("../services/pincodeLookup.service");
 
-/** Resolve display URL from Product.imageUrl (string or legacy array). */
+/** Resolve display URL from Product.images or legacy imageUrl / array. */
 function resolveProductImageUrl(product) {
   if (!product) return "/placeholder.png";
+  const images = product.images;
+  if (Array.isArray(images) && images.length > 0) {
+    const first = images.find(
+      (i) => i && typeof i.url === "string" && i.url.trim()
+    );
+    if (first) return first.url.trim();
+  }
   const raw = product.imageUrl;
   if (Array.isArray(raw)) {
     const first = raw.find((u) => typeof u === "string" && u.trim());
@@ -34,6 +46,14 @@ function resolveOrderItemImageUrl(item) {
   return "/placeholder.png";
 }
 
+function formatDeliveryAddressForCustomer(da) {
+  if (!da || typeof da !== "object") return "No address";
+  const tail = [da.city, da.state, da.pincode].filter(Boolean).join(", ");
+  const parts = [da.line1, da.line2, da.landmark, tail].filter(Boolean);
+  if (parts.length) return parts.join(" · ");
+  return da.line1 || "No address";
+}
+
 const PAYMENT_MODES = ["COD", "ONLINE"];
 
 /**
@@ -57,14 +77,42 @@ exports.placeCustomerOrder = async (req, res) => {
       return res.status(400).json({ message: "Invalid payment mode" });
     }
 
-    // Delivery validation (restored)
-    if (
-      !deliveryAddress?.line1 ||
-      typeof deliveryAddress.lat !== "number" ||
-      typeof deliveryAddress.lng !== "number"
-    ) {
+    const line1 = String(deliveryAddress?.line1 || "").trim();
+    const landmark = String(deliveryAddress?.landmark || "").trim();
+    const lat = Number(deliveryAddress?.lat);
+    const lng = Number(deliveryAddress?.lng);
+
+    if (!line1 || !landmark) {
+      return res.status(400).json({ message: "Address line 1 and landmark are required" });
+    }
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
       return res.status(400).json({ message: "Valid delivery address required" });
     }
+
+    const pinDigits = String(deliveryAddress?.pincode || "")
+      .replace(/\D/g, "")
+      .slice(0, 6);
+    if (!isValidIndianPincodeFormat(pinDigits)) {
+      return res.status(400).json({ message: "Enter a valid 6-digit Indian PIN code" });
+    }
+
+    const pinLookup = await lookupIndianPincode(pinDigits);
+    if (!pinLookup.ok) {
+      return res.status(400).json({
+        message: "PIN code not found. Enter a valid Indian PIN code.",
+      });
+    }
+
+    const normalizedDeliveryAddress = {
+      line1,
+      line2: String(deliveryAddress?.line2 || "").trim(),
+      landmark,
+      city: pinLookup.city,
+      state: pinLookup.state,
+      pincode: pinLookup.pincode,
+      lat,
+      lng,
+    };
 
     let orderItems = [];
     let totalAmount = 0;
@@ -74,13 +122,41 @@ exports.placeCustomerOrder = async (req, res) => {
         return res.status(400).json({ message: "Invalid product details" });
       }
 
+      const productRow = await Product.findOne({
+        _id: item.productId,
+        tenantId,
+      })
+        .select("name")
+        .lean();
+
+      if (!productRow) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This product is not available at your store. Clear your cart, confirm you are logged into the correct store, and try again.",
+          error: "Product not found for tenant",
+        });
+      }
+
       const inventory = await Inventory.findOne({
         productId: item.productId,
         tenantId,
       }).populate("productId");
 
-      if (!inventory || inventory.availableQty < item.qty) {
-        return res.status(400).json({ message: "No stock available" });
+      if (!inventory) {
+        return res.status(400).json({
+          success: false,
+          message: `No stock record for ${productRow.name}.`,
+          error: "No inventory for product",
+        });
+      }
+
+      if (inventory.availableQty < item.qty) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for ${productRow.name}.`,
+          error: `Only ${inventory.availableQty} available`,
+        });
       }
 
       orderItems.push({
@@ -174,7 +250,7 @@ exports.placeCustomerOrder = async (req, res) => {
       couponCode: appliedCoupon ? appliedCoupon.code : null,
       couponDiscount,
       paymentMode,
-      deliveryAddress,
+      deliveryAddress: normalizedDeliveryAddress,
       orderStatus: "PLACED",
       paymentStatus,
     });
@@ -239,7 +315,7 @@ exports.getCustomerOrderHistory = async (req, res) => {
       createdAt: order.createdAt,
 
       // ✅ ADD THESE (you already store them)
-      address: order.deliveryAddress?.line1 || "No address",
+      address: formatDeliveryAddressForCustomer(order.deliveryAddress),
       deliverySlot: order.deliverySlot || "Standard Delivery",
 
       // ✅ SEND ITEMS PROPERLY

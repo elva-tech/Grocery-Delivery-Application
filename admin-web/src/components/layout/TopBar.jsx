@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom'; // Added for navigation
 import { Bell, AlertTriangle, Package, X } from 'lucide-react';
 import { useAppState } from '../../context/AppStateContext';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 const GlobalNotification = () => {
+  const { logisticsLabel } = useTenantBranding();
   const { products, orders } = useAppState();
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
@@ -85,7 +87,9 @@ const GlobalNotification = () => {
               )}
             </div>
             <div className="p-3 bg-gray-50 text-center border-t border-gray-100">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">FreshRoot Logistics</p>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                {logisticsLabel}
+              </p>
             </div>
           </div>
         </>

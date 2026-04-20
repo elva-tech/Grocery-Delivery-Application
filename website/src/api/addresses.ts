@@ -19,19 +19,50 @@ export const getAddresses = async () => {
   });
 };
 
+const formatStoredPhone = (raw: string) => {
+  const d = String(raw || '').replace(/\D/g, '').slice(-10);
+  return d ? `${COUNTRY_CODE} ${d}` : '';
+};
+
 export const addAddress = async (address: any) => {
   return new Promise((resolve) => {
     const current = JSON.parse(localStorage.getItem('user_addresses') || '[]');
-    // Prepend country code on backend side
-    const newAddress = { 
-      ...address, 
+    const newAddress = {
+      ...address,
       id: Date.now().toString(),
-      phone: `${COUNTRY_CODE} ${address.phone}`,
-      altPhone: address.altPhone ? `${COUNTRY_CODE} ${address.altPhone}` : ''
+      phone: formatStoredPhone(address.phone),
+      altPhone: address.altPhone ? formatStoredPhone(address.altPhone) : '',
     };
     const updated = [...current, newAddress];
     localStorage.setItem('user_addresses', JSON.stringify(updated));
     resolve(newAddress);
+  });
+};
+
+export const updateAddress = async (id: string, address: any) => {
+  return new Promise((resolve, reject) => {
+    const current = JSON.parse(localStorage.getItem('user_addresses') || '[]');
+    const idx = current.findIndex((a: any) => a.id === id);
+    if (idx === -1) {
+      reject(new Error('Address not found'));
+      return;
+    }
+    const prev = current[idx];
+    const merged = {
+      ...prev,
+      ...address,
+      id: prev.id,
+      phone: address.phone ? formatStoredPhone(address.phone) : prev.phone,
+      altPhone:
+        address.altPhone !== undefined
+          ? address.altPhone
+            ? formatStoredPhone(address.altPhone)
+            : ''
+          : prev.altPhone,
+    };
+    current[idx] = merged;
+    localStorage.setItem('user_addresses', JSON.stringify(current));
+    resolve(merged);
   });
 };
 

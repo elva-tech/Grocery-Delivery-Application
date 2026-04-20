@@ -1,6 +1,6 @@
 const ReturnRequest = require("../models/ReturnRequest.model");
 const Order = require("../models/Order.model");
-
+const tenantPolicy = require("../config/tenantPolicy");
 
 /* CREATE RETURN REQUEST (Customer) */
 
@@ -29,7 +29,23 @@ exports.createReturnRequest = async (req, res) => {
       });
     }
 
-    const order = await Order.findById(orderId);
+    const evidenceCheck = tenantPolicy.validateEvidenceImageUrlStrict(evidenceUrl);
+    if (!evidenceCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        message: evidenceCheck.message,
+      });
+    }
+
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tenant context is required",
+      });
+    }
+
+    const order = await Order.findOne({ _id: orderId, tenantId });
 
     if (!order) {
         return res.status(404).json({
@@ -86,17 +102,36 @@ exports.createReturnRequest = async (req, res) => {
 /* GET ALL RETURN REQUESTS (ADMIN) */
 
 exports.getAllReturns = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tenant context is required",
+      });
+    }
 
-  const returns = await ReturnRequest.find({ orderId: { $ne: null } })
-  .populate("orderId", "_id status totalAmount")
-  .populate("userId", "_id name email")
-  .sort({ createdAt: -1 });
+    const returns = await ReturnRequest.find({ orderId: { $ne: null } })
+      .populate({
+        path: "orderId",
+        match: { tenantId },
+        select: "_id status totalAmount tenantId",
+      })
+      .populate("userId", "_id name email")
+      .sort({ createdAt: -1 });
 
-  res.json({
-    success: true,
-    data: returns
-  });
+    const data = returns.filter((r) => r.orderId);
 
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 
@@ -106,6 +141,14 @@ exports.approveReturn = async (req, res) => {
 
     const { id } = req.params;
     const { resolutionNote, refundAmount } = req.body;
+
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tenant context is required",
+      });
+    }
 
     const request = await ReturnRequest.findById(id);
 
@@ -123,7 +166,17 @@ exports.approveReturn = async (req, res) => {
       });
     }
 
-    const order = await Order.findById(request.orderId);
+    const order = await Order.findOne({
+      _id: request.orderId,
+      tenantId,
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
 
     request.status = "approved";
     request.resolutionNote = resolutionNote;
@@ -171,6 +224,14 @@ exports.rejectReturn = async (req, res) => {
     const { id } = req.params;
     const { resolutionNote } = req.body;
 
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tenant context is required",
+      });
+    }
+
     const request = await ReturnRequest.findById(id);
 
     if (!request) {
@@ -184,6 +245,18 @@ exports.rejectReturn = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Return request already processed"
+      });
+    }
+
+    const orderBelongsToTenant = await Order.exists({
+      _id: request.orderId,
+      tenantId,
+    });
+
+    if (!orderBelongsToTenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
       });
     }
 

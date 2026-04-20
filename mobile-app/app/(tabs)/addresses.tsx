@@ -25,22 +25,37 @@ import {
 } from '@/api/ordersApi';
 import { getCartCalculation } from '@/api/cartApi';
 import { RAZORPAY_KEY_ID } from '@/src/config/constants';
+import {
+  buildDeliveryAddressPayload,
+  formatAddressSummary,
+  isValidIndianPincode,
+  lookupIndianPincode,
+  sanitizeIndianPincode,
+} from '@/utils/indiaPincode';
 
 type OrderMode = 'self' | 'others';
 
 type OthersData = {
   recipientName: string;
   recipientPhone: string;
-  fullAddress: string;
+  line1: string;
+  line2: string;
   landmark: string;
+  city: string;
+  state: string;
+  pincode: string;
   note: string;
 };
 
 const EMPTY_OTHERS: OthersData = {
   recipientName: '',
   recipientPhone: '',
-  fullAddress: '',
+  line1: '',
+  line2: '',
   landmark: '',
+  city: '',
+  state: '',
+  pincode: '',
   note: '',
 };
 
@@ -71,9 +86,16 @@ export default function AddressesScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false); // New state for API call
   const [label, setLabel] = useState('');
-  const [full, setFull] = useState('');
-  const [phone, setPhone] = useState((user?.phone || '').replace(/^\+91\s*/, ''));
+  const [line1, setLine1] = useState('');
+  const [line2, setLine2] = useState('');
   const [landmark, setLandmark] = useState('');
+  const [city, setCity] = useState('');
+  const [stateField, setStateField] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [othersPinLoading, setOthersPinLoading] = useState(false);
+  const [addrLat, setAddrLat] = useState(0);
+  const [addrLng, setAddrLng] = useState(0);
+  const [phone, setPhone] = useState((user?.phone || '').replace(/^\+91\s*/, ''));
 
   const [showMap, setShowMap] = useState(false);
   const [mapLoading, setMapLoading] = useState(false);
@@ -104,17 +126,59 @@ export default function AddressesScreen() {
   };
 
   const handleAddPersonal = async () => {
-    if (!label.trim() || !full.trim() || !phone.trim()) {
-      showToast('error', 'Missing Fields', 'Label, Address and Phone are required');
+    if (!label.trim() || !line1.trim() || !landmark.trim() || !phone.trim()) {
+      showToast('error', 'Missing Fields', 'Label, address line 1, landmark, and phone are required');
+      return;
+    }
+    const p = sanitizeIndianPincode(pincode);
+    if (!isValidIndianPincode(p)) {
+      showToast('error', 'PIN', 'Enter a valid 6-digit Indian PIN code');
       return;
     }
     setIsSaving(true);
     try {
-      const newAddr = await addAddress({ label, full, phone, landmark });
+      const lookup = await lookupIndianPincode(p);
+      if (!lookup.ok) {
+        showToast('error', 'PIN', 'PIN code not found');
+        setIsSaving(false);
+        return;
+      }
+      const lat = region?.latitude ?? addrLat;
+      const lng = region?.longitude ?? addrLng;
+      const full = formatAddressSummary({
+        line1,
+        line2,
+        landmark,
+        city: lookup.city,
+        state: lookup.state,
+        pincode: lookup.pincode,
+      });
+      const newAddr = await addAddress({
+        label,
+        line1,
+        line2,
+        landmark,
+        city: lookup.city,
+        state: lookup.state,
+        pincode: lookup.pincode,
+        full,
+        phone,
+        lat,
+        lng,
+      });
       setAddresses(prev => [...prev, newAddr]);
       setSelectedId(newAddr.id);
       setAdding(false);
-      setLabel(''); setFull(''); setPhone((user?.phone || '').replace(/^\+91\s*/, '')); setLandmark('');
+      setLabel('');
+      setLine1('');
+      setLine2('');
+      setLandmark('');
+      setCity('');
+      setStateField('');
+      setPincode('');
+      setPhone((user?.phone || '').replace(/^\+91\s*/, ''));
+      setAddrLat(0);
+      setAddrLng(0);
     } catch (e: any) {
       showToast('error', 'Save Failed', e?.message || 'Error');
     } finally {
@@ -122,15 +186,37 @@ export default function AddressesScreen() {
     }
   };
 
-  const handleConfirmOthers = () => {
-    if (!othersForm.recipientName || !othersForm.recipientPhone || !othersForm.fullAddress) {
-      showToast('error', 'Missing Info', 'Name, Phone and Address are required');
+  const handleConfirmOthers = async () => {
+    if (!othersForm.recipientName || !othersForm.recipientPhone || !othersForm.line1.trim()) {
+      showToast('error', 'Missing Info', 'Name, phone, and address line 1 are required');
+      return;
+    }
+    if (!othersForm.landmark.trim()) {
+      showToast('error', 'Landmark', 'Landmark is required');
       return;
     }
     if (othersForm.recipientPhone.length !== 10) {
       showToast('error', 'Invalid Phone', '10 digits required');
       return;
     }
+    const p = sanitizeIndianPincode(othersForm.pincode);
+    if (!isValidIndianPincode(p)) {
+      showToast('error', 'PIN', 'Enter a valid 6-digit Indian PIN');
+      return;
+    }
+    setOthersPinLoading(true);
+    const lookup = await lookupIndianPincode(p);
+    setOthersPinLoading(false);
+    if (!lookup.ok) {
+      showToast('error', 'PIN', 'PIN code not found');
+      return;
+    }
+    setOthersForm(prev => ({
+      ...prev,
+      pincode: lookup.pincode,
+      city: lookup.city,
+      state: lookup.state,
+    }));
     setOthersConfirmed(true);
     setShowOthersModal(false);
     setOrderMode('others');
@@ -185,16 +271,31 @@ export default function AddressesScreen() {
     try {
       setIsPlacingOrder(true);
 
-      const deliveryLine =
+      const deliverySource =
         orderMode === 'self'
-          ? (addresses.find((a: any) => a.id === selectedId)?.full || '')
-          : othersForm.fullAddress;
+          ? addresses.find((a: any) => a.id === selectedId)
+          : {
+              line1: othersForm.line1,
+              line2: othersForm.line2,
+              landmark: othersForm.landmark,
+              city: othersForm.city,
+              state: othersForm.state,
+              pincode: othersForm.pincode,
+              lat: 0,
+              lng: 0,
+            };
+
+      if (!deliverySource) {
+        showToast('error', 'Address', 'Select a delivery address');
+        setIsPlacingOrder(false);
+        return;
+      }
 
       const order = await placeOrderBackend(
         {
           items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
           paymentMode: 'ONLINE',
-          deliveryAddress: { line1: deliveryLine, lat: 0, lng: 0 },
+          deliveryAddress: buildDeliveryAddressPayload(deliverySource),
           couponCode: appliedCoupon?.code ?? null,
         },
         token,
@@ -267,7 +368,11 @@ export default function AddressesScreen() {
     setIsFetchingAddress(true);
     try {
       const formatted = await getAddressFromCoords(lat, lng, controller.signal);
-      if (!controller.signal.aborted) setFull(formatted);
+      if (!controller.signal.aborted) {
+        setLine1(formatted);
+        setAddrLat(lat);
+        setAddrLng(lng);
+      }
     } catch (e: any) {
       console.error(e);
     } finally {
@@ -291,6 +396,8 @@ export default function AddressesScreen() {
       longitudeDelta: 0.005,
     };
     setRegion(reg);
+    setAddrLat(reg.latitude);
+    setAddrLng(reg.longitude);
     setMapLoading(false);
     setShowMap(true);
     fetchAddressFromBackend(reg.latitude, reg.longitude);
@@ -354,14 +461,35 @@ export default function AddressesScreen() {
 
             <TextInput placeholder="Label (Home/Work) *" value={label} onChangeText={setLabel} style={styles.input} />
             <TextInput
-              placeholder="Full Address *"
-              value={full}
-              onChangeText={setFull}
+              placeholder="Address line 1 *"
+              value={line1}
+              onChangeText={setLine1}
               style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
               multiline
             />
+            <TextInput placeholder="Address line 2 (optional)" value={line2} onChangeText={setLine2} style={styles.input} />
+            <TextInput placeholder="Landmark *" value={landmark} onChangeText={setLandmark} style={styles.input} />
+            <TextInput placeholder="City (from PIN)" value={city} editable={false} style={[styles.input, { backgroundColor: '#f1f5f9' }]} />
+            <TextInput placeholder="State (from PIN)" value={stateField} editable={false} style={[styles.input, { backgroundColor: '#f1f5f9' }]} />
+            <TextInput
+              placeholder="PIN code *"
+              value={pincode}
+              onChangeText={t => setPincode(t.replace(/\D/g, '').slice(0, 6))}
+              onBlur={async () => {
+                const p = sanitizeIndianPincode(pincode);
+                if (p.length !== 6 || !isValidIndianPincode(p)) return;
+                const r = await lookupIndianPincode(p);
+                if (r.ok) {
+                  setPincode(r.pincode);
+                  setCity(r.city);
+                  setStateField(r.state);
+                }
+              }}
+              keyboardType="number-pad"
+              style={styles.input}
+              maxLength={6}
+            />
             <TextInput placeholder="Phone Number *" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={styles.input} maxLength={10} />
-            <TextInput placeholder="Landmark (Optional)" value={landmark} onChangeText={setLandmark} style={styles.input} />
 
             <View style={styles.row}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setAdding(false)}>
@@ -388,7 +516,7 @@ export default function AddressesScreen() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.addrLabel}>{addr.label}</Text>
-                        <Text style={styles.addrFull}>{addr.full}</Text>
+                        <Text style={styles.addrFull}>{formatAddressSummary(addr)}</Text>
                       </View>
                       {selectedId === addr.id && <Ionicons name="checkmark-circle" size={24} color="#4b6f9e" />}
                     </TouchableOpacity>
@@ -407,7 +535,7 @@ export default function AddressesScreen() {
                     <Text style={styles.othersSummaryTitle}>RECIPIENT DETAILS</Text>
                   </View>
                   <Text style={styles.othersSummaryName}>{othersForm.recipientName} • {othersForm.recipientPhone}</Text>
-                  <Text style={styles.othersSummaryAddr}>{othersForm.fullAddress}</Text>
+                  <Text style={styles.othersSummaryAddr}>{formatAddressSummary(othersForm)}</Text>
                   {othersForm.landmark ? <Text style={styles.othersSummaryLandmark}>Near: {othersForm.landmark}</Text> : null}
                   <TouchableOpacity style={styles.editOthersBtn} onPress={() => setShowOthersModal(true)}>
                     <Text style={styles.editOthersText}>Edit Details</Text>
@@ -553,19 +681,59 @@ export default function AddressesScreen() {
 
                 <Text style={styles.inputLabel}>DELIVERY ADDRESS</Text>
                 <TextInput
-                  placeholder="Flat, Floor, Building, Area *"
+                  placeholder="Address line 1 *"
                   placeholderTextColor="#94a3b8"
-                  value={othersForm.fullAddress}
-                  onChangeText={t => setOthersForm({ ...othersForm, fullAddress: t })}
+                  value={othersForm.line1}
+                  onChangeText={t => setOthersForm({ ...othersForm, line1: t })}
                   style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
                   multiline
                 />
                 <TextInput
-                  placeholder="Landmark (Optional)"
+                  placeholder="Address line 2 (optional)"
+                  placeholderTextColor="#94a3b8"
+                  value={othersForm.line2}
+                  onChangeText={t => setOthersForm({ ...othersForm, line2: t })}
+                  style={styles.input}
+                />
+                <TextInput
+                  placeholder="Landmark *"
                   placeholderTextColor="#94a3b8"
                   value={othersForm.landmark}
                   onChangeText={t => setOthersForm({ ...othersForm, landmark: t })}
                   style={styles.input}
+                />
+                <TextInput
+                  placeholder="City (from PIN)"
+                  placeholderTextColor="#94a3b8"
+                  value={othersForm.city}
+                  editable={false}
+                  style={[styles.input, { backgroundColor: '#f1f5f9' }]}
+                />
+                <TextInput
+                  placeholder="State (from PIN)"
+                  placeholderTextColor="#94a3b8"
+                  value={othersForm.state}
+                  editable={false}
+                  style={[styles.input, { backgroundColor: '#f1f5f9' }]}
+                />
+                <TextInput
+                  placeholder="PIN code *"
+                  placeholderTextColor="#94a3b8"
+                  value={othersForm.pincode}
+                  onChangeText={t => setOthersForm({ ...othersForm, pincode: t.replace(/\D/g, '').slice(0, 6) })}
+                  onBlur={async () => {
+                    const p = sanitizeIndianPincode(othersForm.pincode);
+                    if (p.length !== 6 || !isValidIndianPincode(p)) return;
+                    setOthersPinLoading(true);
+                    const r = await lookupIndianPincode(p);
+                    setOthersPinLoading(false);
+                    if (r.ok) {
+                      setOthersForm(prev => ({ ...prev, pincode: r.pincode, city: r.city, state: r.state }));
+                    }
+                  }}
+                  keyboardType="number-pad"
+                  style={styles.input}
+                  maxLength={6}
                 />
                 <TextInput
                   placeholder="Instruction (e.g. Leave with guard)"
@@ -575,8 +743,8 @@ export default function AddressesScreen() {
                   style={styles.input}
                 />
 
-                <TouchableOpacity style={styles.saveBtn} onPress={handleConfirmOthers}>
-                  <Text style={styles.saveBtnText}>Confirm Delivery Details</Text>
+                <TouchableOpacity style={styles.saveBtn} onPress={handleConfirmOthers} disabled={othersPinLoading}>
+                  <Text style={styles.saveBtnText}>{othersPinLoading ? 'Checking PIN…' : 'Confirm Delivery Details'}</Text>
                 </TouchableOpacity>
               </ScrollView>
             </KeyboardAvoidingView>
@@ -591,13 +759,17 @@ export default function AddressesScreen() {
             provider={PROVIDER_GOOGLE}
             style={{ flex: 1 }}
             initialRegion={region}
-            onRegionChangeComplete={r => fetchAddressFromBackend(r.latitude, r.longitude)}
+            onRegionChangeComplete={r => {
+              setAddrLat(r.latitude);
+              setAddrLng(r.longitude);
+              fetchAddressFromBackend(r.latitude, r.longitude);
+            }}
           />
           <View style={styles.markerFixed} pointerEvents="none">
             <Ionicons name="location" size={40} color="#ef4444" />
           </View>
           <View style={styles.mapFooter}>
-            <Text style={styles.mapAddr}>{isFetchingAddress ? 'Fetching address...' : full}</Text>
+            <Text style={styles.mapAddr}>{isFetchingAddress ? 'Fetching address...' : line1}</Text>
             <TouchableOpacity style={styles.mapConfirmBtn} onPress={() => setShowMap(false)}>
               <Text style={styles.mapConfirmBtnText}>Confirm Location</Text>
             </TouchableOpacity>

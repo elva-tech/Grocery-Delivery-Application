@@ -94,7 +94,16 @@ export const placeOrderBackend = async (
   payload: {
     items: { productId: string; qty: number }[];
     paymentMode: string;
-    deliveryAddress: { line1: string; lat: number; lng: number };
+    deliveryAddress: {
+      line1: string;
+      line2?: string;
+      landmark: string;
+      city: string;
+      state: string;
+      pincode: string;
+      lat: number;
+      lng: number;
+    };
     couponCode?: string | null;
   },
   token: string,

@@ -6,9 +6,23 @@ import { logout } from '../../store/slices/authSlice';
 import { getAddressFromCoords } from '../../api/addresses';
 import type { RootState } from '../../store/store';
 import AddressModal from './AddressModal';
-import { APP_CONFIG } from '../../api/mockdata';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 import { Headset } from 'lucide-react';
+
+function splitBrandWords(storeName: string) {
+  const words = storeName.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { head: 'STORE', tail: '' };
+  if (words.length === 1) {
+    const w = words[0].toUpperCase();
+    const mid = Math.max(1, Math.floor(w.length / 2));
+    return { head: w.slice(0, mid), tail: w.slice(mid) };
+  }
+  return {
+    head: words.slice(0, -1).join(' ').toUpperCase(),
+    tail: ` ${words[words.length - 1].toUpperCase()}`,
+  };
+}
 
 interface HeaderProps {
   searchValue: string;
@@ -18,6 +32,8 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClick, onLoginClick }) => {
+  const { storeName, tagline, logo } = useTenantBranding();
+  const { head: brandHead, tail: brandTail } = splitBrandWords(storeName);
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { totalAmount } = useSelector((state: RootState) => state.cart);
@@ -81,10 +97,10 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
               </div>
 
               <h2 className="text-3xl font-black text-slate-900 italic uppercase tracking-tighter mb-3 leading-none">
-                Experience {APP_CONFIG.brandName}.
+                Experience {storeName}.
               </h2>
               <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">
-                Download our mobile app for faster checkout, live tracking, and exclusive fresh deals.
+                Download our mobile app for faster checkout, live tracking, and exclusive offers.
               </p>
 
               <div className="flex flex-col gap-3">
@@ -130,11 +146,28 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-3 sm:gap-8">
 
           {/* LOGO */}
-          <div className="flex flex-col group cursor-pointer shrink-0" onClick={() => navigate('/')}>
-            <span className="text-lg sm:text-2xl font-black text-[#1e293b] tracking-[-0.05em] leading-none uppercase italic">
-              {APP_CONFIG.brandName.toUpperCase()}<span className="text-[#4b6f9e]">APP</span>
-            </span>
-            <span className="hidden sm:block text-[8px] font-black text-[#4b6f9e] tracking-[0.4em] uppercase opacity-50 group-hover:opacity-100 transition-opacity">Pure Dairy Culture</span>
+          <div
+            className="flex items-center gap-2 sm:gap-3 group cursor-pointer shrink-0 min-w-0"
+            onClick={() => navigate('/')}
+          >
+            {logo ? (
+              <img
+                src={logo}
+                alt=""
+                className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl object-contain border border-slate-100 bg-white shrink-0"
+              />
+            ) : null}
+            <div className="flex flex-col min-w-0">
+              <span className="text-lg sm:text-2xl font-black text-[#1e293b] tracking-[-0.05em] leading-none uppercase italic truncate">
+                {brandHead}
+                {brandTail ? (
+                  <span className="text-[#4b6f9e]">{brandTail}</span>
+                ) : null}
+              </span>
+              <span className="hidden sm:block text-[8px] font-black text-[#4b6f9e] tracking-[0.4em] uppercase opacity-50 group-hover:opacity-100 transition-opacity truncate">
+                {tagline}
+              </span>
+            </div>
           </div>
 
           {/* LOCATION (Hidden on very small screens to save space) */}

@@ -6,12 +6,15 @@ import type { RootState } from '../store/store';
 import { logout } from '../store/slices/authSlice';
 import { useCalculateCartMutation } from '../api/apiSlice';
 import { placeOrderApi, validateCouponApi } from '../api/ordersApi';
+import { buildDeliveryAddressPayload, formatAddressSummary } from '../utils/indiaPincode';
 import { loadRazorpay } from '../utils/loadRazorpay';
 import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
+import { useToast } from '../context/ToastContext';
 
 const Checkout = ({ address }: any) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { showToast } = useToast();
   const { items } = useSelector((state: RootState) => state.cart);
   const { user } = useSelector((state: RootState) => state.auth);
   
@@ -81,11 +84,7 @@ const handlePlaceOrder = async () => {
   const orderPayload = {
     items: items.map(item => ({ productId: item.id, qty: item.quantity })),
     paymentMode: paymentMethod,
-    deliveryAddress: {
-      line1: address?.full || '',
-      lat: typeof address?.lat === 'number' ? address.lat : 0,
-      lng: typeof address?.lng === 'number' ? address.lng : 0,
-    },
+    deliveryAddress: buildDeliveryAddressPayload(address || {}),
     couponCode: appliedCoupon?.code ?? null,
   };
 
@@ -102,7 +101,7 @@ const handlePlaceOrder = async () => {
 
     const scriptLoaded = await loadRazorpay();
     if (!scriptLoaded) {
-      alert('Failed to load payment gateway. Please check your connection.');
+      showToast('error', 'Failed to load payment gateway. Please check your connection.');
       setIsProcessing(false);
       return;
     }
@@ -140,12 +139,12 @@ const handlePlaceOrder = async () => {
           if (verification.success) {
             navigate('/success', { state: { fromCheckout: true, orderId: order.orderId, orderItems: items } });
           } else {
-            alert('Payment verification failed. Please contact support.');
+            showToast('error', 'Payment verification failed. Please contact support.');
             setIsProcessing(false);
           }
         } catch (err) {
           console.error('Payment verification error:', err);
-          alert('Payment verification failed. Please contact support.');
+          showToast('error', 'Payment verification failed. Please contact support.');
           setIsProcessing(false);
         }
       },
@@ -155,7 +154,7 @@ const handlePlaceOrder = async () => {
 
     rzp.on('payment.failed', (response: any) => {
       console.error('Payment failed:', response);
-      alert(response?.error?.description || 'Payment failed. Please try again.');
+      showToast('error', response?.error?.description || 'Payment failed. Please try again.');
       setIsProcessing(false);
     });
 
@@ -164,10 +163,10 @@ const handlePlaceOrder = async () => {
     console.error('Order placement failed:', error);
     if (error?.response?.status === 401) {
       dispatch(logout());
-      alert('Your session has expired. Please log in again to place your order.');
+      showToast('error', 'Your session has expired. Please log in again to place your order.');
       navigate('/', { replace: true });
     } else {
-      alert(error?.response?.data?.message || 'Failed to place order. Please try again.');
+      showToast('error', error?.response?.data?.message || 'Failed to place order. Please try again.');
       setIsProcessing(false);
     }
   }
@@ -194,15 +193,17 @@ const handlePlaceOrder = async () => {
               <div className="space-y-4">
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{address?.label || 'Home'}</p>
-                  <p className="text-slate-700 font-bold text-lg leading-tight">{address?.full || 'No address selected'}</p>
+                  <p className="text-slate-700 font-bold text-lg leading-tight whitespace-pre-line">
+                    {formatAddressSummary(address || {}) || 'No address selected'}
+                  </p>
                 </div>
-                
-                {address?.landmark && (
+
+                {address?.landmark ? (
                   <div className="flex items-center gap-2 text-slate-500">
                     <Map size={14} />
                     <p className="text-xs font-bold">Landmark: {address.landmark}</p>
                   </div>
-                )}
+                ) : null}
 
                 <div className="flex flex-wrap gap-4 pt-2">
                   <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl text-slate-600">

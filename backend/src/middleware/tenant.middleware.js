@@ -13,7 +13,13 @@ const resolveTenant = async (req, res, next) => {
 
     // ── LOCALHOST (DEV) ─────────────────────────────
     if (hostname.includes("localhost")) {
-      if (!tenantId) tenantId = "demo-tenant";
+      if (!tenantId) {
+        tenantId = String(
+          process.env.LOCAL_DEFAULT_TENANT_ID || "demo-tenant"
+        )
+          .trim()
+          .toLowerCase();
+      }
       req.tenantId = tenantId;
       console.log("Resolved Tenant (local dev, no DB check):", tenantId);
       return next();

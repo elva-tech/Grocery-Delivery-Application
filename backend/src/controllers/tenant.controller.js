@@ -120,7 +120,9 @@ exports.getTenantDetails = async (req, res) => {
   }
 
   const tenant = await Tenant.findOne({ tenantId })
-    .select("tenantId name logo storeAddress contactEmail phoneNumber plan customerDomain adminDomain ownerName")
+    .select(
+      "tenantId name logo storeAddress contactEmail phoneNumber plan customerDomain adminDomain ownerName tagline heroBadge heroTitle heroSubtitle supportEmail supportPhone supportHours"
+    )
     .lean();
 
   if (!tenant) {
@@ -143,9 +145,89 @@ exports.getTenantDetails = async (req, res) => {
     storeAddress:  tenant.storeAddress || "",
     contactEmail:  tenant.contactEmail || "",
     phoneNumber:   tenant.phoneNumber || "",
+    customerDomain: tenant.customerDomain || "",
+    adminDomain:   tenant.adminDomain || "",
+    tagline:       tenant.tagline || "",
+    heroBadge:     tenant.heroBadge || "",
+    heroTitle:     tenant.heroTitle || "",
+    heroSubtitle:  tenant.heroSubtitle || "",
     plan:          activePlan,
     status:        tenant.status || "ACTIVE",
+    supportEmail:  tenant.supportEmail || "",
+    supportPhone:  tenant.supportPhone || "",
+    supportHours:  tenant.supportHours || "",
   });
+};
+
+/* ─────────────────────────────────────────────
+   PATCH /api/tenant/support-contact
+   Admin only — customer-facing support details
+───────────────────────────────────────────── */
+exports.updateTenantSupportContact = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: "tenantId missing from session" });
+    }
+
+    const { supportEmail, supportPhone, supportHours } = req.body;
+    const email = String(supportEmail || "")
+      .trim()
+      .toLowerCase();
+    const phoneRaw = String(supportPhone || "").trim();
+    const hours = String(supportHours || "").trim();
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Support email is required" });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: "Invalid support email" });
+    }
+
+    const phoneDigits = phoneRaw.replace(/\D/g, "");
+    if (phoneDigits.length < 10) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Support phone must include at least 10 digits" });
+    }
+    const phone = phoneDigits.slice(-10);
+
+    if (!hours || hours.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Support hours are required (e.g. Mon–Sat 9:00 AM – 6:00 PM)",
+      });
+    }
+
+    const updated = await Tenant.findOneAndUpdate(
+      { tenantId },
+      {
+        $set: {
+          supportEmail: email,
+          supportPhone: phone,
+          supportHours: hours.slice(0, 400),
+        },
+      },
+      { new: true }
+    )
+      .select("tenantId supportEmail supportPhone supportHours")
+      .lean();
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Tenant not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Support details saved",
+      supportEmail: updated.supportEmail,
+      supportPhone: updated.supportPhone,
+      supportHours: updated.supportHours,
+    });
+  } catch (err) {
+    console.error("[updateTenantSupportContact]", err);
+    return res.status(500).json({ success: false, message: "Failed to save support details" });
+  }
 };
 
 /* ─────────────────────────────────────────────
@@ -193,7 +275,20 @@ exports.createTenant = async (req, res) => {
       contactEmail,
       plan: requestedPlan,
       password,
+      tagline,
+      heroBadge,
+      heroTitle,
+      heroSubtitle,
+      supportEmail: rawSupportEmail,
+      supportPhone: rawSupportPhone,
+      supportHours: rawSupportHours,
     } = req.body;
+
+    const trimStr = (v, max = 500) => {
+      const s = typeof v === "string" ? v.trim() : "";
+      if (!s) return "";
+      return s.length > max ? s.slice(0, max) : s;
+    };
 
     // ── Input validation ────────────────────────────────────────────────
     if (!storeName || !storeName.trim()) {
@@ -217,6 +312,28 @@ exports.createTenant = async (req, res) => {
       if (!emailRe.test(contactEmail.trim())) {
         return res.status(400).json({ success: false, message: "contactEmail format is invalid" });
       }
+    }
+
+    let initialSupportEmail = "";
+    let initialSupportPhone = "";
+    let initialSupportHours = "";
+    if (rawSupportEmail && String(rawSupportEmail).trim()) {
+      const se = String(rawSupportEmail).trim().toLowerCase();
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(se)) {
+        return res.status(400).json({ success: false, message: "supportEmail format is invalid" });
+      }
+      initialSupportEmail = se;
+    }
+    if (rawSupportPhone && String(rawSupportPhone).trim()) {
+      const sd = String(rawSupportPhone).replace(/\D/g, "");
+      if (sd.length < 10) {
+        return res.status(400).json({ success: false, message: "supportPhone must include at least 10 digits" });
+      }
+      initialSupportPhone = sd.slice(-10);
+    }
+    if (rawSupportHours && String(rawSupportHours).trim()) {
+      initialSupportHours = trimStr(rawSupportHours, 400);
     }
 
     // ── Password validation ─────────────────────────────────────────────
@@ -273,6 +390,13 @@ exports.createTenant = async (req, res) => {
       storeAddress:   storeAddress ? storeAddress.trim() : "",
       contactEmail:   contactEmail ? contactEmail.trim().toLowerCase() : "",
       adminPassword:  hashedPassword,
+      tagline:        trimStr(tagline),
+      heroBadge:      trimStr(heroBadge),
+      heroTitle:      trimStr(heroTitle),
+      heroSubtitle:   trimStr(heroSubtitle),
+      supportEmail:   initialSupportEmail,
+      supportPhone:   initialSupportPhone,
+      supportHours:   initialSupportHours,
     });
 
     // ── 2. Create Admin User ────────────────────────────────────────────

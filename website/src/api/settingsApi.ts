@@ -1,5 +1,5 @@
 import axios from "axios";
-import { API_BASE_URL, TENANT_ID } from "../config";
+import { API_BASE_URL, getTenantId } from "../config";
 
 const SETTINGS_URL = `${API_BASE_URL}/api/settings`;
 
@@ -19,7 +19,7 @@ export async function fetchSettings(): Promise<AppSettings> {
   if (_cache && now < _cacheExpiry) return _cache;
 
   const res = await axios.get(SETTINGS_URL, {
-    headers: { "x-tenant-id": TENANT_ID },
+    headers: { "x-tenant-id": getTenantId() },
   });
 
   _cache = res.data as AppSettings;

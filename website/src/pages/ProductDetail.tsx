@@ -8,6 +8,7 @@ import {
 
 import { addToCart, removeFromCart } from '../store/slices/cartSlice';
 import { useGetProductsQuery } from '../api/apiSlice';
+import { getTenantId } from '../utils/getTenantId';
 import type { RootState } from '../store/store';
 import ProductCard from '../components/products/ProductCard';
 import { resolveImageGallery } from '../utils/resolveImageUrl';
@@ -18,7 +19,7 @@ const ProductDetail = () => {
   const dispatch = useDispatch();
   const [activeImg, setActiveImg] = useState(0);
 
-  const { data: allProducts = [] } = useGetProductsQuery();
+  const { data: allProducts = [] } = useGetProductsQuery(getTenantId());
 
   // Auto-scroll to top when product changes
   useEffect(() => {

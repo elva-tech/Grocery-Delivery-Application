@@ -1,12 +1,15 @@
 import axios from "axios";
-import { API_BASE_URL } from "../config";
+import { API_BASE_URL, getTenantId } from "../config";
 
 const PAYMENT_URL = `${API_BASE_URL}/api/payments`;
 
 function getAuthHeader() {
   const token = localStorage.getItem("token");
   if (!token) throw new Error("Unauthorized");
-  return { Authorization: `Bearer ${token}` };
+  return {
+    Authorization: `Bearer ${token}`,
+    "x-tenant-id": getTenantId(),
+  };
 }
 
 export interface CreatePaymentResponse {

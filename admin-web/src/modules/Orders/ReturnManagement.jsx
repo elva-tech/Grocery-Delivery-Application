@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useAppState } from '../../context/AppStateContext';
+import { useToast } from '../../context/ToastContext';
 import { CheckCircle, XCircle, AlertCircle, Eye } from 'lucide-react';
 
 const ReturnManagement = () => {
+  const { showToast } = useToast();
   const { returns, processReturnRequest, appSettings } = useAppState(); // Added appSettings here
   const [adminNotes, setAdminNotes] = useState({});
 
@@ -21,7 +23,7 @@ const ReturnManagement = () => {
 
   const handleAction = (id, decision) => {
     if (!adminNotes[id]?.trim()) {
-      alert("Please provide a reason for the customer.");
+      showToast('error', 'Please provide a reason for the customer.');
       return;
     }
     processReturnRequest(id, decision, adminNotes[id]);
