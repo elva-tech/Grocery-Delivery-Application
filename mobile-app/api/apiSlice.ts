@@ -1,8 +1,9 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
+import { API_BASE_URL } from '@/src/config/constants';
+import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 const BASE = API_BASE_URL.DEVELOPMENT;
-const TENANT_HEADERS = { 'x-tenant-id': TENANT_ID };
+const tenantHeaders = async () => ({ 'x-tenant-id': await getActiveTenantId() });
 
 /* ---------------- TYPES ---------------- */
 
@@ -103,7 +104,7 @@ export const apiSlice = createApi({
     getAppSettings: builder.query<AppSettings, void>({
       queryFn: async () => {
         try {
-          const res = await fetch(`${BASE}/api/settings`, { headers: TENANT_HEADERS });
+          const res = await fetch(`${BASE}/api/settings`, { headers: await tenantHeaders() });
           if (!res.ok) throw new Error('settings fetch failed');
           const s = await res.json();
           return {
@@ -123,7 +124,7 @@ export const apiSlice = createApi({
     getCategories: builder.query<Category[], void>({
       queryFn: async () => {
         try {
-          const res = await fetch(`${BASE}/api/products`, { headers: TENANT_HEADERS });
+          const res = await fetch(`${BASE}/api/products`, { headers: await tenantHeaders() });
           if (!res.ok) throw new Error('products fetch failed');
           const json = await res.json();
           const products: Product[] = (json.products || []).map(normalizeProduct);
@@ -138,7 +139,7 @@ export const apiSlice = createApi({
     getProducts: builder.query<Product[], void>({
       queryFn: async () => {
         try {
-          const res = await fetch(`${BASE}/api/products`, { headers: TENANT_HEADERS });
+          const res = await fetch(`${BASE}/api/products`, { headers: await tenantHeaders() });
           if (!res.ok) throw new Error('products fetch failed');
           const json = await res.json();
           return { data: (json.products || []).map(normalizeProduct) };
@@ -152,7 +153,7 @@ export const apiSlice = createApi({
     getProductsByCategory: builder.query<Product[], string>({
       queryFn: async (categoryId) => {
         try {
-          const res = await fetch(`${BASE}/api/products?category=${encodeURIComponent(categoryId)}`, { headers: TENANT_HEADERS });
+          const res = await fetch(`${BASE}/api/products?category=${encodeURIComponent(categoryId)}`, { headers: await tenantHeaders() });
           if (!res.ok) throw new Error('products fetch failed');
           const json = await res.json();
           const all: Product[] = (json.products || []).map(normalizeProduct);
@@ -171,7 +172,7 @@ export const apiSlice = createApi({
     getFeaturedProducts: builder.query<Product[], void>({
       queryFn: async () => {
         try {
-          const res = await fetch(`${BASE}/api/products`, { headers: TENANT_HEADERS });
+          const res = await fetch(`${BASE}/api/products`, { headers: await tenantHeaders() });
           if (!res.ok) throw new Error('products fetch failed');
           const json = await res.json();
           return { data: (json.products || []).map(normalizeProduct).slice(0, 6) };
@@ -189,7 +190,7 @@ export const apiSlice = createApi({
     }, void>({
       queryFn: async () => {
         try {
-          const res = await fetch(`${BASE}/api/store/status`, { headers: TENANT_HEADERS });
+          const res = await fetch(`${BASE}/api/store/status`, { headers: await tenantHeaders() });
           if (!res.ok) throw new Error('store status fetch failed');
           const data = await res.json();
           return {

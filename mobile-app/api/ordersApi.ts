@@ -1,4 +1,5 @@
-import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
+import { API_BASE_URL } from '@/src/config/constants';
+import { getActiveTenantId } from '@/src/utils/tenantStorage';
 import { store } from '@/store/store';
 
 const BASE = API_BASE_URL.DEVELOPMENT;
@@ -13,7 +14,7 @@ export const cancelOrderApi = async (orderId: string) => {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${token}`,
-      'x-tenant-id': TENANT_ID,
+      'x-tenant-id': await getActiveTenantId(),
     },
   });
   const data = await res.json().catch(() => ({}));
@@ -29,7 +30,7 @@ export const getUserOrders = async (_userId?: string) => {
     const res = await fetch(`${BASE}/api/orders/my`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        'x-tenant-id': TENANT_ID,
+        'x-tenant-id': await getActiveTenantId(),
       },
     });
     if (!res.ok) throw new Error('orders fetch failed');
@@ -59,7 +60,7 @@ export const getOrderById = async (orderId: string) => {
     const res = await fetch(`${BASE}/api/orders/${orderId}`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        'x-tenant-id': TENANT_ID,
+        'x-tenant-id': await getActiveTenantId(),
       },
     });
     if (!res.ok) return null;
@@ -83,9 +84,9 @@ export const getOrderById = async (orderId: string) => {
 
 // ─── REAL BACKEND API FUNCTIONS ──────────────────────────────────────────────
 
-const authHeaders = (token: string) => ({
+const authHeaders = async (token: string) => ({
   'Content-Type': 'application/json',
-  'x-tenant-id': TENANT_ID,
+  'x-tenant-id': await getActiveTenantId(),
   Authorization: `Bearer ${token}`,
 });
 
@@ -101,7 +102,7 @@ export const placeOrderBackend = async (
 ) => {
   const res = await fetch(`${BASE}/api/orders`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: await authHeaders(token),
     body: JSON.stringify(payload),
   });
   const data = await res.json();
@@ -117,7 +118,7 @@ export const validateCouponApi = async (
 ) => {
   const res = await fetch(`${BASE}/api/coupons/validate`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: await authHeaders(token),
     body: JSON.stringify({ code, cartTotal }),
   });
   const data = await res.json();
@@ -129,7 +130,7 @@ export const validateCouponApi = async (
 export const createMobilePaymentOrder = async (orderId: string, token: string) => {
   const res = await fetch(`${BASE}/api/payments/create`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: await authHeaders(token),
     body: JSON.stringify({ order_id: orderId }),
   });
   const data = await res.json();
@@ -149,7 +150,7 @@ export const verifyMobilePayment = async (
 ) => {
   const res = await fetch(`${BASE}/api/payments/verify`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: await authHeaders(token),
     body: JSON.stringify(payload),
   });
   const data = await res.json();
@@ -167,7 +168,7 @@ export const rateOrderApi = async (
   if (!token) throw new Error('Not authenticated');
   const res = await fetch(`${BASE}/api/orders/${orderId}/rate`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: await authHeaders(token),
     body: JSON.stringify({ rating, comment }),
   });
   const data = await res.json();
@@ -185,7 +186,7 @@ export const reportOrderIssueApi = async (
 ) => {
   const res = await fetch(`${BASE}/api/returns/create`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: await authHeaders(token),
     body: JSON.stringify({ orderId, reason, customerComment, evidenceUrl }),
   });
   const data = await res.json();
@@ -197,7 +198,7 @@ export const reportOrderIssueApi = async (
 export const updateProfileApi = async (name: string, token: string) => {
   const res = await fetch(`${BASE}/api/auth/profile`, {
     method: 'PATCH',
-    headers: authHeaders(token),
+    headers: await authHeaders(token),
     body: JSON.stringify({ name }),
   });
   const data = await res.json();

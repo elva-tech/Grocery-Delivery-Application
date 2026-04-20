@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ACTIVE_API_URL, TENANT_ID } from '@/src/config/constants';
+import { ACTIVE_API_URL } from '@/src/config/constants';
+import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 export interface SendOtpResponse {
   success: boolean;
@@ -29,7 +30,7 @@ export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => 
     headers: {
       'Content-Type': 'application/json',
       'x-platform': 'mobile',
-      'x-tenant-id': TENANT_ID,
+      'x-tenant-id': await getActiveTenantId(),
     },
     body: JSON.stringify({ phoneNumber }),
   });
@@ -57,7 +58,7 @@ export const verifyOtp = async (
     headers: {
       'Content-Type': 'application/json',
       'x-platform': 'mobile',
-      'x-tenant-id': TENANT_ID,
+      'x-tenant-id': await getActiveTenantId(),
     },
     body: JSON.stringify({ phoneNumber, otp, ...(name && { name }) }),
   });
