@@ -15,11 +15,13 @@ import {
   Tag
 } from 'lucide-react';
 import { APP_CONFIG } from '../../config/appConfig';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 import { useLocation } from 'react-router-dom';
 
 import { DollarSign } from 'lucide-react';
 
 const Sidebar = () => {
+  const { storeName, logo } = useTenantBranding();
   const { appSettings } = useAppState();
   const location = useLocation();
 
@@ -71,12 +73,16 @@ const Sidebar = () => {
     <aside className="w-68 bg-white h-screen flex flex-col border-r border-gray-200 sticky top-0 shadow-sm">
       <div className="p-6 mb-2">
         <div className="flex items-center gap-3 px-2">
-          <div className="bg-[#0F2C1D] p-2 rounded-xl shadow-lg shadow-green-900/20">
-            <img src={APP_CONFIG.brand.logo} alt="Logo" className="w-6 h-6 brightness-0 invert" />
+          <div className="bg-[#0F2C1D] p-2 rounded-xl shadow-lg shadow-green-900/20 overflow-hidden flex items-center justify-center min-w-[2.5rem] min-h-[2.5rem]">
+            {logo ? (
+              <img src={logo} alt="" className="w-6 h-6 object-cover rounded-md" />
+            ) : (
+              <img src={APP_CONFIG.brand.logo} alt="" className="w-6 h-6 brightness-0 invert" />
+            )}
           </div>
           <div className="flex flex-col">
             <span className="font-black text-lg tracking-tight text-gray-900 leading-none">
-              {APP_CONFIG.brand.name}
+              {storeName}
             </span>
             <span className="text-[10px] font-bold text-green-600 uppercase tracking-widest mt-1">
               Admin Portal

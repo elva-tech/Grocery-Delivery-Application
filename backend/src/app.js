@@ -9,12 +9,24 @@ const webhookRoutes = require("./routes/webhook.routes");
 
 const app = express();
 
-// Middlewares
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'x-platform'],
-}));
+// Middlewares — reflect Origin so browsers get a concrete ACAO value (preflight + custom headers)
+app.use(
+  cors({
+    origin: true,
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-tenant-id",
+      "x-platform",
+      "Accept",
+      "Accept-Language",
+      "X-Requested-With",
+    ],
+    optionsSuccessStatus: 204,
+    maxAge: 86400,
+  })
+);
 
 // Webhook routes registered BEFORE express.json() to preserve raw body for signature verification
 app.use("/api/webhooks", webhookRoutes);

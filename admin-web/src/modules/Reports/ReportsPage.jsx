@@ -6,8 +6,10 @@ import CustomButton from '../../components/shared/CustomButton';
 import { TrendingUp, ShoppingBag, FileText, Search, X, Download } from 'lucide-react';
 import Pagination from '../../components/shared/Pagination';
 import usePagination from '../../hooks/usePagination';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 const ReportsPage = () => {
+  const { storeName } = useTenantBranding();
   const { orders } = useAppState();
 
   const [activeTab, setActiveTab] = useState('REVENUE');
@@ -87,7 +89,9 @@ useEffect(() => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `FreshRoot_${activeTab}_Report.csv`;
+    const slug =
+      storeName.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/gi, '') || 'Store';
+    a.download = `${slug}_${activeTab}_Report.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };

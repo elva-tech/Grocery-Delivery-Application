@@ -75,7 +75,7 @@ const BannerManagement = () => {
     setUploading(true);
 
     try {
-      const uploadResponse = await apiService.uploadFile(file);
+      const uploadResponse = await apiService.uploadFile(file, "banners");
       const imageUrl = uploadResponse?.url || uploadResponse?.data?.url;
 
       if (!imageUrl) {
@@ -84,7 +84,11 @@ const BannerManagement = () => {
 
       await apiService.createBanner({
         title: title.trim(),
-        imageUrl
+        imageUrl,
+        imagePublicId:
+          typeof uploadResponse?.public_id === "string"
+            ? uploadResponse.public_id.trim()
+            : "",
       });
 
       setTitle("");

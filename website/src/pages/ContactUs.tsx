@@ -1,20 +1,30 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, MapPin, Phone, Mail, Store, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Mail, Store, Loader2, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { fetchTenantDetails, type TenantDetails } from '../api/tenantApi';
+import { useTenantBranding } from '../context/TenantBrandingContext';
 
 const ContactUs = () => {
   const navigate = useNavigate();
-  const [tenant, setTenant] = useState<TenantDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { loading, error, raw, storeName } = useTenantBranding();
+  const tenant = raw;
 
-  useEffect(() => {
-    fetchTenantDetails()
-      .then(setTenant)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const domainLine =
+    tenant?.customerDomain?.trim() ||
+    (tenant?.tenantId ? `${tenant.tenantId}.localhost` : '');
+
+  const supportHours = tenant?.supportHours?.trim();
+  const supportEmail = tenant?.supportEmail?.trim();
+  const supportPhone = tenant?.supportPhone?.trim()?.replace(/\D/g, '').slice(-10);
+  const generalPhone = tenant?.phoneNumber?.trim()?.replace(/\D/g, '').slice(-10);
+  const displayPhone = supportPhone || generalPhone;
+  const phoneIsSupport = Boolean(supportPhone);
+  const supportMail = supportEmail || tenant?.contactEmail?.trim();
+  const emailIsSupport = Boolean(supportEmail);
+
+  const hasAnyContact =
+    Boolean(displayPhone) ||
+    Boolean(supportMail) ||
+    Boolean(tenant?.storeAddress?.trim()) ||
+    Boolean(supportHours);
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-16 min-h-screen">
@@ -46,12 +56,11 @@ const ContactUs = () => {
 
       {tenant && !loading && (
         <div className="space-y-6">
-          {/* Store Identity */}
           <div className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 flex items-center gap-5">
             {tenant.logo ? (
               <img
                 src={tenant.logo}
-                alt={tenant.storeName}
+                alt={storeName}
                 className="w-16 h-16 rounded-2xl object-cover border border-slate-200 flex-shrink-0"
               />
             ) : (
@@ -61,45 +70,64 @@ const ContactUs = () => {
             )}
             <div>
               <p className="font-black text-xl text-slate-900 uppercase tracking-tight leading-none">
-                {tenant.storeName}
+                {tenant.storeName || storeName}
               </p>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">
-                {tenant.tenantId}.enandi.com
-              </p>
+              {domainLine && (
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">
+                  {domainLine}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Contact Details */}
           <div className="space-y-3">
-            {tenant.phoneNumber && (
+            {supportHours && (
+              <div className="flex items-start gap-4 bg-white border-2 border-slate-100 rounded-[2rem] p-5">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#4b6f9e] flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Support hours</p>
+                  <p className="font-bold text-slate-800 text-sm leading-relaxed mt-0.5 whitespace-pre-line">
+                    {supportHours}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {displayPhone && (
               <a
-                href={`tel:+91${tenant.phoneNumber}`}
+                href={`tel:+91${displayPhone}`}
                 className="flex items-center gap-4 bg-white border-2 border-slate-100 rounded-[2rem] p-5 hover:border-[#4b6f9e] transition-colors group"
               >
                 <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#4b6f9e] flex items-center justify-center flex-shrink-0">
                   <Phone size={18} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {phoneIsSupport ? 'Support phone' : 'Phone'}
+                  </p>
                   <p className="font-bold text-slate-800 text-sm group-hover:text-[#4b6f9e] transition-colors">
-                    +91 {tenant.phoneNumber}
+                    +91 {displayPhone}
                   </p>
                 </div>
               </a>
             )}
 
-            {tenant.contactEmail && (
+            {supportMail && (
               <a
-                href={`mailto:${tenant.contactEmail}`}
+                href={`mailto:${supportMail}`}
                 className="flex items-center gap-4 bg-white border-2 border-slate-100 rounded-[2rem] p-5 hover:border-[#4b6f9e] transition-colors group"
               >
                 <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#4b6f9e] flex items-center justify-center flex-shrink-0">
                   <Mail size={18} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {emailIsSupport ? 'Support email' : 'Email'}
+                  </p>
                   <p className="font-bold text-slate-800 text-sm group-hover:text-[#4b6f9e] transition-colors">
-                    {tenant.contactEmail}
+                    {supportMail}
                   </p>
                 </div>
               </a>
@@ -119,8 +147,7 @@ const ContactUs = () => {
               </div>
             )}
 
-            {/* Fallback if no contact details have been filled in yet */}
-            {!tenant.phoneNumber && !tenant.contactEmail && !tenant.storeAddress && (
+            {!hasAnyContact && (
               <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-[2rem] text-slate-400 font-bold text-xs uppercase tracking-widest">
                 Contact details not set up yet
               </div>

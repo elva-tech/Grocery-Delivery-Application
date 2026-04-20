@@ -3,46 +3,79 @@
  * @description Admin form to manage products with backend-ready description and image handling.
  */
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { X, Plus, ChevronDown } from 'lucide-react';
-import axios from 'axios';
 import { useAppState } from '../../context/AppStateContext';
 import { apiService } from '../../services/apiService';
 import resolveImageUrl from '../../utils/resolveImageUrl';
 
-// VALIDATION SCHEMA
-const ProductSchema = Yup.object().shape({
-  name: Yup.string().required('Required'),
-  description: Yup.string().required('Required'),
-  price: Yup.number().min(1, 'Price must be positive').required('Required'),
-  stock: Yup.number().min(0, 'No negative stock').required('Required'),
-  parentCategoryId: Yup.string().required('Required'),
-  subCategoryId: Yup.string(),
-  unitValue: Yup.number().typeError('Required').min(0.01, 'Must be > 0').required('Required'),
-  unitType: Yup.string().required('Select a unit type'),
-  threshold: Yup.number().typeError('Must be a number').min(0, 'Must be ≥ 0').nullable()
-});
+/** Keep { url, public_id }[] for Cloudinary deletes while editing. */
+function normalizeImagesForForm(imageValue) {
+  if (!Array.isArray(imageValue)) {
+    const one = resolveImageUrl({ image: imageValue });
+    return one ? [{ url: one, public_id: '' }] : [];
+  }
+  return imageValue
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        const url = entry.trim();
+        return url ? { url, public_id: '' } : null;
+      }
+      if (entry && typeof entry === 'object' && typeof entry.url === 'string') {
+        const url = entry.url.trim();
+        if (!url) return null;
+        const public_id =
+          typeof entry.public_id === 'string' ? entry.public_id.trim() : '';
+        return { url, public_id };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
 
-const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
-  const normalizeImageList = (imageValue) => {
-    if (Array.isArray(imageValue)) {
-      return imageValue
-        .filter((entry) => typeof entry === 'string')
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-    }
+function previewUrlsFromImageField(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((e) => {
+      if (typeof e === 'string') return e.trim();
+      if (e && typeof e === 'object' && typeof e.url === 'string') return e.url.trim();
+      return '';
+    })
+    .filter(Boolean);
+}
 
-    const resolved = resolveImageUrl({ image: imageValue });
-    return resolved ? [resolved] : [];
-  };
+function buildProductSchema(noMainCategories) {
+  return Yup.object().shape({
+    name: Yup.string().required('Required'),
+    description: Yup.string().required('Required'),
+    price: Yup.number().min(1, 'Price must be positive').required('Required'),
+    stock: Yup.number().min(0, 'No negative stock').required('Required'),
+    parentCategoryId: noMainCategories
+      ? Yup.string().nullable()
+      : Yup.string().required('Required'),
+    subCategoryId: Yup.string().nullable(),
+    freeCategoryName: noMainCategories
+      ? Yup.string().trim().min(1, 'Enter a main category name').required('Required')
+      : Yup.string().nullable(),
+    freeSubcategoryName: Yup.string().nullable(),
+    unitValue: Yup.number().typeError('Required').min(0.01, 'Must be > 0').required('Required'),
+    unitType: Yup.string().required('Select a unit type'),
+    threshold: Yup.number().typeError('Must be a number').min(0, 'Must be ≥ 0').nullable(),
+  });
+}
 
-
+const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted }) => {
   const fileInputRef = useRef(null);
   const { categories } = useAppState();
 
   const mainCategories = categories.filter(c => !c.parentId);
+  const noMainCategories = mainCategories.length === 0;
+  const productSchema = useMemo(
+    () => buildProductSchema(noMainCategories),
+    [noMainCategories]
+  );
 
   // Dynamic unit system
   const [units, setUnits] = useState([]);
@@ -55,11 +88,26 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
   const [addUnitError, setAddUnitError] = useState('');
 
   const [showErrors, setShowErrors] = useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  /** null = idle; distinguishes upload vs remove status text */
+  const [imageBusy, setImageBusy] = useState(null);
   const [imageUploadError, setImageUploadError] = useState('');
-  const [imagePreviews, setImagePreviews] = useState(
-    normalizeImageList(initialValues?.image ?? initialValues?.images)
+  const [imageUploadSuccess, setImageUploadSuccess] = useState('');
+  const [imagePreviews, setImagePreviews] = useState(() =>
+    previewUrlsFromImageField(
+      normalizeImagesForForm(initialValues?.images ?? initialValues?.image ?? [])
+    )
   );
+
+  const editingKey =
+    initialValues?.productId || initialValues?._id || initialValues?.id || '';
+
+  useEffect(() => {
+    setImagePreviews(
+      previewUrlsFromImageField(
+        normalizeImagesForForm(initialValues?.images ?? initialValues?.image ?? [])
+      )
+    );
+  }, [editingKey]);
 
   useEffect(() => {
     apiService.getUnits()
@@ -136,12 +184,16 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
           unitType: initialValues?.unitType ?? parsedUnit.unitType,
           parentCategoryId:
             initialValues?.parentCategoryId ||
-            (mainCategories[0]?.id || ''),
+            (noMainCategories ? '' : mainCategories[0]?.id || ''),
           subCategoryId: initialValues?.subCategoryId || '',
-          image: normalizeImageList(initialValues?.image ?? initialValues?.images)
+          freeCategoryName: '',
+          freeSubcategoryName: '',
+          image: normalizeImagesForForm(
+            initialValues?.images ?? initialValues?.image ?? []
+          ),
         }}
 
-        validationSchema={ProductSchema}
+        validationSchema={productSchema}
 
 
         // {MISSING FIELD LOGIC}
@@ -155,6 +207,8 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
     price: true,
     stock: true,
     parentCategoryId: true,
+    freeCategoryName: true,
+    freeSubcategoryName: true,
     unitValue: true,
     unitType: true,
   });
@@ -223,18 +277,47 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
 
                           <button
                             type="button"
-                            onClick={() => {
-                              setFieldValue(
-                                'image',
-                                values.image.filter(
-                                  (_, idx) => idx !== i
-                                )
+                            disabled={!!imageBusy}
+                            onClick={async () => {
+                              const nextImages = values.image.filter(
+                                (_, idx) => idx !== i
                               );
-                              setImagePreviews(
-                                imagePreviews.filter((_, idx) => idx !== i)
-                              );
+                              const removed =
+                                Array.isArray(values.image) && i < values.image.length
+                                  ? values.image[i]
+                                  : null;
+                              const publicId =
+                                removed &&
+                                typeof removed === 'object' &&
+                                typeof removed.public_id === 'string'
+                                  ? removed.public_id.trim()
+                                  : '';
+                              if (editingKey && publicId) {
+                                setImageBusy('removing');
+                                setImageUploadError('');
+                                try {
+                                  await apiService.deleteProductImage(
+                                    String(editingKey),
+                                    publicId
+                                  );
+                                  onImagesPersisted?.();
+                                  setImageUploadSuccess('Image removed from storage.');
+                                  window.setTimeout(() => setImageUploadSuccess(''), 3000);
+                                } catch (err) {
+                                  const msg =
+                                    (err && err.response && err.response.data && err.response.data.message) ||
+                                    (typeof err?.message === 'string' && err.message) ||
+                                    'Could not delete image.';
+                                  setImageUploadError(msg);
+                                  setImageBusy(null);
+                                  return;
+                                }
+                                setImageBusy(null);
+                              }
+                              setFieldValue('image', nextImages);
+                              setImagePreviews(previewUrlsFromImageField(nextImages));
                             }}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 disabled:opacity-40 disabled:pointer-events-none"
                           >
 
                             <X size={10} />
@@ -250,7 +333,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                         onClick={() =>
                           fileInputRef.current.click()
                         }
-                        disabled={isUploadingImage}
+                        disabled={!!imageBusy}
                         className="aspect-square border-2 border-dashed border-emerald-200 rounded-lg flex items-center justify-center bg-emerald-50/30 text-emerald-600"
                       >
 
@@ -268,52 +351,87 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
                           if (!files.length) return;
 
                           setImageUploadError('');
-                          setIsUploadingImage(true);
+                          setImageUploadSuccess('');
+                          setImageBusy('uploading');
 
                           const localPreviews = files.map((file) => URL.createObjectURL(file));
                           setImagePreviews((prev) => [...prev, ...localPreviews]);
 
                           try {
-                            const baseURL = import.meta.env.VITE_API_URL || 'https://grocery-delivery-application-6n3w.onrender.com';
-                            const token = localStorage.getItem('jwtToken');
-                            const uploadedUrls = await Promise.all(
-                              files.map(async (file) => {
-                                const formData = new FormData();
-                                formData.append('file', file);
+                            const isMongoProductId =
+                              editingKey &&
+                              String(editingKey).match(/^[a-f\d]{24}$/i);
 
-                                const response = await axios.post(`${baseURL}/api/upload`, formData, {
-                                  headers: {
-                                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                                    'Content-Type': 'multipart/form-data',
-                                  },
-                                });
+                            let merged;
+                            if (isMongoProductId) {
+                              const data = await apiService.appendProductImages(
+                                String(editingKey),
+                                files
+                              );
+                              merged = normalizeImagesForForm(
+                                data?.product?.images ?? []
+                              );
+                              onImagesPersisted?.();
+                            } else {
+                              const uploaded = await Promise.all(
+                                files.map(async (file) => {
+                                  const data = await apiService.uploadFile(
+                                    file,
+                                    'products',
+                                    {}
+                                  );
+                                  if (!data?.url) return null;
+                                  return {
+                                    url: data.url,
+                                    public_id:
+                                      typeof data.public_id === 'string'
+                                        ? data.public_id
+                                        : '',
+                                  };
+                                })
+                              );
+                              const newImages = uploaded.filter(Boolean);
+                              merged = [...values.image, ...newImages];
+                            }
 
-                                return response?.data?.url;
-                              })
+                            setFieldValue('image', merged);
+
+                            localPreviews.forEach((url) => URL.revokeObjectURL(url));
+                            setImagePreviews(previewUrlsFromImageField(merged));
+
+                            const n = files.length;
+                            setImageUploadSuccess(
+                              n > 1
+                                ? `${n} images uploaded successfully.`
+                                : 'Image uploaded successfully.'
                             );
-
-                            setFieldValue(
-                              'image',
-                              [...values.image, ...uploadedUrls.filter(Boolean)]
-                            );
+                            window.setTimeout(() => setImageUploadSuccess(''), 4000);
                           } catch (err) {
                             localPreviews.forEach((url) => URL.revokeObjectURL(url));
                             setImagePreviews((prev) =>
                               prev.slice(0, prev.length - localPreviews.length)
                             );
                             setImageUploadError(
-                              err?.response?.data?.message || 'Image upload failed. Please try again.'
+                              (typeof err?.response?.data?.message === 'string' && err.response.data.message)
+                              || (err && typeof err === 'object' && typeof err.message === 'string' && err.message)
+                              || 'Image upload failed. Please try again.'
                             );
                           } finally {
-                            setIsUploadingImage(false);
+                            setImageBusy(null);
                             e.target.value = '';
                           }
                         }}
                       />
 
                     </div>
-                    {isUploadingImage && (
+                    {imageBusy === 'uploading' && (
                       <p className="text-[11px] text-emerald-600">Uploading image...</p>
+                    )}
+                    {imageBusy === 'removing' && (
+                      <p className="text-[11px] text-amber-700">Removing image...</p>
+                    )}
+                    {imageUploadSuccess && (
+                      <p className="text-[11px] text-emerald-700 font-semibold">{imageUploadSuccess}</p>
                     )}
                     {imageUploadError && (
                       <p className="text-[11px] text-red-500">{imageUploadError}</p>
@@ -327,59 +445,70 @@ const ProductForm = ({ initialValues, onSubmit, onCancel }) => {
 
                     <div className="grid grid-cols-2 gap-2">
 
-                      <div>
-
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">
-                          Main Category
-                        </label>
-
-                        <Field
-                          as="select"
-                          name="parentCategoryId"
-                          className="w-full border p-3 rounded-xl bg-white mt-1"
-                        >
-
-                          {mainCategories.map(c => (
-                            <option
-                              key={c.id}
-                              value={c.id}
+                      {noMainCategories ? (
+                        <>
+                          <div className="col-span-2 rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900">
+                            No categories yet (they are created from your products). Type a category below, or close this form and use <span className="font-bold">New Category</span> first.
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">
+                              Main category (new)
+                            </label>
+                            <Field
+                              name="freeCategoryName"
+                              placeholder="e.g. Apparel"
+                              className="w-full border p-3 rounded-xl bg-white mt-1"
+                            />
+                            <ErrorMessage name="freeCategoryName" component="p" className="text-red-500 text-[11px] mt-1" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">
+                              Sub category (optional)
+                            </label>
+                            <Field
+                              name="freeSubcategoryName"
+                              placeholder="e.g. T-Shirts"
+                              className="w-full border p-3 rounded-xl bg-white mt-1"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">
+                              Main Category
+                            </label>
+                            <Field
+                              as="select"
+                              name="parentCategoryId"
+                              className="w-full border p-3 rounded-xl bg-white mt-1"
                             >
-                              {c.name}
-                            </option>
-                          ))}
-
-                        </Field>
-
-                      </div>
-
-                      <div>
-
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">
-                          Sub Category
-                        </label>
-
-                        <Field
-                          as="select"
-                          name="subCategoryId"
-                          className="w-full border p-3 rounded-xl bg-white mt-1"
-                        >
-
-                          <option value="">
-                            Select Sub
-                          </option>
-
-                          {subCats.map(c => (
-                            <option
-                              key={c.id}
-                              value={c.id}
+                              {mainCategories.map(c => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </Field>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">
+                              Sub Category
+                            </label>
+                            <Field
+                              as="select"
+                              name="subCategoryId"
+                              className="w-full border p-3 rounded-xl bg-white mt-1"
                             >
-                              {c.name}
-                            </option>
-                          ))}
-
-                        </Field>
-
-                      </div>
+                              <option value="">Select Sub</option>
+                              {subCats.map(c => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </Field>
+                          </div>
+                        </>
+                      )}
 
                     </div>
 

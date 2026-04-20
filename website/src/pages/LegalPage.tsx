@@ -1,26 +1,27 @@
 import { useLocation } from 'react-router-dom';
 import { APP_CONFIG } from '../api/mockdata';
+import { useTenantBranding } from '../context/TenantBrandingContext';
 
-const CONTENT = (brand: string) => ({
+const CONTENT = (brand: string, supportEmail: string, supportPhone: string, address: string) => ({
   '/about': {
     title: `About ${brand}.`,
-    text: `At ${brand}, we are committed to redefining the way you consume daily essentials. Our platform was built to ensure that purity and quality are never compromised. We act as a bridge between high-quality producers and health-conscious consumers.
+    text: `At ${brand}, we are committed to a smooth shopping experience from browse to delivery. Our platform connects you with curated products and reliable fulfillment.
 
-Our mission is to foster a "Pure Culture" where every product delivered to your doorstep is handled with the utmost care, maintaining its natural nutritional profile. We leverage technology to simplify your daily logistics, providing a seamless experience from farm to table.
+We focus on transparency, clear communication, and careful handling of every order. Technology helps us keep inventory, checkout, and tracking simple so you can shop with confidence.
 
-Whether it is dairy, poultry, or organic pantry staples, ${brand} stands for transparency, sustainability, and uncompromising quality. We believe that better health starts with better ingredients.`
+${brand} stands for fair practices, responsive support, and continuous improvement for our customers and partners.`
   },
   '/contact': {
     title: 'Get in Touch.',
     text: `We are here to assist you with any queries regarding your orders, subscriptions, or feedback.
 
 Customer Support:
-Email: ${APP_CONFIG.supportEmail}
-Phone: ${APP_CONFIG.contactNumber}
+Email: ${supportEmail}
+Phone: ${supportPhone}
 
 Corporate Office:
-${brand} Marketplace Technologies
-${APP_CONFIG.address}
+${brand}
+${address}
 
 Our support team is available during standard business hours to ensure your experience remains smooth and hassle-free.`
   },
@@ -71,8 +72,14 @@ You can set up recurring orders for your daily essentials. You have full control
 
 const LegalPage = () => {
   const { pathname } = useLocation();
-  const brand = APP_CONFIG.brandName;
-  const page = CONTENT(brand)[pathname as keyof ReturnType<typeof CONTENT>] || CONTENT(brand)['/about'];
+  const { storeName, tagline, raw } = useTenantBranding();
+  const brand = storeName;
+  const supportEmail = raw?.contactEmail?.trim() || APP_CONFIG.supportEmail;
+  const supportPhone = raw?.phoneNumber?.trim() || APP_CONFIG.contactNumber;
+  const address = raw?.storeAddress?.trim() || APP_CONFIG.address;
+  const page =
+    CONTENT(brand, supportEmail, supportPhone, address)[pathname as keyof ReturnType<typeof CONTENT>] ||
+    CONTENT(brand, supportEmail, supportPhone, address)['/about'];
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-20 min-h-screen">
@@ -86,7 +93,9 @@ const LegalPage = () => {
       </div>
       <div className="mt-12 flex gap-4">
         <div className="h-1 w-20 bg-[#4b6f9e] rounded-full" />
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{brand} Pure Culture © 2026</p>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          {brand} · {tagline} © {new Date().getFullYear()}
+        </p>
       </div>
     </div>
   );

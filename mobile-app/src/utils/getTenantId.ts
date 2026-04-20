@@ -1,20 +1,18 @@
 /**
- * Resolves the current tenantId for mobile.
+ * Resolves the current tenantId for mobile (pre-auth API headers).
  *
- * Resolution order:
- *   1. EXPO_PUBLIC_TENANT_ID   — set per build in eas.json or .env
- *   2. 'demo-tenant'           — local dev fallback
- *
- * For authenticated requests the backend extracts tenantId from the JWT;
- * this value is only needed for pre-auth requests (products, banners, settings).
- *
- * To configure per build, add to eas.json build profile:
- *   "env": { "EXPO_PUBLIC_TENANT_ID": "freshmart" }
+ * Set EXPO_PUBLIC_TENANT_ID per store (see eas.json).
+ * Optional: EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID when TENANT_ID is unset in dev.
  */
 export function getTenantId(): string {
-  const envTenant = process.env.EXPO_PUBLIC_TENANT_ID;
-  if (envTenant) {
-    return envTenant;
-  }
-  return 'demo-tenant';
+  const envTenant = process.env.EXPO_PUBLIC_TENANT_ID?.trim();
+  if (envTenant) return envTenant;
+
+  const localDefault = process.env.EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID?.trim();
+  if (localDefault) return localDefault;
+
+  console.warn(
+    "[tenant] Set EXPO_PUBLIC_TENANT_ID (or EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID) so catalog and login target the same store."
+  );
+  return "demo-tenant";
 }

@@ -8,6 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import ReportIssueModal from './ReportIssueModal';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
 import { resolveImageUrl } from '../utils/resolveImageUrl';
+import { useToast } from '../context/ToastContext';
 
 const STATUS_THEME: any = {
   PLACED: { color: 'text-slate-500', bg: 'bg-slate-50', label: 'Order Placed' },
@@ -24,6 +25,7 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
+  const { showToast } = useToast();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   
   // NEW: Fetch remote features
@@ -77,8 +79,7 @@ const loadOrders = async () => {
   } catch (error) {
     console.error("Failed to load orders:", error);
 
-    // ✅ SHOW USER ERROR
-    alert("Failed to load orders. Please try again.");
+    showToast('error', 'Failed to load orders. Please try again.');
 
     setOrders([]); // safe fallback
   } finally {
@@ -108,11 +109,11 @@ const loadOrders = async () => {
   const res = await cancelOrderApi(selectedOrder.id);
 
   if (!res.success) {
-    alert(res.message || "Cancel failed");
+    showToast('error', res.message || 'Cancel failed');
     return;
   }
 
-  alert("Order cancelled successfully");
+  showToast('success', 'Order cancelled successfully');
 
   await loadOrders();        // ✅ reload
   setIsCancelModalOpen(false); // ✅ close modal

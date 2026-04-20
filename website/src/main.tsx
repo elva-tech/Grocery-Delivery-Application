@@ -5,6 +5,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { store } from './store/store' 
 import App from './App'
 import './index.css'
+import { TenantBrandingProvider } from './context/TenantBrandingContext'
+import { ToastProvider } from './context/ToastContext'
 
 const rootElement = document.getElementById('root');
 
@@ -14,7 +16,11 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <Provider store={store}>
       <BrowserRouter>
-        <App />
+        <TenantBrandingProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </TenantBrandingProvider>
       </BrowserRouter>
     </Provider>
   </React.StrictMode>,

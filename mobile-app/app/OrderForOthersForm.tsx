@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { showToast } from '@/utils/toast'; 
+import { showToast } from '@/utils/toast';
+import {
+  isValidIndianPincode,
+  lookupIndianPincode,
+  sanitizeIndianPincode,
+} from '@/utils/indiaPincode';
 
 export type OthersData = {
   recipientName: string;
   recipientPhone: string;
-  fullAddress: string;
+  line1: string;
+  line2: string;
   landmark: string;
+  city: string;
+  state: string;
+  pincode: string;
   note: string;
 };
 
@@ -23,8 +32,12 @@ interface Props {
 const EMPTY_FORM: OthersData = {
   recipientName: '',
   recipientPhone: '',
-  fullAddress: '',
+  line1: '',
+  line2: '',
   landmark: '',
+  city: '',
+  state: '',
+  pincode: '',
   note: '',
 };
 
@@ -32,7 +45,6 @@ export default function OrderForOthersForm({ onSubmit, onCancel, initialData }: 
   const [form, setForm] = useState<OthersData>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync with initialData if editing
   useEffect(() => {
     if (initialData) {
       setForm(initialData);
@@ -41,34 +53,52 @@ export default function OrderForOthersForm({ onSubmit, onCancel, initialData }: 
     }
   }, [initialData]);
 
-  const handleDone = () => {
-    // ─── VALIDATION ───
+  const handleDone = async () => {
     if (!form.recipientName.trim()) {
       showToast('error', 'Missing Name', "Please enter the recipient's name");
       return;
     }
     if (form.recipientPhone.length < 10) {
-      showToast('error', 'Invalid Phone', "Please enter a valid 10-digit phone number");
+      showToast('error', 'Invalid Phone', 'Please enter a valid 10-digit phone number');
       return;
     }
-    if (!form.fullAddress.trim() || form.fullAddress.length < 5) {
-      showToast('error', 'Invalid Address', "Please provide a more detailed address");
+    if (!form.line1.trim()) {
+      showToast('error', 'Address', 'Address line 1 is required');
+      return;
+    }
+    if (!form.landmark.trim()) {
+      showToast('error', 'Landmark', 'Landmark is required');
+      return;
+    }
+    const p = sanitizeIndianPincode(form.pincode);
+    if (!isValidIndianPincode(p)) {
+      showToast('error', 'PIN', 'Enter a valid 6-digit Indian PIN code');
       return;
     }
 
     setIsSubmitting(true);
-    
-    // Small timeout to give user feedback that something happened
-    setTimeout(() => {
-      onSubmit(form);
+    const lookup = await lookupIndianPincode(p);
+    if (!lookup.ok) {
+      showToast('error', 'PIN', 'PIN code not found');
       setIsSubmitting(false);
-    }, 400);
+      return;
+    }
+
+    const merged: OthersData = {
+      ...form,
+      pincode: lookup.pincode,
+      city: lookup.city,
+      state: lookup.state,
+    };
+
+    onSubmit(merged);
+    setIsSubmitting(false);
   };
 
   return (
     <View style={styles.overlay}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalContainer}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
@@ -77,17 +107,17 @@ export default function OrderForOthersForm({ onSubmit, onCancel, initialData }: 
             <Text style={styles.title}>Recipient Details</Text>
             <Text style={styles.subtitle}>Where should we deliver the order?</Text>
           </View>
-          <TouchableOpacity 
-            onPress={onCancel} 
-            hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}
+          <TouchableOpacity
+            onPress={onCancel}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             style={styles.closeBtn}
           >
             <Ionicons name="close" size={22} color="#64748b" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           style={styles.form}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 40 }}
@@ -95,60 +125,92 @@ export default function OrderForOthersForm({ onSubmit, onCancel, initialData }: 
           <Text style={styles.sectionLabel}>Contact Information</Text>
           <View style={styles.inputGroup}>
             <Ionicons name="person-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
-            <TextInput 
-              placeholder="Recipient's Name *" 
+            <TextInput
+              placeholder="Recipient's Name *"
               placeholderTextColor="#94a3b8"
-              style={styles.input} 
+              style={styles.input}
               value={form.recipientName}
-              onChangeText={(t) => setForm(prev => ({...prev, recipientName: t}))}
+              onChangeText={(t) => setForm(prev => ({ ...prev, recipientName: t }))}
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Ionicons name="call-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
-            <TextInput 
-              placeholder="Recipient's Phone *" 
+            <TextInput
+              placeholder="Recipient's Phone *"
               placeholderTextColor="#94a3b8"
-              style={styles.input} 
+              style={styles.input}
               keyboardType="phone-pad"
               maxLength={10}
               value={form.recipientPhone}
-              onChangeText={(t) => setForm(prev => ({...prev, recipientPhone: t.replace(/\D/g, '')}))}
+              onChangeText={(t) => setForm(prev => ({ ...prev, recipientPhone: t.replace(/\D/g, '') }))}
             />
           </View>
 
           <Text style={styles.sectionLabel}>Delivery Location</Text>
           <View style={[styles.inputGroup, { alignItems: 'flex-start', paddingTop: 12 }]}>
             <Ionicons name="location-outline" size={18} color="#94a3b8" style={[styles.inputIcon, { marginTop: 2 }]} />
-            <TextInput 
-              placeholder="Complete Address (Flat No, Building, Street) *" 
+            <TextInput
+              placeholder="Address line 1 *"
               placeholderTextColor="#94a3b8"
-              style={[styles.input, styles.textArea]} 
+              style={[styles.input, styles.textArea]}
               multiline
               numberOfLines={3}
-              value={form.fullAddress}
-              onChangeText={(t) => setForm(prev => ({...prev, fullAddress: t}))}
+              value={form.line1}
+              onChangeText={(t) => setForm(prev => ({ ...prev, line1: t }))}
             />
           </View>
 
-          <TextInput 
-            placeholder="Landmark (Optional)" 
+          <TextInput
+            placeholder="Address line 2 (optional)"
             placeholderTextColor="#94a3b8"
-            style={styles.inputStandalone} 
+            style={styles.inputStandalone}
+            value={form.line2}
+            onChangeText={(t) => setForm(prev => ({ ...prev, line2: t }))}
+          />
+
+          <TextInput
+            placeholder="Landmark *"
+            placeholderTextColor="#94a3b8"
+            style={styles.inputStandalone}
             value={form.landmark}
-            onChangeText={(t) => setForm(prev => ({...prev, landmark: t}))}
+            onChangeText={(t) => setForm(prev => ({ ...prev, landmark: t }))}
           />
 
-          <TextInput 
-            placeholder="Delivery Instructions (e.g. Leave at gate)" 
+          <TextInput
+            placeholder="City (from PIN)"
             placeholderTextColor="#94a3b8"
-            style={styles.inputStandalone} 
-            value={form.note}
-            onChangeText={(t) => setForm(prev => ({...prev, note: t}))}
+            style={[styles.inputStandalone, { backgroundColor: '#f1f5f9' }]}
+            value={form.city}
+            editable={false}
+          />
+          <TextInput
+            placeholder="State (from PIN)"
+            placeholderTextColor="#94a3b8"
+            style={[styles.inputStandalone, { backgroundColor: '#f1f5f9' }]}
+            value={form.state}
+            editable={false}
+          />
+          <TextInput
+            placeholder="PIN code *"
+            placeholderTextColor="#94a3b8"
+            style={styles.inputStandalone}
+            value={form.pincode}
+            onChangeText={(t) => setForm(prev => ({ ...prev, pincode: t.replace(/\D/g, '').slice(0, 6) }))}
+            keyboardType="number-pad"
+            maxLength={6}
           />
 
-          <TouchableOpacity 
-            style={[styles.submitBtn, isSubmitting && { opacity: 0.8 }]} 
+          <TextInput
+            placeholder="Delivery Instructions (e.g. Leave at gate)"
+            placeholderTextColor="#94a3b8"
+            style={styles.inputStandalone}
+            value={form.note}
+            onChangeText={(t) => setForm(prev => ({ ...prev, note: t }))}
+          />
+
+          <TouchableOpacity
+            style={[styles.submitBtn, isSubmitting && { opacity: 0.8 }]}
             onPress={handleDone}
             disabled={isSubmitting}
           >
@@ -167,13 +229,13 @@ export default function OrderForOthersForm({ onSubmit, onCancel, initialData }: 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%' },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 24, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#f1f5f9' 
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
   title: { fontSize: 20, fontWeight: '800', color: '#1e293b' },
   subtitle: { fontSize: 13, color: '#64748b', marginTop: 2 },
@@ -192,28 +254,28 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginRight: 12 },
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#1e293b' },
-  inputStandalone: { 
-    backgroundColor: '#f8fafc', 
-    borderWidth: 1, 
-    borderColor: '#e2e8f0', 
-    borderRadius: 14, 
-    padding: 16, 
-    marginBottom: 16, 
-    fontSize: 15, 
-    color: '#1e293b' 
+  inputStandalone: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    fontSize: 15,
+    color: '#1e293b',
   },
   textArea: { height: 80, textAlignVertical: 'top' },
-  submitBtn: { 
-    backgroundColor: '#4b6f9e', 
-    padding: 18, 
-    borderRadius: 16, 
-    alignItems: 'center', 
+  submitBtn: {
+    backgroundColor: '#4b6f9e',
+    padding: 18,
+    borderRadius: 16,
+    alignItems: 'center',
     marginTop: 10,
     shadowColor: '#4b6f9e',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
     shadowRadius: 15,
-    elevation: 8 
+    elevation: 8,
   },
   submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

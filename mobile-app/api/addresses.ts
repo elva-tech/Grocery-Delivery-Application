@@ -5,7 +5,7 @@ const ADDRESSES_KEY = '@enandi_addresses';
 const COUNTRY_CODE = "+91"; // Backend controlled
 
 const makeKey = (address: any) =>
-  `${address.label?.trim()}|${address.full?.trim()}|${address.phone?.trim()}`;
+  `${address.label?.trim()}|${address.line1?.trim() || address.full?.trim()}|${address.pincode?.trim() || ''}|${address.phone?.trim()}`;
 
 export const getAddressFromCoords = async (lat: number, lng: number, signal?: AbortSignal) => {
   if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });

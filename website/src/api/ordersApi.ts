@@ -1,5 +1,5 @@
 import axios from "axios";
-import { API_BASE_URL, TENANT_ID } from "../config";
+import { API_BASE_URL, getTenantId } from "../config";
 
 const API_URL = `${API_BASE_URL}/api/orders`;
 const COUPONS_URL = `${API_BASE_URL}/api/coupons`;
@@ -16,7 +16,7 @@ export const getCartCalculation = async (items: any[]) => {
   const subtotal = items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
 
   const settingsRes = await axios.get(`${API_BASE_URL}/api/settings`, {
-    headers: { 'x-tenant-id': TENANT_ID },
+    headers: { 'x-tenant-id': getTenantId() },
   });
   const s = settingsRes.data;
 
@@ -92,7 +92,8 @@ export const getUserOrders = async () => {
 
     const res = await axios.get(`${API_URL}/my`, {
       headers: {
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
+        'x-tenant-id': getTenantId(),
       }
     });
 
@@ -129,7 +130,8 @@ export const cancelOrderApi = async (orderId: string) => {
       {},
       {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          'x-tenant-id': getTenantId(),
         }
       }
     );
@@ -180,7 +182,12 @@ export const validateCouponApi = async (code: string, cartTotal: number): Promis
   const res = await axios.post(
     `${COUPONS_URL}/validate`,
     { code: code.trim().toUpperCase(), cartTotal },
-    { headers: { Authorization: `Bearer ${token}` } }
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-tenant-id': getTenantId(),
+      },
+    }
   );
   return res.data;
 };
@@ -188,13 +195,25 @@ export const validateCouponApi = async (code: string, cartTotal: number): Promis
 export const placeOrderApi = async (payload: {
   items: { productId: string; qty: number }[];
   paymentMode: 'COD' | 'ONLINE';
-  deliveryAddress: { line1: string; lat: number; lng: number };
+  deliveryAddress: {
+    line1: string;
+    line2?: string;
+    landmark: string;
+    city: string;
+    state: string;
+    pincode: string;
+    lat: number;
+    lng: number;
+  };
   couponCode?: string | null;
 }) => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('Unauthorized');
   const res = await axios.post(API_URL, payload, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-tenant-id': getTenantId(),
+    },
   });
   return res.data; // { orderId, totalAmount, orderStatus, ... }
 };
@@ -210,7 +229,12 @@ export const reportOrderIssueApi = async (payload: {
   const res = await axios.post(
     `${API_URL}/report-issue`,
     payload,
-    { headers: { Authorization: `Bearer ${token}` } }
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-tenant-id': getTenantId(),
+      },
+    }
   );
   return res.data;
 };
@@ -221,7 +245,12 @@ export const rateOrderApi = async (orderId: string, rating: number, comment: str
   const res = await axios.post(
     `${API_URL}/${orderId}/rate`,
     { rating, comment },
-    { headers: { Authorization: `Bearer ${token}` } }
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-tenant-id': getTenantId(),
+      },
+    }
   );
   return res.data; // { success: true, message }
 };

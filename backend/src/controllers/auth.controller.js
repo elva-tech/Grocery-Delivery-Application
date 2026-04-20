@@ -116,6 +116,18 @@ const verifyOtp = async (req, res) => {
     let user = await User.findOne({ tenantId, phoneNumber: phone });
 
     if (!user) {
+      const forAdminLogin =
+        req.body?.forAdminLogin === true ||
+        String(req.headers["x-admin-login"] || "").trim() === "1";
+
+      if (forAdminLogin) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "No account for this phone in this store. Use the same 10-digit number you entered when the store was created (store admin phone), not a random demo number.",
+        });
+      }
+
       // First-time login for this phone on this tenant → auto-create CUSTOMER account
       if (!name || name.trim().length < 2) {
         return res.status(400).json({

@@ -22,4 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-admin-web/.env
+# Private env (use .env.development / .env.production for shared defaults)
+.env
+.env.local
+.env.development.local
+.env.production.local

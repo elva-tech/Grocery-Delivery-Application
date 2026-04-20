@@ -1,6 +1,8 @@
 import { Gift, Sparkles, ChevronRight } from 'lucide-react';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 export const FreeDeliveryToast = ({ show, onClick }: { show: boolean, onClick: () => void }) => {
+  const { storeName } = useTenantBranding();
   return (
     <div className={`
       fixed bottom-10 left-0 right-0 flex justify-center px-4 z-[999] pointer-events-none transition-all duration-500
@@ -28,7 +30,9 @@ export const FreeDeliveryToast = ({ show, onClick }: { show: boolean, onClick: (
         {/* Text Content - Brand Aligned */}
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-black text-[#4b6f9e] uppercase tracking-[0.2em]">Dairy Dash Reward</span>
+            <span className="text-[10px] font-black text-[#4b6f9e] uppercase tracking-[0.2em]">
+              {storeName} · Reward
+            </span>
             <Sparkles size={10} className="text-yellow-500 animate-pulse" />
           </div>
           <h3 className="text-[#1e293b] font-black text-sm tracking-tight">

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchTenants, updateTenantPlan, updateTenantStatus, fetchBillingOverview, markTenantInvoicePaid } from '../api/superApi';
-import CreateStoreModal from '../components/CreateStoreModal';
 import EditStoreModal from '../components/EditStoreModal';
 
 const PLANS    = ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'];
@@ -26,7 +25,6 @@ export default function Dashboard() {
   const [tenants, setTenants]         = useState([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState('');
-  const [showModal, setShowModal]         = useState(false);
   const [editingTenant, setEditingTenant] = useState(null);
   const [successMsg, setSuccessMsg]       = useState('');
 
@@ -159,7 +157,11 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { setShowModal(true); setSuccessMsg(''); }}
+            type="button"
+            onClick={() => {
+              setSuccessMsg('');
+              navigate('/create-store');
+            }}
             className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded transition-colors"
           >
             + Create Store
@@ -480,16 +482,6 @@ export default function Dashboard() {
           )}
         </div>
       </main>
-
-      {showModal && (
-        <CreateStoreModal
-          onClose={() => setShowModal(false)}
-          onCreated={() => {
-            setSuccessMsg('Store created successfully');
-            load();
-          }}
-        />
-      )}
 
       {editingTenant && (
         <EditStoreModal

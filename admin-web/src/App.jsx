@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AppStateProvider, useAppState } from './context/AppStateContext'; // Added useAppState
+import { AppStateProvider, useAppState } from './context/AppStateContext';
+import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import AdminLayout from './components/layout/AdminLayout';
 import Login from './modules/Auth/Login';
@@ -16,6 +17,7 @@ import CouponManagement from './modules/Coupons/CouponManagement';
 
 import PaymentPlan from './modules/Settings/PaymentPlan';
 import Schedule from './modules/Settings/Schedule';
+import StoreProfilePage from './modules/Settings/StoreProfilePage';
 
 // Create a helper component to handle the conditional logic inside the Router
 const AppRoutes = () => {
@@ -41,6 +43,7 @@ const AppRoutes = () => {
         <Route path="/banners" element={<BannerManagement />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/coupons" element={<CouponManagement />} />
+        <Route path="store-profile" element={<StoreProfilePage />} />
       </Route>
       {/* Catch all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -61,11 +64,13 @@ const ReturnManagementWrapper = () => {
 
 function App() {
   return (
-    <AppStateProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AppStateProvider>
+    <ToastProvider>
+      <AppStateProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AppStateProvider>
+    </ToastProvider>
   );
 }
 
