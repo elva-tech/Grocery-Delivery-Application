@@ -3,6 +3,7 @@ const User     = require("../models/User.model");
 const Store    = require("../models/Store.model");
 const Settings = require("../models/Settings.model");
 const bcrypt   = require("bcryptjs");
+const QRCode   = require("qrcode");
 const { seedPlans, getOrCreateSubscription } = require("../services/billing.service");
 
 /* ─────────────────────────────────────────────
@@ -11,6 +12,23 @@ const { seedPlans, getOrCreateSubscription } = require("../services/billing.serv
 
 const BASE_DOMAIN      = "enandi.com";
 const TENANT_ID_REGEX  = /^[a-z0-9-]+$/;
+
+/* ─────────────────────────────────────────────
+   STORE CODE GENERATOR
+───────────────────────────────────────────── */
+
+/**
+ * Generates a unique 4-character uppercase alphanumeric storeCode.
+ * Retries up to 20 times before throwing.
+ */
+async function generateStoreCode() {
+  for (let i = 0; i < 20; i++) {
+    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const exists = await Tenant.exists({ storeCode: code });
+    if (!exists) return code;
+  }
+  throw new Error("Could not generate a unique storeCode after 20 attempts.");
+}
 
 /* ─────────────────────────────────────────────
    HELPERS
@@ -229,6 +247,36 @@ exports.updateTenantSupportContact = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to save support details" });
   }
 };
+/*____________________________________________
+   GET /api/tenant/by-code/:storeCode
+   Public — resolves a 4-char storeCode to tenantId + basic store info
+───────────────────────────────────────────── */
+exports.getTenantByCode = async (req, res) => {
+  const { storeCode } = req.params;
+  if (!storeCode) {
+    return res.status(400).json({ success: false, message: "storeCode is required" });
+  }
+
+  const tenant = await Tenant.findOne({
+    storeCode: storeCode.toUpperCase(),
+    isActive:  true,
+  })
+    .select("tenantId name logo storeCode deepLink")
+    .lean();
+
+  if (!tenant) {
+    return res.status(404).json({ success: false, message: "Invalid store code" });
+  }
+
+  return res.json({
+    success:   true,
+    tenantId:  tenant.tenantId,
+    storeName: tenant.name,
+    logo:      tenant.logo || "",
+    storeCode: tenant.storeCode,
+    deepLink:  tenant.deepLink || `enandi://${tenant.tenantId}`,
+  });
+};
 
 /* ─────────────────────────────────────────────
    GET /api/tenant/account-status
@@ -375,6 +423,11 @@ exports.createTenant = async (req, res) => {
     const customerDomain = `${tenantId}.${BASE_DOMAIN}`;
     const adminDomain    = `admin.${tenantId}.${BASE_DOMAIN}`;
 
+    // ── Generate storeCode, deepLink, QR ────────────────────────────────
+    const storeCode = await generateStoreCode();
+    const deepLink  = `enandi://${tenantId}`;
+    const qrCode    = await QRCode.toDataURL(deepLink);
+
     // ── 1. Create Tenant record ─────────────────────────────────────────
     await Tenant.create({
       tenantId,
@@ -397,6 +450,9 @@ exports.createTenant = async (req, res) => {
       supportEmail:   initialSupportEmail,
       supportPhone:   initialSupportPhone,
       supportHours:   initialSupportHours,
+      storeCode,
+      deepLink,
+      qrCode,
     });
 
     // ── 2. Create Admin User ────────────────────────────────────────────
@@ -430,6 +486,9 @@ exports.createTenant = async (req, res) => {
       customerDomain,
       adminDomain,
       adminUserId:    adminUser._id,
+      storeCode,
+      deepLink,
+      qrCode,
       message:        "Store created successfully",
     });
   } catch (err) {

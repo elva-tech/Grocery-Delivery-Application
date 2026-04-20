@@ -40,6 +40,9 @@ export default function Dashboard() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [markingPaid,   setMarkingPaid]   = useState({}); // tenantId → bool
 
+  // QR preview modal
+  const [qrPreview, setQrPreview] = useState(null); // tenant object or null
+
   const load = async () => {
     setLoading(true);
     setError('');
@@ -267,6 +270,8 @@ export default function Dashboard() {
                     <th className="px-4 py-3 text-left">Plan</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Created</th>
+                    <th className="px-4 py-3 text-left">Store Code</th>
+                    <th className="px-4 py-3 text-left">Deep Link / QR</th>
                     <th className="px-4 py-3 text-right">Sub. Revenue ({revenueDays === 0 ? 'All' : `${revenueDays}d`})</th>
                     <th className="px-4 py-3 text-right">Current Bill</th>
                     <th className="px-4 py-3 text-left">Payment</th>
@@ -308,6 +313,55 @@ export default function Dashboard() {
 
                       {/* Created date */}
                       <td className="px-4 py-3 text-gray-500 text-xs">{fmt(tenant.createdAt)}</td>
+
+                      {/* Store Code */}
+                      <td className="px-4 py-3">
+                        {tenant.storeCode ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-sm font-bold text-indigo-700 tracking-widest bg-indigo-50 px-2 py-0.5 rounded">
+                              {tenant.storeCode}
+                            </span>
+                            <button
+                              title="Copy store code"
+                              onClick={() => navigator.clipboard.writeText(tenant.storeCode)}
+                              className="text-gray-400 hover:text-indigo-600 transition-colors text-xs"
+                            >
+                              ⎘
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Deep Link + QR */}
+                      <td className="px-4 py-3">
+                        {tenant.deepLink ? (
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-gray-600 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 max-w-[140px] truncate" title={tenant.deepLink}>
+                              {tenant.deepLink}
+                            </span>
+                            <button
+                              title="Copy deep link"
+                              onClick={() => navigator.clipboard.writeText(tenant.deepLink)}
+                              className="text-gray-400 hover:text-indigo-600 transition-colors text-xs flex-shrink-0"
+                            >
+                              ⎘
+                            </button>
+                            {tenant.qrCode && (
+                              <button
+                                title="Preview QR code"
+                                onClick={() => setQrPreview(tenant)}
+                                className="text-gray-400 hover:text-indigo-600 transition-colors text-xs flex-shrink-0"
+                              >
+                                🔲
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
 
                       {/* Revenue */}
                       <td className="px-4 py-3 text-right text-gray-700 text-xs font-medium">
@@ -439,6 +493,48 @@ export default function Dashboard() {
             setEditingTenant(null);
           }}
         />
+      )}
+
+      {/* QR Code Preview Modal */}
+      {qrPreview && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setQrPreview(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-72 flex flex-col items-center gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold text-gray-800">{qrPreview.name}</h3>
+            <img
+              src={qrPreview.qrCode}
+              alt={`QR for ${qrPreview.name}`}
+              className="w-48 h-48"
+            />
+            <p className="font-mono text-xs text-gray-500 text-center break-all">{qrPreview.deepLink}</p>
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={() => navigator.clipboard.writeText(qrPreview.deepLink)}
+                className="flex-1 text-xs py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Copy Link
+              </button>
+              <a
+                href={qrPreview.qrCode}
+                download={`${qrPreview.tenantId}-qr.png`}
+                className="flex-1 text-xs py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-center"
+              >
+                Download QR
+              </a>
+            </div>
+            <button
+              onClick={() => setQrPreview(null)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -21,7 +21,8 @@ import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } fr
 import { addToCart } from '@/store/slices/cartSlice';
 import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
-import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
+import { API_BASE_URL } from '@/src/config/constants';
+import { getActiveTenantId } from '@/src/utils/tenantStorage';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 // Constants for UI consistency
@@ -127,13 +128,16 @@ export default function HomeScreen() {
   // Banners — fetched from backend
   const [banners, setBanners] = useState<any[]>([]);
   useEffect(() => {
-    fetch(`${API_BASE_URL.DEVELOPMENT}/api/banners`, { headers: { 'x-tenant-id': TENANT_ID } })
-      .then(r => r.json())
-      .then(json => {
-        const list = json.banners ?? json ?? [];
-        if (list.length) setBanners(list.map((b: any) => ({ id: b._id ?? b.id, imageUrl: b.imageUrl, image: b.image, title: b.title })));
-      })
-      .catch(() => {});
+    (async () => {
+      const tenantId = await getActiveTenantId();
+      fetch(`${API_BASE_URL.DEVELOPMENT}/api/banners`, { headers: { 'x-tenant-id': tenantId } })
+        .then(r => r.json())
+        .then(json => {
+          const list = json.banners ?? json ?? [];
+          if (list.length) setBanners(list.map((b: any) => ({ id: b._id ?? b.id, imageUrl: b.imageUrl, image: b.image, title: b.title })));
+        })
+        .catch(() => {});
+    })();
   }, []);
 
   // API Hooks

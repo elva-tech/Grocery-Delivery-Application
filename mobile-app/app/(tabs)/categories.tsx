@@ -58,11 +58,22 @@ useEffect(() => {
     }
   }, [activeParentId, subCategories]);
 
+  const activeParent = parentCategories.find(c => c.id === activeParentId);
+
   const { data: products = [], isLoading: prodLoading } =
-    useGetProductsByCategoryQuery(activeParentId || '', { skip: !activeParentId });
+    useGetProductsByCategoryQuery(activeParent?.name || '', { skip: !activeParent });
 
   const filteredProducts = useMemo(() => {
-    const base = products.filter(p => p.subCategoryId === activeSubCatId);
+    // const base = products.filter(p => p.subCategoryId === activeSubCatId);
+
+    // If a sub-category is selected, filter products by that sub-category
+    const activeSub = subCategories.find(c => c.id === activeSubCatId);
+
+const base = activeSub
+  ? products.filter(p =>
+      p.subcategory?.toLowerCase() === activeSub.name.toLowerCase()
+    )
+  : products;
     if (!searchQuery.trim()) return base;
     const q = searchQuery.toLowerCase();
     return base.filter(p => p.name?.toLowerCase().includes(q));

@@ -9,10 +9,29 @@ export default function Register() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [alternatePhone, setAlternatePhone] = useState("");
   const [loading, setLoading] = useState(false);
 
   const indiaRegex = /^[6-9]\d{9}$/;
-  const isValid = indiaRegex.test(phone) && name.length >= 2;
+  const isValid =indiaRegex.test(phone.trim()) &&
+  name.trim().length >= 2 &&
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
+  address.trim().length >= 5;
+  // console.log({
+  //   phone,
+  //   name,
+  //   email,
+  //   address,
+  //   isValid
+  // });
+  // console.log({
+  //   phoneValid: indiaRegex.test(phone.trim()),
+  //   nameValid: name.trim().length >= 2,
+  //   emailValid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()),
+  //   addressValid: address.trim().length >= 5,
+  // });
 
   const handleNext = async () => {
     console.log("CLICKED SEND OTP");
@@ -21,9 +40,17 @@ export default function Register() {
     setLoading(true);
     try {
       await sendOtp(phone as string); // ✅ FIXED
+      
       router.push({
         pathname: '/auth/otp',
-        params: { phone, name }
+        params: {
+          phone,
+          name,
+          email,
+          address,
+          alternatePhone,
+          mode: "signup"
+        }
       });
     } catch (error) {
       alert("Failed to send OTP. Try again.");
@@ -43,6 +70,7 @@ export default function Register() {
         <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Create Account</Text>
         <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>Enter your details to get started</Text>
 
+        {/* Name */}
         <View style={styles.inputWrapper}>
           <Text style={styles.inputLabel}>Full Name</Text>
           <TextInput
@@ -54,6 +82,7 @@ export default function Register() {
           />
         </View>
 
+        {/* Phone */}
         <View style={styles.inputWrapper}>
           <Text style={styles.inputLabel}>Mobile Number</Text>
           <View style={styles.inputRow}>
@@ -69,6 +98,44 @@ export default function Register() {
               onChangeText={(text) => setPhone(text.replace(/[^0-9]/g, ''))}
             />
           </View>
+        </View>
+
+        {/* Email */}
+        <View style={styles.inputWrapper}>
+          <Text style={styles.inputLabel}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="example@email.com"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            placeholderTextColor="#94a3b8"
+          />
+        </View>
+
+        {/* Address */}
+        <View style={styles.inputWrapper}>
+          <Text style={styles.inputLabel}>Address</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your address"
+            value={address}
+            onChangeText={setAddress}
+            placeholderTextColor="#94a3b8"
+          />
+        </View>
+
+        {/* Alternate Phone */}
+        <View style={styles.inputWrapper}>
+          <Text style={styles.inputLabel}>Alternate Phone (Optional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Optional"
+            keyboardType="number-pad"
+            maxLength={10}
+            value={alternatePhone}
+            onChangeText={(text) => setAlternatePhone(text.replace(/[^0-9]/g, ''))}
+          />
         </View>
 
         <TouchableOpacity

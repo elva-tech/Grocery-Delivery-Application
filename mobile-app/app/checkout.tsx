@@ -249,7 +249,7 @@ export default function CheckoutScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.paymentOption, paymentMethod === 'COD' && styles.paymentOptionSelected]}
+              style={[styles.paymentOption, paymentMethod === 'COD' && styles.paymentOptionSelectedCOD]}
               onPress={() => setPaymentMethod('COD')}
               activeOpacity={0.8}
             >
@@ -272,8 +272,20 @@ export default function CheckoutScreen() {
         </View>
       </ScrollView>
 
+      {/* Pay-on-delivery note */}
+      {paymentMethod === 'COD' && (
+        <View style={styles.codNote}>
+          <Ionicons name="cash-outline" size={13} color="#16a34a" />
+          <Text style={styles.codNoteText}>Pay on Delivery — no advance needed</Text>
+        </View>
+      )}
+
       <TouchableOpacity
-        style={[styles.placeOrderBtn, (items.length === 0 || isPlacing || isStoreClosed) && styles.btnDisabled]}
+        style={[
+          styles.placeOrderBtn,
+          paymentMethod === 'COD' && styles.placeOrderBtnCOD,
+          (items.length === 0 || isPlacing || isStoreClosed) && styles.btnDisabled,
+        ]}
         onPress={handlePlaceOrder}
         activeOpacity={0.85}
         disabled={items.length === 0 || isPlacing || isStoreClosed}
@@ -287,8 +299,8 @@ export default function CheckoutScreen() {
               : items.length === 0
               ? 'Your Basket is Empty'
               : paymentMethod === 'COD'
-              ? `Place Order (COD) ₹${finalAmount}`
-              : `Confirm & Pay ₹${finalAmount}`}
+              ? `Place Order (COD)  ₹${finalAmount}`
+              : `Confirm & Pay  ₹${finalAmount}`}
           </Text>
         )}
       </TouchableOpacity>
@@ -317,15 +329,19 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#dbe4ef' },
   totalLabel: { fontSize: 18, fontWeight: '700', color: '#2c3e50' },
   totalValue: { fontSize: 18, fontWeight: '700', color: '#4b6f9e' },
-  placeOrderBtn: { margin: 20, backgroundColor: '#4b6f9e', padding: 18, borderRadius: 16, alignItems: 'center' },
+  placeOrderBtn: { marginHorizontal: 20, marginBottom: 20, backgroundColor: '#4b6f9e', padding: 18, borderRadius: 16, alignItems: 'center' },
+  placeOrderBtnCOD: { backgroundColor: '#16a34a' },
   btnDisabled: { backgroundColor: '#cbd5e1' },
   btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   paymentOptions: { gap: 10 },
   paymentOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', padding: 14, borderRadius: 14, gap: 12, borderWidth: 1.5, borderColor: '#dbe4ef' },
   paymentOptionSelected: { borderColor: '#4b6f9e', backgroundColor: '#eef3fb' },
+  paymentOptionSelectedCOD: { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
   paymentOptionText: { flex: 1 },
   paymentOptionLabel: { fontSize: 14, fontWeight: '700', color: '#64748b' },
   paymentOptionLabelSelected: { color: '#4b6f9e' },
   paymentOptionLabelCOD: { color: '#16a34a' },
   paymentOptionSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  codNote: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 20, marginBottom: 8, backgroundColor: '#f0fdf4', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#bbf7d0' },
+  codNoteText: { fontSize: 11, color: '#16a34a', fontWeight: '600' },
 });

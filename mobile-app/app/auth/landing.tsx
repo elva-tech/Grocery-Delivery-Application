@@ -24,10 +24,25 @@ export default function Landing() {
 
       <TouchableOpacity
         style={styles.button}
-        activeOpacity={0.85}
+        onPress={() => router.push('/auth/login')}
+      >
+        <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Login</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, { marginTop: 10 }]}
         onPress={() => router.push('/auth/register')}
       >
-        <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Get Started</Text>
+        <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Sign Up</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.storeCodeBtn}
+        onPress={() => router.push('/auth/store-code')}
+      >
+        <Text style={[styles.storeCodeText, { fontFamily: Fonts.regular }]}>
+          Enter Store Code
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -81,5 +96,14 @@ const styles = StyleSheet.create({
   buttonText: {
     color: Colors.WHITE,
     fontSize: 18,
+  },
+  storeCodeBtn: {
+    marginTop: 24,
+    padding: 10,
+  },
+  storeCodeText: {
+    fontSize: 14,
+    color: Colors.TEXT_MUTED,
+    textDecorationLine: "underline",
   },
 });

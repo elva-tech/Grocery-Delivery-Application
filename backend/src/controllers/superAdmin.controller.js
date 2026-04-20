@@ -50,9 +50,7 @@ exports.getTenants = async (req, res) => {
   try {
     const tenants = await Tenant.find({})
       .sort({ createdAt: -1 })
-      .select(
-        "tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain tagline heroBadge heroTitle heroSubtitle"
-      )
+      .select("tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain storeCode deepLink qrCode tagline heroBadge heroTitle heroSubtitle")
       .lean();
 
     return res.json({ success: true, tenants });
