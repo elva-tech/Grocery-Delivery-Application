@@ -38,6 +38,10 @@ const Addresses = ({ items, onSelect }: any) => {
     note: '',
   });
   const [othersConfirmed, setOthersConfirmed] = useState(false);
+  const selfAddresses = useMemo(
+    () => addresses.filter((addr) => addr.isMyAddress !== false),
+    [addresses]
+  );
 
   const totalAmount = useMemo(() => {
     if (!items || !Array.isArray(items)) return 0;
@@ -53,7 +57,8 @@ const Addresses = ({ items, onSelect }: any) => {
     const data = await getAddresses() as any[];
     setAddresses(data);
     if (data.length > 0 && !selectedId) {
-      setSelectedId(data[0].id);
+      const firstSelf = data.find((addr: any) => addr.isMyAddress !== false);
+      setSelectedId((firstSelf || data[0]).id);
     }
     setLoading(false);
   };
@@ -81,7 +86,7 @@ const Addresses = ({ items, onSelect }: any) => {
 
   const handleFinalConfirm = () => {
     if (orderMode === 'self') {
-      const selected = addresses.find(a => a.id === selectedId);
+      const selected = selfAddresses.find(a => a.id === selectedId);
       if (!selected) return;
       onSelect(selected);
     } else {
@@ -153,8 +158,8 @@ const Addresses = ({ items, onSelect }: any) => {
             {loading ? (
               <Loader2 className="animate-spin mx-auto mt-10 text-slate-300" />
             ) : (
-              addresses.length > 0 ? (
-                addresses.map((addr) => (
+              selfAddresses.length > 0 ? (
+                selfAddresses.map((addr) => (
                   <div
                     key={addr.id}
                     className={`w-full bg-white p-4 sm:p-6 rounded-[2rem] border-2 transition-all flex items-stretch gap-2 sm:gap-4 ${

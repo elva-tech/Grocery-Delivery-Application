@@ -108,6 +108,7 @@ export const getUserOrders = async () => {
       createdAt: order.createdAt,
       address: order.address,
       deliverySlot: order.deliverySlot,
+      invoiceAvailable: Boolean(order.invoiceAvailable),
       items: order.items || []
     }));
 
@@ -253,4 +254,25 @@ export const rateOrderApi = async (orderId: string, rating: number, comment: str
     }
   );
   return res.data; // { success: true, message }
+};
+
+export const downloadOrderSummaryPdfApi = async (orderId: string): Promise<void> => {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Unauthorized");
+  const res = await axios.get(`${API_URL}/${orderId}/order-summary/download`, {
+    responseType: "blob",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "x-tenant-id": getTenantId(),
+    },
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `order-summary-${orderId}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 };

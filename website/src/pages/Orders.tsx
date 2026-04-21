@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2, Star } from 'lucide-react';
 import type { RootState } from '../store/store';
-import { getUserOrders, cancelOrderApi, rateOrderApi } from '../api/ordersApi';
+import { getUserOrders, cancelOrderApi, rateOrderApi, downloadOrderSummaryPdfApi } from '../api/ordersApi';
 import { addToCart } from '../store/slices/cartSlice';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ReportIssueModal from './ReportIssueModal';
@@ -45,6 +45,7 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
   const [ratingComment, setRatingComment] = useState('');
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [ratingError, setRatingError] = useState('');
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -147,6 +148,17 @@ const loadOrders = async () => {
       setRatingError(err?.response?.data?.message || err?.message || 'Failed to submit rating.');
     } finally {
       setIsSubmittingRating(false);
+    }
+  };
+
+  const handleDownloadInvoice = async (orderId: string) => {
+    try {
+      setIsDownloadingInvoice(true);
+      await downloadOrderSummaryPdfApi(orderId);
+    } catch (err: any) {
+      showToast('error', err?.response?.data?.message || err?.message || 'Failed to download order summary.');
+    } finally {
+      setIsDownloadingInvoice(false);
     }
   };
 
@@ -273,6 +285,14 @@ const loadOrders = async () => {
                         <RotateCcw size={14} /> Reorder
                       </button>
                       
+
+                      <button
+                        onClick={() => handleDownloadInvoice(selectedOrder.id)}
+                        disabled={isDownloadingInvoice}
+                        className="flex items-center justify-center gap-2 border-2 border-emerald-200 text-emerald-700 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isDownloadingInvoice ? <Loader2 size={14} className="animate-spin" /> : 'Download Order Summary'}
+                      </button>
 
                       {/* RATE ORDER BUTTON */}
                       {!selectedOrder.rating?.value ? (

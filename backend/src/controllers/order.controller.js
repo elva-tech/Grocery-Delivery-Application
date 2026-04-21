@@ -1,4 +1,6 @@
 const Order = require("../models/Order.model");
+const Tenant = require("../models/Tenant.model");
+const CustomerInvoice = require("../models/CustomerInvoice.model");
 const Inventory = require("../models/Inventory.model");
 const Product = require("../models/Product.model");
 const mongoose = require("mongoose");
@@ -10,6 +12,52 @@ const {
   isValidIndianPincodeFormat,
   lookupIndianPincode,
 } = require("../services/pincodeLookup.service");
+const {
+  generateAndUploadInvoicePdf,
+  streamInvoicePdfFromCloudinary,
+  streamGeneratedInvoicePdf,
+} = require("../services/invoice.service");
+
+function isInvoiceAssetPdf(invoiceAsset) {
+  if (!invoiceAsset || !invoiceAsset.imageUrl) return false;
+  const declaredPdf = String(invoiceAsset.fileType || "").toLowerCase() === "application/pdf";
+  const urlLooksPdf = /\.pdf(?:$|\?)/i.test(String(invoiceAsset.imageUrl));
+  return declaredPdf || urlLooksPdf;
+}
+
+function invoiceNumberPattern(tenantId, sequenceNumber) {
+  const tenantToken = String(tenantId || "tenant")
+    .replace(/[^a-z0-9]/gi, "")
+    .toUpperCase()
+    .slice(0, 6) || "TENANT";
+  return `INV-${tenantToken}-${String(sequenceNumber).padStart(6, "0")}`;
+}
+
+async function getOrCreateCustomerInvoice(order) {
+  const existing = await CustomerInvoice.findOne({ orderId: order._id }).lean();
+  if (existing) return existing;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const last = await CustomerInvoice.findOne({ tenantId: order.tenantId })
+      .sort({ sequenceNumber: -1 })
+      .select("sequenceNumber")
+      .lean();
+    const sequenceNumber = Number(last?.sequenceNumber || 0) + 1;
+    const invoiceNumber = invoiceNumberPattern(order.tenantId, sequenceNumber);
+    try {
+      return await CustomerInvoice.create({
+        tenantId: order.tenantId,
+        orderId: order._id,
+        sequenceNumber,
+        invoiceNumber,
+        fileType: "application/pdf",
+      });
+    } catch (err) {
+      if (err?.code !== 11000) throw err;
+    }
+  }
+  throw new Error("Unable to allocate invoice number");
+}
 
 /** Resolve display URL from Product.images or legacy imageUrl / array. */
 function resolveProductImageUrl(product) {
@@ -317,6 +365,7 @@ exports.getCustomerOrderHistory = async (req, res) => {
       // ✅ ADD THESE (you already store them)
       address: formatDeliveryAddressForCustomer(order.deliveryAddress),
       deliverySlot: order.deliverySlot || "Standard Delivery",
+      invoiceAvailable: Boolean(order.invoiceAsset?.imageUrl),
 
       // ✅ SEND ITEMS PROPERLY
       items: order.items.map((item) => {
@@ -368,6 +417,33 @@ exports.markOrderDelivered = async (req, res) => {
     order.orderStatus = "DELIVERED";
     order.paymentStatus = "PAID";
 
+    const tenant = await Tenant.findOne({ tenantId }).lean();
+    const invoiceUser = await User.findById(order.userId).select("phoneNumber").lean();
+    const customerInvoice = await getOrCreateCustomerInvoice(order);
+
+    if (!isInvoiceAssetPdf(order.invoiceAsset)) {
+      try {
+        const uploadedInvoice = await generateAndUploadInvoicePdf({
+          order: { ...order.toObject(), customerPhone: invoiceUser?.phoneNumber || "" },
+          tenant,
+          invoiceNumber: customerInvoice.invoiceNumber,
+        });
+        order.invoiceAsset = {
+          imageUrl: uploadedInvoice.url,
+          imagePublicId: uploadedInvoice.public_id,
+          fileType: "application/pdf",
+          generatedAt: new Date(),
+        };
+        await CustomerInvoice.findByIdAndUpdate(customerInvoice._id, {
+          invoiceUrl: uploadedInvoice.url,
+          invoicePublicId: uploadedInvoice.public_id,
+          generatedAt: new Date(),
+        });
+      } catch (invoiceErr) {
+        console.error("Invoice generation failed (non-blocking):", invoiceErr);
+      }
+    }
+
     await order.save();
 
     res.status(200).json({
@@ -381,6 +457,100 @@ exports.markOrderDelivered = async (req, res) => {
     res.status(500).json({
       message: "Something went wrong. Please try again later.",
     });
+  }
+};
+
+exports.downloadOrderSummaryPdf = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId, tenantId, role } = req.user;
+
+    const order = await Order.findOne({ _id: orderId, tenantId }).lean();
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+    if (role === "CUSTOMER" && String(order.userId) !== String(userId)) {
+      return res.status(403).json({ success: false, message: "Not allowed to access this order summary" });
+    }
+    if (order.orderStatus !== "DELIVERED") {
+      return res.status(400).json({ success: false, message: "Order summary is available only after delivery" });
+    }
+    const tenant = await Tenant.findOne({ tenantId }).lean();
+    const invoiceUser = await User.findById(order.userId).select("phoneNumber").lean();
+    const customerInvoice = await getOrCreateCustomerInvoice(order);
+    let invoiceImageUrl = order.invoiceAsset?.imageUrl || "";
+    if (!isInvoiceAssetPdf(order.invoiceAsset)) {
+      const freshOrder = await Order.findById(order._id);
+      if (!freshOrder) {
+        return res.status(404).json({ success: false, message: "Order not found" });
+      }
+      const uploadedInvoice = await generateAndUploadInvoicePdf({
+        order: { ...freshOrder.toObject(), customerPhone: invoiceUser?.phoneNumber || "" },
+        tenant,
+        invoiceNumber: customerInvoice.invoiceNumber,
+      });
+      freshOrder.invoiceAsset = {
+        imageUrl: uploadedInvoice.url,
+        imagePublicId: uploadedInvoice.public_id,
+        fileType: "application/pdf",
+        generatedAt: new Date(),
+      };
+      await freshOrder.save();
+      await CustomerInvoice.findByIdAndUpdate(customerInvoice._id, {
+        invoiceUrl: uploadedInvoice.url,
+        invoicePublicId: uploadedInvoice.public_id,
+        generatedAt: new Date(),
+      });
+      invoiceImageUrl = uploadedInvoice.url;
+    }
+
+    const invoiceFileName = `order-summary-${customerInvoice.invoiceNumber}.pdf`;
+    try {
+      await streamInvoicePdfFromCloudinary(invoiceImageUrl, res, invoiceFileName);
+    } catch (cloudinaryErr) {
+      console.error("Cloudinary order summary fetch failed, serving generated PDF:", cloudinaryErr.message);
+      const liveOrder = await Order.findById(order._id).lean();
+      if (!liveOrder) {
+        return res.status(404).json({ success: false, message: "Order not found" });
+      }
+      // Re-upload in fallback flow so Cloudinary folder and DB stay in sync.
+      try {
+        const uploadedInvoice = await generateAndUploadInvoicePdf({
+          order: liveOrder,
+          tenant,
+          invoiceNumber: customerInvoice.invoiceNumber,
+        });
+        await Order.findByIdAndUpdate(order._id, {
+          $set: {
+            invoiceAsset: {
+              imageUrl: uploadedInvoice.url,
+              imagePublicId: uploadedInvoice.public_id,
+              fileType: "application/pdf",
+              generatedAt: new Date(),
+            },
+          },
+        });
+        await CustomerInvoice.findByIdAndUpdate(customerInvoice._id, {
+          invoiceUrl: uploadedInvoice.url,
+          invoicePublicId: uploadedInvoice.public_id,
+          generatedAt: new Date(),
+        });
+      } catch (uploadErr) {
+        console.error("Fallback upload failed (continuing with direct stream):", uploadErr.message);
+      }
+      await streamGeneratedInvoicePdf(
+        {
+          order: { ...liveOrder, customerPhone: invoiceUser?.phoneNumber || "" },
+          tenant,
+          invoiceNumber: customerInvoice.invoiceNumber,
+        },
+        res,
+        invoiceFileName
+      );
+    }
+  } catch (error) {
+    console.error("downloadOrderSummaryPdf error:", error);
+    return res.status(500).json({ success: false, message: "Failed to download order summary" });
   }
 };
 

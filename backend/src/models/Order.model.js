@@ -154,6 +154,12 @@ const orderSchema = new mongoose.Schema(
       comment: { type: String, default: "" },
       createdAt: { type: Date, default: null },
     },
+    invoiceAsset: {
+      imageUrl: { type: String, default: "" },
+      imagePublicId: { type: String, default: "" },
+      fileType: { type: String, default: "application/pdf" },
+      generatedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );

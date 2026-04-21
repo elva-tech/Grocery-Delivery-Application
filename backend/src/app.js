@@ -59,6 +59,7 @@ const unitRoutes       = require('./routes/unit.routes');
 const uploadRoutes     = require("./routes/upload.routes");
 const billingRoutes           = require('./routes/billing.routes');
 const storeAvailabilityRoutes = require('./routes/storeAvailability.routes');
+const addressRoutes           = require("./routes/address.routes");
 const tenantRoutes            = require('./routes/tenant.routes');
 const superRoutes             = require('./routes/super.routes');
 const { startStoreScheduler } = require('./services/storeScheduler.service');
@@ -86,6 +87,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/coupons",  couponRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/billing",  billingRoutes);
+app.use("/api/addresses", addressRoutes);
 
 
 // Start store open/close scheduler (every 60s, respects manualOverride)

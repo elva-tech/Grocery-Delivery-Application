@@ -12,13 +12,16 @@ const api = axios.create({
 /* -------- ATTACH TOKEN + TENANT (send-otp needs tenant before JWT exists) -------- */
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("jwtToken");
-  console.log('[AUTH DEBUG] Using token:', token);
+  const envTenant = String(import.meta.env.VITE_TENANT_ID || "").trim().toLowerCase();
+  if (envTenant) {
+    config.headers["x-tenant-id"] = envTenant;
+  }
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
-      if (payload.tenantId) {
+      if (!config.headers["x-tenant-id"] && payload.tenantId) {
         config.headers["x-tenant-id"] = payload.tenantId;
       }
     } catch {
@@ -28,10 +31,7 @@ api.interceptors.request.use((config) => {
 
   // When calling a remote API (e.g. Render), hostname is not localhost — backend needs x-tenant-id.
   if (!config.headers["x-tenant-id"]) {
-    const fromEnv = import.meta.env.VITE_TENANT_ID;
-    if (fromEnv) {
-      config.headers["x-tenant-id"] = String(fromEnv).trim();
-    } else if (typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
       const host = window.location.hostname;
       if (host === "localhost" || host === "127.0.0.1") {
         const local = String(

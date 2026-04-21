@@ -198,7 +198,7 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
 
     setLoading(true);
     try {
-      const payload = { ...merged, lat: coords[0], lng: coords[1] };
+      const payload = { ...merged, lat: coords[0], lng: coords[1], isMyAddress: true };
       const ed = editAddress as { id?: string } | null | undefined;
       if (ed?.id) {
         await updateAddress(ed.id, payload);

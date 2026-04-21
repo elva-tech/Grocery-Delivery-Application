@@ -10,6 +10,7 @@ const {
   placeCustomerOrder,
   getCustomerOrderHistory,
   markOrderDelivered,
+  downloadOrderSummaryPdf,
   getCustomerOrderById,
   getAllOrders,
   cancelOrder,
@@ -33,6 +34,8 @@ router.post("/report-issue", authMiddleware, returnController.createReturnReques
 router.get("/:id", authMiddleware, getCustomerOrderById);
 
 router.patch("/:orderId/deliver", authMiddleware, markOrderDelivered);
+router.get("/:orderId/order-summary/download", authMiddleware, downloadOrderSummaryPdf);
+router.get("/:orderId/invoice/download", authMiddleware, downloadOrderSummaryPdf);
 router.patch("/:orderId/cancel", authMiddleware, cancelOrder);
 router.post("/:orderId/rate", authMiddleware, rateOrder);
 module.exports = router;
