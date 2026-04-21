@@ -479,6 +479,12 @@ exports.downloadOrderSummaryPdf = async (req, res) => {
     const invoiceUser = await User.findById(order.userId).select("phoneNumber").lean();
     const customerInvoice = await getOrCreateCustomerInvoice(order);
     let invoiceImageUrl = order.invoiceAsset?.imageUrl || "";
+    const invoicePayload = {
+      order: { ...order, customerPhone: invoiceUser?.phoneNumber || "" },
+      tenant,
+      invoiceNumber: customerInvoice.invoiceNumber,
+    };
+    let uploadedInThisRequest = false;
     if (!isInvoiceAssetPdf(order.invoiceAsset)) {
       const freshOrder = await Order.findById(order._id);
       if (!freshOrder) {
@@ -502,9 +508,15 @@ exports.downloadOrderSummaryPdf = async (req, res) => {
         generatedAt: new Date(),
       });
       invoiceImageUrl = uploadedInvoice.url;
+      uploadedInThisRequest = true;
     }
 
     const invoiceFileName = `order-summary-${customerInvoice.invoiceNumber}.pdf`;
+    // If we just uploaded, avoid a second Cloudinary fetch/upload in the same click.
+    if (uploadedInThisRequest) {
+      await streamGeneratedInvoicePdf(invoicePayload, res, invoiceFileName);
+      return;
+    }
     try {
       await streamInvoicePdfFromCloudinary(invoiceImageUrl, res, invoiceFileName);
     } catch (cloudinaryErr) {
@@ -539,11 +551,7 @@ exports.downloadOrderSummaryPdf = async (req, res) => {
         console.error("Fallback upload failed (continuing with direct stream):", uploadErr.message);
       }
       await streamGeneratedInvoicePdf(
-        {
-          order: { ...liveOrder, customerPhone: invoiceUser?.phoneNumber || "" },
-          tenant,
-          invoiceNumber: customerInvoice.invoiceNumber,
-        },
+        { ...invoicePayload, order: { ...liveOrder, customerPhone: invoiceUser?.phoneNumber || "" } },
         res,
         invoiceFileName
       );
