@@ -11,13 +11,23 @@ import { getTenantId } from '../utils/getTenantId';
 
 export const API_BASE_URL = {
   // DEVELOPMENT: 'http://localhost:5000',
-  DEVELOPMENT: 'http://192.168.254.226:5000',
-  // DEVELOPMENT: 'https://grocery-delivery-application-6n3w.onrender.com',
+  // DEVELOPMENT: 'http:///192.168.29.105:5000',
+  DEVELOPMENT: 'https://grocery-delivery-application-6n3w.onrender.com',
   STAGING: 'https://staging-api.egrocery.com',
   PRODUCTION: 'https://grocery-delivery-application-6n3w.onrender.com',
 };
 
-export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;
+
+// export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;
+
+const ENV = process.env.EXPO_PUBLIC_ENV || 'development';
+
+export const ACTIVE_API_URL =
+  ENV === 'production'
+    ? API_BASE_URL.PRODUCTION
+    : API_BASE_URL.DEVELOPMENT;
+
+    
 
 // Dynamically resolved — configure EXPO_PUBLIC_TENANT_ID in eas.json per build profile.
 export const TENANT_ID = getTenantId();

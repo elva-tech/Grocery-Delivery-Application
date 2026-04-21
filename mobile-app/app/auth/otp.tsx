@@ -118,7 +118,7 @@ alternatePhone: alternatePhone || result.user.alternatePhone,
   return (
     <View style={styles.container}>
       <LottieView
-        source={require('../../assets/animations/Security System.json')}
+        source={require('../../assets/animations/OTP-Verification.json')}
         autoPlay loop style={styles.lottieHero}
       />
 

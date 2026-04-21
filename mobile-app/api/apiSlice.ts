@@ -1,7 +1,8 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { API_BASE_URL, TENANT_ID } from '@/src/config/constants';
+import { ACTIVE_API_URL, TENANT_ID } from '@/src/config/constants';
 
-const BASE = API_BASE_URL.DEVELOPMENT;
+const BASE = ACTIVE_API_URL;
+
 const TENANT_HEADERS = { 'x-tenant-id': TENANT_ID };
 
 /* ---------------- TYPES ---------------- */
