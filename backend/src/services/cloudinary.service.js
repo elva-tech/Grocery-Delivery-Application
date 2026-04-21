@@ -7,6 +7,7 @@ const ALLOWED_UPLOAD_CATEGORIES = Object.freeze([
   "products",
   "banners",
   "returns",
+  "bills",
   /** Storefront / admin branding: {root}/{tenantId}/logo/store-logo */
   "logo",
 ]);

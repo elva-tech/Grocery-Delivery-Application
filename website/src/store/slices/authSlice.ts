@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { getTenantId } from '../../utils/getTenantId';
 
 interface AuthState {
   user: any | null;
@@ -12,8 +13,21 @@ const loadPersistedAuth = () => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
     if (token && user) {
+      const parsedUser = JSON.parse(user);
+      const savedTenant = String(parsedUser?.tenantId || '').trim().toLowerCase();
+      const currentTenant = String(getTenantId() || '').trim().toLowerCase();
+      if (savedTenant && currentTenant && savedTenant !== currentTenant) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('jwtToken');
+        return {
+          user: null,
+          token: null,
+          isAuthenticated: false,
+        };
+      }
       return {
-        user: JSON.parse(user),
+        user: parsedUser,
         token,
         isAuthenticated: true,
       };

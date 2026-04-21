@@ -1,4 +1,8 @@
+import axios from "axios";
+import { API_BASE_URL, getTenantId } from "../config";
+
 const COUNTRY_CODE = "+91";
+const ADDRESSES_URL = `${API_BASE_URL}/api/addresses`;
 
 export const getAddressFromCoords = async (lat: number, lng: number): Promise<string> => {
   try {
@@ -13,10 +17,18 @@ export const getAddressFromCoords = async (lat: number, lng: number): Promise<st
 };
 
 export const getAddresses = async () => {
-  return new Promise((resolve) => {
-    const data = JSON.parse(localStorage.getItem('user_addresses') || '[]');
-    setTimeout(() => resolve(data), 100);
+  const token = localStorage.getItem("token");
+  if (!token) return [];
+  const res = await axios.get(`${ADDRESSES_URL}/my`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "x-tenant-id": getTenantId(),
+    },
   });
+  return (res.data?.addresses || []).map((addr: any) => ({
+    ...addr,
+    id: addr._id || addr.id,
+  }));
 };
 
 const formatStoredPhone = (raw: string) => {
@@ -25,45 +37,50 @@ const formatStoredPhone = (raw: string) => {
 };
 
 export const addAddress = async (address: any) => {
-  return new Promise((resolve) => {
-    const current = JSON.parse(localStorage.getItem('user_addresses') || '[]');
-    const newAddress = {
-      ...address,
-      id: Date.now().toString(),
-      phone: formatStoredPhone(address.phone),
-      altPhone: address.altPhone ? formatStoredPhone(address.altPhone) : '',
-    };
-    const updated = [...current, newAddress];
-    localStorage.setItem('user_addresses', JSON.stringify(updated));
-    resolve(newAddress);
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Unauthorized");
+  const payload = {
+    ...address,
+    isMyAddress: address.isMyAddress ?? true,
+    phone: formatStoredPhone(address.phone),
+    altPhone: address.altPhone ? formatStoredPhone(address.altPhone) : "",
+  };
+  const res = await axios.post(ADDRESSES_URL, payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "x-tenant-id": getTenantId(),
+    },
   });
+  return {
+    ...(res.data?.address || {}),
+    id: res.data?.address?._id || res.data?.address?.id,
+  };
 };
 
 export const updateAddress = async (id: string, address: any) => {
-  return new Promise((resolve, reject) => {
-    const current = JSON.parse(localStorage.getItem('user_addresses') || '[]');
-    const idx = current.findIndex((a: any) => a.id === id);
-    if (idx === -1) {
-      reject(new Error('Address not found'));
-      return;
-    }
-    const prev = current[idx];
-    const merged = {
-      ...prev,
-      ...address,
-      id: prev.id,
-      phone: address.phone ? formatStoredPhone(address.phone) : prev.phone,
-      altPhone:
-        address.altPhone !== undefined
-          ? address.altPhone
-            ? formatStoredPhone(address.altPhone)
-            : ''
-          : prev.altPhone,
-    };
-    current[idx] = merged;
-    localStorage.setItem('user_addresses', JSON.stringify(current));
-    resolve(merged);
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Unauthorized");
+  const payload = {
+    ...address,
+    isMyAddress: address.isMyAddress ?? true,
+    phone: address.phone ? formatStoredPhone(address.phone) : "",
+    altPhone:
+      address.altPhone !== undefined
+        ? address.altPhone
+          ? formatStoredPhone(address.altPhone)
+          : ""
+        : "",
+  };
+  const res = await axios.patch(`${ADDRESSES_URL}/${id}`, payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "x-tenant-id": getTenantId(),
+    },
   });
+  return {
+    ...(res.data?.address || {}),
+    id: res.data?.address?._id || res.data?.address?.id,
+  };
 };
 
 export const requestOtp = async (phone: string) => {
