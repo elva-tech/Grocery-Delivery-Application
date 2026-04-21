@@ -146,7 +146,9 @@ async function generateAndUploadInvoicePdf(payload) {
       .then(() => doc.end())
       .catch(reject);
   });
-  return uploadToCloudinary(tempFilePath, payload.order.tenantId, "bills", `order-summary-${String(payload.order._id)}`);
+  return uploadToCloudinary(tempFilePath, payload.order.tenantId, "bills", {
+    invoiceNumber: payload.invoiceNumber,
+  });
 }
 
 function fetchBinary(url) {

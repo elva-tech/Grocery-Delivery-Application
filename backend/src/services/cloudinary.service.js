@@ -52,6 +52,20 @@ function isProductSlotOpts(opts) {
   );
 }
 
+/**
+ * Invoice/order-summary upload options: deterministic file key per tenant.
+ * @param {object} opts
+ * @returns {boolean}
+ */
+function isInvoiceDocOpts(opts) {
+  return (
+    opts &&
+    typeof opts === "object" &&
+    typeof opts.invoiceNumber === "string" &&
+    opts.invoiceNumber.trim().length > 0
+  );
+}
+
 function ensureCloudinaryConfigured() {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -72,9 +86,10 @@ function ensureCloudinaryConfigured() {
  * @param {string} filePath - Absolute path to the file on disk
  * @param {string} tenantId - Tenant identifier
  * @param {string} category - One of ALLOWED_UPLOAD_CATEGORIES
- * @param {string|{ productId: string, slotIndex: number }} [originalFileNameOrOpts]
+ * @param {string|{ productId: string, slotIndex: number }|{ invoiceNumber: string }} [originalFileNameOrOpts]
  *        Legacy: original filename string → timestamp + basename **without extension** (avoids .webp.webp).
  *        Products: { productId, slotIndex } → …/products/{productId}_img{slotIndex} (overwrite same slot).
+ *        Bills: { invoiceNumber } → …/bills/{invoiceNumber} (overwrite same invoice doc).
  * @returns {Promise<{ url: string, public_id: string }>}
  */
 async function uploadToCloudinary(filePath, tenantId, category, originalFileNameOrOpts) {
@@ -105,6 +120,9 @@ async function uploadToCloudinary(filePath, tenantId, category, originalFileName
     const pid = String(opts.productId).trim();
     folderPath = `${root}/${t}/products`;
     publicInner = `${pid}_img${opts.slotIndex}`;
+  } else if (category === "bills" && isInvoiceDocOpts(opts)) {
+    folderPath = `${root}/${t}/bills`;
+    publicInner = sanitizeForPublicIdFragment(opts.invoiceNumber.trim().toLowerCase());
   } else {
     folderPath = `${root}/${t}/${category}`;
     const rawName =
