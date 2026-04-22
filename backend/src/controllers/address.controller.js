@@ -10,6 +10,8 @@ const sanitizeAddressPayload = (body = {}) => ({
   pincode: String(body.pincode || "").trim(),
   phone: String(body.phone || "").trim(),
   altPhone: String(body.altPhone || "").trim(),
+  recipientName: String(body.recipientName || "").trim(),
+  recipientPhone: String(body.recipientPhone || "").trim(),
   full: String(body.full || "").trim(),
   lat: Number.isFinite(Number(body.lat)) ? Number(body.lat) : 0,
   lng: Number.isFinite(Number(body.lng)) ? Number(body.lng) : 0,
