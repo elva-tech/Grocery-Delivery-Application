@@ -37,6 +37,9 @@ export async function lookupIndianPincode(pin: string): Promise<PinLookupResult>
 
 /** Same shape as POST /api/orders `deliveryAddress` (server normalizes city/state from PIN). */
 export function buildDeliveryAddressPayload(address: {
+  isMyAddress?: boolean;
+  recipientName?: string;
+  recipientPhone?: string;
   line1?: string;
   line2?: string;
   landmark?: string;
@@ -49,6 +52,9 @@ export function buildDeliveryAddressPayload(address: {
 }) {
   const pincode = sanitizeIndianPincode(address?.pincode || '');
   return {
+    isMyAddress: address?.isMyAddress !== undefined ? Boolean(address.isMyAddress) : true,
+    recipientName: String(address?.recipientName || '').trim(),
+    recipientPhone: String(address?.recipientPhone || '').replace(/\D/g, '').slice(-10),
     line1: String(address?.line1 || address?.full || '').trim(),
     line2: String(address?.line2 || '').trim(),
     landmark: String(address?.landmark || '').trim(),

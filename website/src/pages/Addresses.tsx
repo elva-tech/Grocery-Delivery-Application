@@ -4,7 +4,7 @@ import {
   MapPin, Plus, ArrowLeft, Loader2, CheckCircle2,
   Gift, User, Users, X, Phone, UserCircle, Pencil,
 } from 'lucide-react';
-import { getAddresses } from '../api/addresses';
+import { addAddress, getAddresses } from '../api/addresses';
 import AddressModal from '../components/layout/AddressModal';
 import { useToast } from '../context/ToastContext';
 import {
@@ -38,6 +38,7 @@ const Addresses = ({ items, onSelect }: any) => {
     note: '',
   });
   const [othersConfirmed, setOthersConfirmed] = useState(false);
+  const [savedOthersAddress, setSavedOthersAddress] = useState<any | null>(null);
   const selfAddresses = useMemo(
     () => addresses.filter((addr) => addr.isMyAddress !== false),
     [addresses]
@@ -90,9 +91,12 @@ const Addresses = ({ items, onSelect }: any) => {
       if (!selected) return;
       onSelect(selected);
     } else {
-      onSelect({
+      onSelect(savedOthersAddress || {
         id: 'others',
         label: `For ${othersForm.recipientName}`,
+        isMyAddress: false,
+        recipientName: othersForm.recipientName,
+        recipientPhone: othersForm.recipientPhone,
         line1: othersForm.line1,
         line2: othersForm.line2,
         landmark: othersForm.landmark,
@@ -362,6 +366,30 @@ const Addresses = ({ items, onSelect }: any) => {
                     return;
                   }
                   setOthersForm(prev => ({ ...prev, pincode: r.pincode, city: r.city, state: r.state }));
+                  const persisted = await addAddress({
+                    label: `For ${othersForm.recipientName}`,
+                    isMyAddress: false,
+                    recipientName: othersForm.recipientName,
+                    recipientPhone: othersForm.recipientPhone,
+                    phone: othersForm.recipientPhone,
+                    line1: othersForm.line1,
+                    line2: othersForm.line2,
+                    landmark: othersForm.landmark,
+                    city: r.city,
+                    state: r.state,
+                    pincode: r.pincode,
+                    full: formatAddressSummary({
+                      line1: othersForm.line1,
+                      line2: othersForm.line2,
+                      landmark: othersForm.landmark,
+                      city: r.city,
+                      state: r.state,
+                      pincode: r.pincode,
+                    }),
+                    lat: 0,
+                    lng: 0,
+                  });
+                  setSavedOthersAddress(persisted);
                   setOthersConfirmed(true);
                   setShowOthersModal(false);
                   setOrderMode('others');

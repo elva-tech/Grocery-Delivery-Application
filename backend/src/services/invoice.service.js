@@ -21,6 +21,21 @@ function buildAddressText(deliveryAddress = {}) {
     .join(", ");
 }
 
+function buildContactName(order, type) {
+  if (type === "ship") {
+    return String(order.deliveryAddress?.recipientName || "").trim() || order.customerName || "Customer";
+  }
+  return order.customerName || "Customer";
+}
+
+function buildContactPhone(order, type) {
+  if (type === "ship") {
+    const rp = String(order.deliveryAddress?.recipientPhone || "").trim();
+    return rp || String(order.customerPhone || "").trim() || "NA";
+  }
+  return String(order.customerPhone || "").trim() || "NA";
+}
+
 async function writeInvoicePdf(doc, { order, tenant, invoiceNumber }) {
   const red = "#9f1d1d";
   const muted = "#6b7280";
@@ -30,8 +45,12 @@ async function writeInvoicePdf(doc, { order, tenant, invoiceNumber }) {
     (order.deliveryCharge || 0) +
     (order.discount || 0) +
     (order.couponDiscount || 0);
-  const customerAddress = buildAddressText(order.deliveryAddress);
-  const customerPhone = String(order.customerPhone || "").trim() || "NA";
+  const billingAddress = buildAddressText(order.billingAddress || order.deliveryAddress);
+  const shippingAddress = buildAddressText(order.deliveryAddress);
+  const billToName = buildContactName(order, "bill");
+  const shipToName = buildContactName(order, "ship");
+  const billToPhone = buildContactPhone(order, "bill");
+  const shipToPhone = buildContactPhone(order, "ship");
   const companyName = String(tenant?.name || order.tenantId || "Store");
   const companyAddress = String(tenant?.storeAddress || "").trim() || "Address unavailable";
   const ownerPhone = String(tenant?.phoneNumber || "").trim() || "NA";
@@ -68,36 +87,53 @@ async function writeInvoicePdf(doc, { order, tenant, invoiceNumber }) {
 
   doc.fillColor(muted).font("Helvetica-Bold").fontSize(10).text("BILL TO", 40, 186);
   doc.fillColor(dark).font("Helvetica").fontSize(10);
-  doc.text(order.customerName || "Customer", 40, 200);
-  doc.text(customerAddress || "-", 40, 214, { width: 240 });
-  doc.text(`Phone: ${customerPhone}`, 40, 246, { width: 240 });
+  doc.text(billToName, 40, 200);
+  doc.text(billingAddress || "-", 40, 214, { width: 240 });
+  doc.text(`Phone: ${billToPhone}`, 40, 246, { width: 240 });
 
   doc.fillColor(muted).font("Helvetica-Bold").fontSize(10).text("SHIP TO", 320, 186);
   doc.fillColor(dark).font("Helvetica").fontSize(10);
-  doc.text(order.customerName || "Customer", 320, 200);
-  doc.text(customerAddress || "-", 320, 214, { width: 252 });
-  doc.text(`Phone: ${customerPhone}`, 320, 246, { width: 252 });
+  doc.text(shipToName, 320, 200);
+  doc.text(shippingAddress || "-", 320, 214, { width: 252 });
+  doc.text(`Phone: ${shipToPhone}`, 320, 246, { width: 252 });
 
-  const tableTop = 285;
-  doc.rect(40, tableTop, 532, 22).fill(red);
-  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
-  doc.text("DESCRIPTION", 50, tableTop + 7);
-  doc.text("QTY", 360, tableTop + 7);
-  doc.text("UNIT PRICE", 410, tableTop + 7);
-  doc.text("TOTAL", 520, tableTop + 7);
+  const drawItemsHeader = (top) => {
+    doc.rect(40, top, 532, 22).fill(red);
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
+    doc.text("DESCRIPTION", 50, top + 7);
+    doc.text("QTY", 360, top + 7);
+    doc.text("UNIT PRICE", 410, top + 7);
+    doc.text("TOTAL", 520, top + 7);
+  };
 
-  let y = tableTop + 28;
+  const firstTableTop = 285;
+  drawItemsHeader(firstTableTop);
+
+  let y = firstTableTop + 28;
   doc.font("Helvetica").fontSize(10).fillColor(dark);
   for (const item of order.items || []) {
+    if (y > 730) {
+      doc.addPage({ size: "A4", margin: 0 });
+      const continuedTop = 50;
+      drawItemsHeader(continuedTop);
+      y = continuedTop + 28;
+    }
     doc.text(item.name || "Item", 50, y, { width: 290, ellipsis: true });
     doc.text(String(item.qty || 0), 366, y);
     doc.text(`Rs ${Number(item.price || 0).toFixed(2)}`, 410, y);
     doc.text(`Rs ${(Number(item.price || 0) * Number(item.qty || 0)).toFixed(2)}`, 512, y, { width: 60, align: "right" });
     y += 22;
-    if (y > 630) break;
   }
 
-  const totalsY = Math.max(y + 16, 650);
+  let totalsY = y + 20;
+  if (totalsY > 700) {
+    doc.addPage({ size: "A4", margin: 0 });
+    totalsY = 80;
+  }
+
+  // Section divider between item list and totals, like other separators in the document.
+  const dividerY = totalsY - 10;
+  doc.moveTo(40, dividerY).lineTo(572, dividerY).strokeColor("#d1d5db").stroke();
   doc.fillColor(muted).font("Helvetica").fontSize(10);
   doc.text("SUBTOTAL", 420, totalsY);
   doc.fillColor(dark).text(`Rs ${subtotal.toFixed(2)}`, 500, totalsY, { width: 72, align: "right" });

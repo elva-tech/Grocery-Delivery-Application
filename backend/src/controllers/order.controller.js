@@ -1,6 +1,7 @@
 const Order = require("../models/Order.model");
 const Tenant = require("../models/Tenant.model");
 const CustomerInvoice = require("../models/CustomerInvoice.model");
+const Address = require("../models/Address.model");
 const Inventory = require("../models/Inventory.model");
 const Product = require("../models/Product.model");
 const mongoose = require("mongoose");
@@ -114,8 +115,9 @@ exports.placeCustomerOrder = async (req, res) => {
     const userId = req.user.userId;
     const tenantId = req.user.tenantId;
 
-    const placingUser = await User.findById(userId).select("name").lean();
+    const placingUser = await User.findById(userId).select("name phoneNumber").lean();
     const customerName = placingUser?.name || "";
+    const customerPhone = String(placingUser?.phoneNumber || "").trim();
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Please add items to place order" });
@@ -152,6 +154,12 @@ exports.placeCustomerOrder = async (req, res) => {
     }
 
     const normalizedDeliveryAddress = {
+      isMyAddress:
+        deliveryAddress?.isMyAddress !== undefined
+          ? Boolean(deliveryAddress.isMyAddress)
+          : true,
+      recipientName: String(deliveryAddress?.recipientName || "").trim(),
+      recipientPhone: String(deliveryAddress?.recipientPhone || "").trim(),
       line1,
       line2: String(deliveryAddress?.line2 || "").trim(),
       landmark,
@@ -287,10 +295,42 @@ exports.placeCustomerOrder = async (req, res) => {
 
     const paymentStatus = "PENDING";
 
+    let billingAddress = {
+      line1: normalizedDeliveryAddress.line1,
+      line2: normalizedDeliveryAddress.line2,
+      landmark: normalizedDeliveryAddress.landmark,
+      city: normalizedDeliveryAddress.city,
+      state: normalizedDeliveryAddress.state,
+      pincode: normalizedDeliveryAddress.pincode,
+    };
+
+    if (!normalizedDeliveryAddress.isMyAddress) {
+      const selfAddress = await Address.findOne({
+        tenantId,
+        userId,
+        isMyAddress: true,
+        isActive: true,
+      })
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+
+      if (selfAddress) {
+        billingAddress = {
+          line1: selfAddress.line1 || "",
+          line2: selfAddress.line2 || "",
+          landmark: selfAddress.landmark || "",
+          city: selfAddress.city || "",
+          state: selfAddress.state || "",
+          pincode: selfAddress.pincode || "",
+        };
+      }
+    }
+
     const order = await Order.create({
       tenantId,
       userId,
       customerName,
+      customerPhone,
       items: orderItems,
       totalAmount: grandTotal,
       deliveryCharge,
@@ -299,6 +339,7 @@ exports.placeCustomerOrder = async (req, res) => {
       couponDiscount,
       paymentMode,
       deliveryAddress: normalizedDeliveryAddress,
+      billingAddress,
       orderStatus: "PLACED",
       paymentStatus,
     });

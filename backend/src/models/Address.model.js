@@ -63,6 +63,16 @@ const addressSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    recipientName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    recipientPhone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     full: {
       type: String,
       default: "",
