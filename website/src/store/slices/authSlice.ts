@@ -16,6 +16,16 @@ const loadPersistedAuth = () => {
       const parsedUser = JSON.parse(user);
       const savedTenant = String(parsedUser?.tenantId || '').trim().toLowerCase();
       const currentTenant = String(getTenantId() || '').trim().toLowerCase();
+      if (!savedTenant) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('jwtToken');
+        return {
+          user: null,
+          token: null,
+          isAuthenticated: false,
+        };
+      }
       if (savedTenant && currentTenant && savedTenant !== currentTenant) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');

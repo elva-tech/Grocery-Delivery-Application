@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from "lottie-react-native";
 import { updateProfile } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
+import { getActiveTenantId } from "@/src/utils/tenantStorage";
 
 export default function OTP() {
   const router = useRouter();
@@ -75,6 +76,14 @@ export default function OTP() {
         mode === "signup" ? (name as string) : undefined,
         mode as "signup" | "login"
       );
+      if (!result.token || !result.user) throw new Error(result.message || 'Verification failed');
+      const currentTenant = String(await getActiveTenantId()).trim().toLowerCase();
+      const tokenTenant = String(result.user.tenantId || "").trim().toLowerCase();
+      if (currentTenant && tokenTenant && currentTenant !== tokenTenant) {
+        await AsyncStorage.multiRemove(['token', 'user', 'jwtToken']);
+        throw new Error('This account belongs to a different store. Please switch store and login again.');
+      }
+
       if (mode === "signup") {
         await updateProfile({
           name,
@@ -83,7 +92,6 @@ export default function OTP() {
           alternatePhone
         });
       }
-      if (!result.token || !result.user) throw new Error(result.message || 'Verification failed');
 
       await AsyncStorage.setItem('token', result.token);
       await AsyncStorage.setItem('user', JSON.stringify({
@@ -93,6 +101,7 @@ export default function OTP() {
         email: email || result.user.email,
         address: address || result.user.address,
         alternatePhone: alternatePhone || result.user.alternatePhone,
+        tenantId: result.user.tenantId || currentTenant,
       }));
 
       dispatch(setCredentials({
@@ -103,6 +112,7 @@ export default function OTP() {
 email: email || result.user.email,
 address: address || result.user.address,
 alternatePhone: alternatePhone || result.user.alternatePhone,
+tenantId: result.user.tenantId || currentTenant,
         },
         token: result.token,
       }));

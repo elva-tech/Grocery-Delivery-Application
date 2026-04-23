@@ -11,7 +11,7 @@ interface SidebarProps {
 }
 
 const CategorySidebar: React.FC<SidebarProps> = ({ selectedParentId, selectedSubId, onSelectParent, onSelectSub }) => {
-  const { data: categories = [] } = useGetCategoriesQuery();
+  const { data: categories = [], isLoading } = useGetCategoriesQuery();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -36,6 +36,11 @@ const CategorySidebar: React.FC<SidebarProps> = ({ selectedParentId, selectedSub
       </div>
 
       <div className="flex-1">
+        {isLoading && (
+          <div className="py-6 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Loading...
+          </div>
+        )}
         {parentCategories.map((parent: any) => {
           const isParentActive = selectedParentId === parent.id;
           const subCats = categories.filter((c: any) => c.parentId === parent.id);

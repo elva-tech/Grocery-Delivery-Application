@@ -97,7 +97,7 @@ export const AppStateProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
 
   /* -------- LOADING + ERROR STATE -------- */
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [riders, setRiders] = useState([]);
@@ -112,7 +112,12 @@ export const AppStateProvider = ({ children }) => {
   /* ---------- FETCH PRODUCTS FROM BACKEND ---------- */
   const fetchProductsFromAPI = useCallback(async () => {
     const token = localStorage.getItem('jwtToken');
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
       const data = await apiService.getInventory();
       const items = data.data || [];
@@ -129,6 +134,9 @@ export const AppStateProvider = ({ children }) => {
       sessionStorage.removeItem('app_categories');
     } catch (err) {
       console.error('Failed to fetch products:', err);
+      setError('Failed to load inventory data');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
