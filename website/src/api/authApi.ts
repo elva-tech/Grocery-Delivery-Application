@@ -17,6 +17,7 @@ export interface VerifyOtpResponse {
     id: string;
     phoneNumber: string;
     name?: string;
+    tenantId?: string;
   };
 }
 

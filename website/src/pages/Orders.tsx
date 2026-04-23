@@ -331,9 +331,30 @@ const loadOrders = async () => {
                   )}
 
                   {selectedOrder.status === 'OUT_FOR_DELIVERY' && (
-                    <button className="col-span-2 flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-400 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
-                       <Clock size={14} /> Tracking in Progress...
-                    </button>
+                    <div className="col-span-2 space-y-3">
+                      <button className="w-full flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-400 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
+                        <Clock size={14} /> Tracking in Progress...
+                      </button>
+                      <div className="border-2 border-blue-100 bg-blue-50 rounded-2xl p-4">
+                        <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-1">Delivery Partner</p>
+                        <p className="text-sm font-black text-slate-800">
+                          {selectedOrder.deliveryPartner?.name || 'Will be assigned soon'}
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                          {selectedOrder.deliveryPartner?.phoneNumber
+                            ? `Mobile: ${selectedOrder.deliveryPartner.phoneNumber}`
+                            : 'Mobile number will appear once assigned'}
+                        </p>
+                        {selectedOrder.deliveryPartner?.phoneNumber && (
+                          <a
+                            href={`tel:${selectedOrder.deliveryPartner.phoneNumber}`}
+                            className="inline-flex mt-3 items-center justify-center rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                          >
+                            Contact Partner
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   )}
 
                   {['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder.status) && (

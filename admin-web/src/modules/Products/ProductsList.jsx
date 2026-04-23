@@ -4,7 +4,7 @@ import DataTable from '../../components/shared/DataTable';
 import CustomButton from '../../components/shared/CustomButton';
 import ProductForm from './ProductForm';
 import CategoryForm from './CategoryForm';
-import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight, Search, X } from 'lucide-react';
+import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight, Search, X, Loader, AlertCircle } from 'lucide-react';
 import Pagination from '../../components/shared/Pagination';
 import usePagination from '../../hooks/usePagination';
 import { APP_CONFIG } from '../../config/appConfig';
@@ -36,7 +36,17 @@ const buildImagesPayload = (imageField) => {
 
 const ProductList = () => {
   const { showToast } = useToast();
-  const { products, categories, addProduct, updateProduct, deleteProduct, refreshProducts, addCategory } = useAppState();
+  const {
+    products,
+    categories,
+    loading,
+    error,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    refreshProducts,
+    addCategory,
+  } = useAppState();
 
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -337,7 +347,25 @@ const ProductList = () => {
         />
       )}
 
-      {!showForm && !editingItem && (
+      {!showForm && !editingItem && loading ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3">
+          <Loader className="w-8 h-8 text-emerald-600 animate-spin" />
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading inventory...</p>
+        </div>
+      ) : !showForm && !editingItem && error ? (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start gap-3">
+          <AlertCircle className="text-red-600 mt-0.5" size={18} />
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-red-700">{error}</p>
+            <button
+              onClick={() => refreshProducts()}
+              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : !showForm && !editingItem && (
         <>
           <DataTable
             columns={columns}

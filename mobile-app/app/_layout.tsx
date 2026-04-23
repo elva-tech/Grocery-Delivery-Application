@@ -16,7 +16,7 @@ import { setCredentials } from '@/store/slices/authSlice';
 import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
-import { extractTenantFromUrl, saveTenantId } from '@/src/utils/tenantStorage';
+import { extractTenantFromUrl, getActiveTenantId, saveTenantId } from '@/src/utils/tenantStorage';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -58,7 +58,14 @@ const isClosed = storeStatus?.isClosed;
           AsyncStorage.getItem(CART_STORAGE_KEY),
         ]);
         if (token && userStr) {
-          dispatch(setCredentials({ user: JSON.parse(userStr), token }));
+          const parsedUser = JSON.parse(userStr);
+          const savedTenant = String(parsedUser?.tenantId || '').trim().toLowerCase();
+          const activeTenant = String(await getActiveTenantId()).trim().toLowerCase();
+          if (!savedTenant || (activeTenant && savedTenant !== activeTenant)) {
+            await AsyncStorage.multiRemove(['token', 'user', 'jwtToken']);
+          } else {
+            dispatch(setCredentials({ user: parsedUser, token }));
+          }
         }
         if (cartStr) {
           dispatch(hydrateCart(JSON.parse(cartStr)));

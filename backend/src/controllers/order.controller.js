@@ -3,7 +3,6 @@ const Tenant = require("../models/Tenant.model");
 const CustomerInvoice = require("../models/CustomerInvoice.model");
 const Address = require("../models/Address.model");
 const Inventory = require("../models/Inventory.model");
-const Product = require("../models/Product.model");
 const mongoose = require("mongoose");
 const User = require("../models/User.model");
 const Settings = require("../models/Settings.model");
@@ -178,22 +177,6 @@ exports.placeCustomerOrder = async (req, res) => {
         return res.status(400).json({ message: "Invalid product details" });
       }
 
-      const productRow = await Product.findOne({
-        _id: item.productId,
-        tenantId,
-      })
-        .select("name")
-        .lean();
-
-      if (!productRow) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "This product is not available at your store. Clear your cart, confirm you are logged into the correct store, and try again.",
-          error: "Product not found for tenant",
-        });
-      }
-
       const inventory = await Inventory.findOne({
         productId: item.productId,
         tenantId,
@@ -202,7 +185,17 @@ exports.placeCustomerOrder = async (req, res) => {
       if (!inventory) {
         return res.status(400).json({
           success: false,
-          message: `No stock record for ${productRow.name}.`,
+          message:
+            "This product is not available at your store. Clear your cart, confirm you are logged into the correct store, and try again.",
+          error: "No inventory for product",
+        });
+      }
+
+      if (!inventory.productId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This product is not available at your store. Clear your cart, confirm you are logged into the correct store, and try again.",
           error: "No inventory for product",
         });
       }
@@ -394,7 +387,9 @@ exports.getCustomerOrderHistory = async (req, res) => {
     }
 
     const orders = await Order.find(filter)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .populate("riderId", "name phoneNumber")
+      .lean();
 
     const formattedOrders = orders.map(order => ({
       id: order._id,                          // ✅ IMPORTANT (frontend expects id)
@@ -407,6 +402,16 @@ exports.getCustomerOrderHistory = async (req, res) => {
       address: formatDeliveryAddressForCustomer(order.deliveryAddress),
       deliverySlot: order.deliverySlot || "Standard Delivery",
       invoiceAvailable: Boolean(order.invoiceAsset?.imageUrl),
+      deliveryPartner:
+        order.orderStatus === "OUT_FOR_DELIVERY"
+          ? {
+              name:
+                order.riderName ||
+                order.riderId?.name ||
+                "Delivery Partner",
+              phoneNumber: String(order.riderId?.phoneNumber || "").trim(),
+            }
+          : null,
 
       // ✅ SEND ITEMS PROPERLY
       items: order.items.map((item) => {

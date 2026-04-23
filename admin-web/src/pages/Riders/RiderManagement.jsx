@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import { apiService } from '../../services/apiService';
-import { Bike, UserPlus, Search, Phone, Truck, Zap, X, AlertTriangle, Package, ExternalLink } from 'lucide-react';
+import { Bike, UserPlus, Search, Phone, Truck, Zap, X, AlertTriangle, Package, ExternalLink, Loader2 } from 'lucide-react';
 
 const RiderManagement = () => {
   const { riders, orders, toggleRiderStatus, addRider } = useAppState();
@@ -10,24 +10,32 @@ const RiderManagement = () => {
   const [showWarning, setShowWarning] = useState(null); 
   const [viewTasks, setViewTasks] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [newRider, setNewRider] = useState({ name: '', phone: '', vehicle: 'Bike' });
   const [localRiders, setLocalRiders] = useState(riders);
 
   // Refetch riders when component mounts to get latest data
-  useEffect(() => {
-    const refetchRiders = async () => {
-      try {
-        const data = await apiService.getRiders();
-        const normalized = (data.data?.riders || []).map(r => ({
-          ...r,
-          id: r._id,
-        }));
-        setLocalRiders(normalized);
-      } catch (error) {
-        console.error("Failed to refetch riders:", error);
-      }
-    };
+  const refetchRiders = async () => {
+    try {
+      setInitialLoading(true);
+      setLoadError('');
+      const data = await apiService.getRiders();
+      const normalized = (data.data?.riders || []).map(r => ({
+        ...r,
+        id: r._id,
+      }));
+      setLocalRiders(normalized);
+    } catch (error) {
+      console.error("Failed to refetch riders:", error);
+      setLoadError('Failed to load delivery partners');
+      setLocalRiders([]);
+    } finally {
+      setInitialLoading(false);
+    }
+  };
 
+  useEffect(() => {
     refetchRiders();
   }, []);
 
@@ -119,8 +127,31 @@ const RiderManagement = () => {
         <input type="text" placeholder="Search by name..." className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl outline-none font-medium shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredRiders.map((rider) => (
+      {initialLoading ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading delivery partners...</p>
+        </div>
+      ) : loadError ? (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start gap-3">
+          <AlertTriangle className="text-red-500 mt-0.5" size={18} />
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-red-700">{loadError}</p>
+            <button
+              onClick={refetchRiders}
+              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : filteredRiders.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center text-slate-400 font-bold">
+          No delivery partners found.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredRiders.map((rider) => (
           <div key={rider.id} className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
             <div className={`absolute top-0 left-0 w-full h-1.5 ${rider.status === 'Online' ? 'bg-emerald-500' : 'bg-gray-300'}`} />
             
@@ -154,8 +185,9 @@ const RiderManagement = () => {
               </div>
             </div>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* MODAL: VIEW RIDER TASKS */}
       {viewTasks && (

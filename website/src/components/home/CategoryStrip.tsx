@@ -17,7 +17,7 @@ const CategoryStrip: React.FC<CategoryStripProps> = ({
   onSelectSub, 
   onSeeAll 
 }) => {
-  const { data: categories = [] } = useGetCategoriesQuery();
+  const { data: categories = [], isLoading } = useGetCategoriesQuery();
 
   // 1. Get Main Pillars
   const mainPillars = useMemo(() => 
@@ -43,6 +43,11 @@ const CategoryStrip: React.FC<CategoryStripProps> = ({
 
       {/* PILLARS ROW */}
       <div className="flex gap-5 overflow-x-auto no-scrollbar pb-4 -mx-2 px-2">
+        {isLoading && (
+          <div className="w-full py-6 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Loading categories...
+          </div>
+        )}
         {mainPillars.map((cat: any) => {
           const isActive = String(selectedId) === String(cat.id);
           return (

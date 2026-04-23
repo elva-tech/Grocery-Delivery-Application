@@ -25,7 +25,7 @@ interface FooterProps {
 const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
   const { storeName, tagline } = useTenantBranding();
   const brand = useMemo(() => splitBrandWords(storeName), [storeName]);
-  const { data: categories = [] } = useGetCategoriesQuery();
+  const { data: categories = [], isLoading: categoriesLoading } = useGetCategoriesQuery();
   const navigate = useNavigate();
 
   const usefulLinks = [
@@ -55,6 +55,11 @@ const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
           <div className="lg:col-span-8">
             <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-[0.2em] italic">Categories</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-y-4 gap-x-4">
+              {categoriesLoading && (
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 col-span-full">
+                  Loading categories...
+                </p>
+              )}
               {categories.map((cat: any) => (
                 <button 
                   key={cat.id} 

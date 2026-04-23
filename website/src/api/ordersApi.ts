@@ -109,6 +109,7 @@ export const getUserOrders = async () => {
       address: order.address,
       deliverySlot: order.deliverySlot,
       invoiceAvailable: Boolean(order.invoiceAvailable),
+      deliveryPartner: order.deliveryPartner || null,
       items: order.items || []
     }));
 
