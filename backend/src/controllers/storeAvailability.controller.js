@@ -40,11 +40,11 @@ async function patchSchedule(req, res) {
     const tenantId = req.user && req.user.tenantId;
     if (!tenantId) return res.status(400).json({ error: "tenantId missing from token" });
 
-    const { openTime, closeTime } = req.body;
+    const { openTime, closeTime, type, reason, startDate, endDate } = req.body;
     if (!openTime || !closeTime) {
       return res.status(400).json({ error: "openTime and closeTime are required" });
     }
-    const store = await setStoreSchedule(tenantId, openTime, closeTime);
+    const store = await setStoreSchedule(tenantId, openTime, closeTime, type, reason, startDate, endDate);
     res.json({ success: true, schedule: store.schedule, manualOverride: store.manualOverride });
   } catch (err) {
     res.status(400).json({ error: err.message });

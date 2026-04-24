@@ -4,7 +4,7 @@ import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 const BASE = API_BASE_URL.DEVELOPMENT;
 const tenantHeaders = async () => ({ 'x-tenant-id': await getActiveTenantId() });
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 /* ---------------- TYPES ---------------- */
 
 export interface AppSettings {
@@ -182,11 +182,43 @@ export const apiSlice = createApi({
       },
     }),
 
+
+    // COUPON FETCHING FOR USER
+    getCoupons: builder.query<any[], void>({
+  queryFn: async () => {
+    try {
+      const token = await AsyncStorage.getItem("token"); // IMPORTANT
+      const tenantId = await getActiveTenantId();
+
+      const res = await fetch(`${BASE}/api/coupons/active`, {
+        headers: {
+          'x-tenant-id': tenantId,
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) throw new Error("Failed to fetch coupons");
+
+      const data = await res.json();
+
+      return { data: data.coupons || [] };
+    } catch (e: any) {
+      return { error: { status: 'FETCH_ERROR', error: e.message } };
+    }
+  },
+}),
+
     /* ----------- STORE STATUS ----------- */
-    getStoreStatus: builder.query<{
-      isClosed: boolean;
+  getStoreStatus: builder.query<{
+      isOpen: boolean;
       reason: string;
       nextChange: string | null;
+      type: string;
+      startTime: string | null;
+      endTime: string | null;
+      startDate: string | null;
+      endDate: string | null;
+      manualOverride: boolean;
     }, void>({
       queryFn: async () => {
         try {
@@ -195,20 +227,32 @@ export const apiSlice = createApi({
           const data = await res.json();
           return {
             data: {
-              isClosed:   !data.isOpen,
-              reason:     data.reason ?? 'SCHEDULE',
-              nextChange: data.nextChange ?? null,
+              isOpen:         data.isOpen ?? true,
+              reason:         data.reason ?? '',
+              nextChange:     data.nextChange ?? null,
+              type:           data.type ?? 'TIME',
+              startTime:      data.startTime ?? null,
+              endTime:        data.endTime ?? null,
+              startDate:      data.startDate ?? null,
+              endDate:        data.endDate ?? null,
+              manualOverride: data.manualOverride ?? false,
             },
           };
         } catch {
-          // Fail open – don't block the app if the API is unreachable
-          return { data: { isClosed: false, reason: 'UNAVAILABLE', nextChange: null } };
+          return {
+            data: {
+              isOpen: true, reason: '', nextChange: null,
+              type: 'TIME', startTime: null, endTime: null,
+              startDate: null, endDate: null, manualOverride: false,
+            },
+          };
         }
       },
     }),
-
   }),
 });
+
+
 
 /* ---------------- EXPORTS ---------------- */
 
@@ -219,4 +263,5 @@ export const {
   useGetFeaturedProductsQuery,
   useGetAppSettingsQuery,
   useGetStoreStatusQuery,
+  useGetCouponsQuery,
 } = apiSlice;

@@ -42,31 +42,49 @@ const Schedule = () => {
     }
   };
 
-  const handleSave = async () => {
-    // Build UTC ISO strings from the form inputs
-    let openISO, closeISO;
+ const handleSave = async () => {
+    let openISO, closeISO, startDateISO = null, endDateISO = null;
 
     if (type === 'TIME') {
-      // Use today's date + the chosen time
-      const today = new Date().toISOString().slice(0, 10);
-      openISO  = new Date(`${today}T${form.startTime}:00`).toISOString();
-      closeISO = new Date(`${today}T${form.endTime}:00`).toISOString();
+      if (!form.startTime || !form.endTime) {
+        alert("Please set both open and close times.");
+        return;
+      }
+      const now = new Date();
+      const openLocal = new Date(
+        now.getFullYear(), now.getMonth(), now.getDate(),
+        Number(form.startTime.split(":")[0]), Number(form.startTime.split(":")[1])
+      );
+      const closeLocal = new Date(
+        now.getFullYear(), now.getMonth(), now.getDate(),
+        Number(form.endTime.split(":")[0]), Number(form.endTime.split(":")[1])
+      );
+      openISO  = openLocal.toISOString();
+      closeISO = closeLocal.toISOString();
     } else {
-      // DATE mode – combine date + time
-      openISO  = new Date(`${form.startDate}T${form.startTime || '00:00'}:00`).toISOString();
-      closeISO = new Date(`${form.endDate}T${form.endTime || '23:59'}:00`).toISOString();
+      // DATE mode — openTime/closeTime = start/end of the closure period
+      if (!form.startDate || !form.endDate) {
+        alert("Please set both start and end dates.");
+        return;
+      }
+      openISO       = new Date(`${form.startDate}T${form.startTime || '00:00'}:00`).toISOString();
+      closeISO      = new Date(`${form.endDate}T${form.endTime   || '23:59'}:00`).toISOString();
+      startDateISO  = openISO;
+      endDateISO    = closeISO;
     }
 
-    await saveSchedule({ openTime: openISO, closeTime: closeISO });
-
-    setCurrentSchedule({
+    await saveSchedule({
+      openTime:  openISO,
+      closeTime: closeISO,
       type,
-      ...form,
-      isActive: true
+      reason:    form.reason || "",
+      startDate: startDateISO,
+      endDate:   endDateISO,
     });
 
+    setCurrentSchedule({ type, ...form, isActive: true });
     setShowPopup(true);
-    setTimeout(() => setShowPopup(false), 2000);
+    setTimeout(() => setShowPopup(false), 2500);
   };
 
   return (

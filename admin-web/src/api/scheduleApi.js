@@ -23,21 +23,31 @@ export const getSchedule = async () => {
   try {
     const res = await api.get("/api/store/status");
     const data = res.data;
-    // Map backend shape to what Schedule.jsx expects
+    const scheduleType = data.schedule?.type ?? data.type ?? "TIME";
+
     return {
-      isActive:  data.schedule?.openTime != null && !data.manualOverride,
-      isOpen:    data.isOpen,
-      reason:    data.reason,
-      nextChange: data.nextChange,
-      schedule:  data.schedule,
+      isActive:       data.schedule?.openTime != null && !data.manualOverride,
+      isOpen:         data.isOpen,
+      reason:         data.reason ?? "",
+      nextChange:     data.nextChange ?? null,
+      schedule:       data.schedule,
       manualOverride: data.manualOverride,
-      // Legacy-compat fields used by Schedule.jsx active-schedule display
-      type:      "TIME",
+      type:           scheduleType,
+
+      // TIME fields — HH:MM for the inputs
       startTime: data.schedule?.openTime
         ? new Date(data.schedule.openTime).toTimeString().slice(0, 5)
         : null,
       endTime: data.schedule?.closeTime
         ? new Date(data.schedule.closeTime).toTimeString().slice(0, 5)
+        : null,
+
+      // DATE fields — full ISO for date inputs
+      startDate: data.schedule?.startDate
+        ? new Date(data.schedule.startDate).toISOString().slice(0, 10)
+        : null,
+      endDate: data.schedule?.endDate
+        ? new Date(data.schedule.endDate).toISOString().slice(0, 10)
         : null,
     };
   } catch {
@@ -47,7 +57,6 @@ export const getSchedule = async () => {
 
 // SAVE schedule  { openTime: ISO, closeTime: ISO }
 export const saveSchedule = async (data) => {
-  // If isActive: false, caller wants to stop schedule → manual override open
   if (data.isActive === false) {
     await api.patch("/api/store/status", { isOpen: true });
     return { success: true };
@@ -55,6 +64,10 @@ export const saveSchedule = async (data) => {
   const res = await api.patch("/api/store/schedule", {
     openTime:  data.openTime,
     closeTime: data.closeTime,
+    type:      data.type      ?? "TIME",
+    reason:    data.reason    ?? "",
+    startDate: data.startDate ?? null,
+    endDate:   data.endDate   ?? null,
   });
   return res.data;
 };

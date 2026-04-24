@@ -186,3 +186,25 @@ exports.validateCoupon = async (req, res) => {
     res.status(500).json({ valid: false, message: "Server error" });
   }
 };
+
+
+   // public endpoint for users to fetch coupons
+    exports.getActiveCoupons = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    const now = new Date();
+
+    const coupons = await Coupon.find({
+      tenantId,
+      isActive: true,
+      validFrom: { $lte: now },
+      validTo: { $gte: now },
+    }).sort({ createdAt: -1 });
+
+    res.json({ coupons });
+  } catch (err) {
+    console.error("[coupon] getActiveCoupons error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};

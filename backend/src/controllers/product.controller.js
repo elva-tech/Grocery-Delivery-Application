@@ -660,11 +660,12 @@ const getAvailableProducts = async (req, res) => {
     }
 
     const visibility = tenantPolicy.buildProductTenantRoot(tenantId);
-    const matchClauses = [
-      visibility,
-      { isAvailable: true },
-      { $or: [{ isActive: true }, { isActive: { $exists: false } }] },
-    ];
+
+    // out of stock
+ const matchClauses = [
+  visibility,
+  { $or: [{ isActive: true }, { isActive: { $exists: false } }] },
+];
     if (category) {
       const safeCategory = escapeRegex(category);
       matchClauses.push({
@@ -687,7 +688,7 @@ const getAvailableProducts = async (req, res) => {
         },
       },
       { $unwind: "$inventory" },
-      { $match: { "inventory.availableQty": { $gt: 0 } } },
+      // { $match: { "inventory.availableQty": { $gt: 0 } } },
       {
         $addFields: {
           imagesNorm: {

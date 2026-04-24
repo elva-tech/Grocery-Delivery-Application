@@ -30,6 +30,7 @@ export default function ProductDetailScreen() {
   // Data Fetching
   const { data: allProducts } = useGetProductsQuery();
   const product = allProducts?.find(p => p.id === id);
+  const isOutOfStock = product?.stock === 0;
 
   // FIX: Explicitly checking if THIS specific ID is in the cart
   const cartItem = useSelector((state: RootState) =>
@@ -63,6 +64,7 @@ export default function ProductDetailScreen() {
   const primaryImage = resolveProductImageUri(product);
 
   const handleAddToCart = () => {
+    if (product?.stock === 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     dispatch(addToCart({ ...product, image: primaryImage ?? undefined }));
     showToast('success', 'Added!', `${product.name} added to basket`);
@@ -224,9 +226,18 @@ export default function ProductDetailScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.addBtn} onPress={handleAddToCart}>
+          <TouchableOpacity
+            style={[
+              styles.addBtn,
+              isOutOfStock && { backgroundColor: '#cbd5e1' }
+            ]}
+            onPress={handleAddToCart}
+            disabled={isOutOfStock}
+          >
             <Ionicons name="basket-outline" size={20} color="#fff" />
-            <Text style={styles.addBtnText}>Add to Basket</Text>
+            <Text style={styles.addBtnText}>
+              {isOutOfStock ? 'Out of Stock' : 'Add to Basket'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -292,25 +303,25 @@ const styles = StyleSheet.create({
   iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 1 },
   featureText: { fontSize: 15, color: '#2c3e50', fontWeight: '600' },
 
-basketRedirect: {
-    marginTop: 25, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  basketRedirect: {
+    marginTop: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f0f7ff', 
-    padding: 16, 
-    borderRadius: 18, 
-    borderWidth: 1, 
+    backgroundColor: '#f0f7ff',
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
     borderColor: '#d0e3ff'
   },
-  redirectInner: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 10 
+  redirectInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
   },
-  basketRedirectText: { 
-    color: BRAND_BLUE, 
-    fontWeight: '700', 
+  basketRedirectText: {
+    color: BRAND_BLUE,
+    fontWeight: '700',
     fontSize: 15,
     letterSpacing: -0.3 // Gives it a more premium, tight look
   },

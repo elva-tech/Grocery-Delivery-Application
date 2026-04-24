@@ -114,14 +114,35 @@ export const apiSlice = createApi({
   endpoints: (builder) => ({
 
     /* ----------- SETTINGS (Remote Config) ----------- */
+    // getAppSettings: builder.query<AppSettings, void>({
+    //   queryFn: () => ({
+    //     data: {
+    //       allowRefunds: true,
+    //       allowReportIssue: false,
+    //       allowOrderCancellation: true
+    //     }
+    //   }),
+    // }),
+
     getAppSettings: builder.query<AppSettings, void>({
-      queryFn: () => ({
-        data: {
-          allowRefunds: true,
-          allowReportIssue: false,
-          allowOrderCancellation: true
+      queryFn: async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/settings`, {
+            headers: { 'x-tenant-id': getTenantId() },
+          });
+          if (!res.ok) throw new Error('settings fetch failed');
+          const s = await res.json();
+          return {
+            data: {
+              allowRefunds: s.allowRefunds ?? true,
+              allowReportIssue: s.allowReportIssue ?? true,
+              allowOrderCancellation: s.allowOrderCancellation ?? true,
+            },
+          };
+        } catch {
+          return { data: { allowRefunds: true, allowReportIssue: true, allowOrderCancellation: true } };
         }
-      }),
+      },
     }),
 
     /* ----------- CATEGORIES (derived from products) ----------- */
@@ -211,10 +232,17 @@ export const apiSlice = createApi({
     // ----------- STORE STATUS (SCHEDULE) ----------- //
 
     getStoreStatus: builder.query<{
-      isClosed: boolean;
+      isOpen: boolean;
       reason: string;
       nextChange: string | null;
+      type: string;
+      startTime: string | null;
+      endTime: string | null;
+      startDate: string | null;
+      endDate: string | null;
+      manualOverride: boolean;
     }, void>({
+      keepUnusedDataFor: 60,
       queryFn: async () => {
         try {
           const res = await fetch(`${API_BASE_URL}/api/store/status`, {
@@ -224,18 +252,52 @@ export const apiSlice = createApi({
           const data = await res.json();
           return {
             data: {
-              isClosed:   !data.isOpen,
-              reason:     data.reason ?? 'SCHEDULE',
+              isOpen: data.isOpen ?? true,
+              reason: data.reason ?? '',
               nextChange: data.nextChange ?? null,
+              type: data.type ?? 'TIME',
+              startTime: data.startTime ?? null,
+              endTime: data.endTime ?? null,
+              startDate: data.startDate ?? null,
+              endDate: data.endDate ?? null,
+              manualOverride: data.manualOverride ?? false,
             },
           };
         } catch {
-          // Fail open – don't block the store if the API is unreachable
-          return { data: { isClosed: false, reason: 'UNAVAILABLE', nextChange: null } };
+          return {
+            data: {
+              isOpen: true, reason: '', nextChange: null,
+              type: 'TIME', startTime: null, endTime: null,
+              startDate: null, endDate: null, manualOverride: false,
+            },
+          };
         }
       },
     }),
 
+    // ----------- ACTIVE COUPONS ----------- //
+
+    getCoupons: builder.query<any[], void>({
+      queryFn: async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/coupons/active`, {
+            headers: {
+              'x-tenant-id': getTenantId(),
+              'Authorization': `Bearer ${localStorage.getItem("token")}`,
+            },
+          });
+
+          if (!res.ok) throw new Error("Failed to fetch coupons");
+
+          const data = await res.json();
+
+          return { data: data.coupons || [] };
+        } catch (err: any) {
+          console.error("COUPON FETCH ERROR:", err);
+          return { error: { status: 'FETCH_ERROR', error: err.message } };
+        }
+      },
+    }),
     /* ----------- CART & BILLING ----------- */
     calculateCart: builder.mutation<{
       subtotal: number;
@@ -304,5 +366,6 @@ export const {
   useGetProductsByCategoryQuery,
   useCalculateCartMutation,
   useGetAppSettingsQuery,
-  useGetStoreStatusQuery
+  useGetStoreStatusQuery,
+  useGetCouponsQuery,
 } = apiSlice;

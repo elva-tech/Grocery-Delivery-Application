@@ -11,6 +11,8 @@ import * as Location from 'expo-location';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { useDispatch, useSelector } from 'react-redux';
 
+import { useGetCouponsQuery } from '@/api/apiSlice'
+
 import RazorpayCheckout from 'react-native-razorpay';
 
 import { clearCart } from '@/store/slices/cartSlice';
@@ -102,6 +104,8 @@ export default function AddressesScreen() {
   const [region, setRegion] = useState<any>(null);
   const [isFetchingAddress, setIsFetchingAddress] = useState(false);
   const geocodeAbortRef = useRef<AbortController | null>(null);
+
+  const { data: coupons = [] } = useGetCouponsQuery();
 
   useEffect(() => { load(); }, []);
 
@@ -275,15 +279,15 @@ export default function AddressesScreen() {
         orderMode === 'self'
           ? addresses.find((a: any) => a.id === selectedId)
           : {
-              line1: othersForm.line1,
-              line2: othersForm.line2,
-              landmark: othersForm.landmark,
-              city: othersForm.city,
-              state: othersForm.state,
-              pincode: othersForm.pincode,
-              lat: 0,
-              lng: 0,
-            };
+            line1: othersForm.line1,
+            line2: othersForm.line2,
+            landmark: othersForm.landmark,
+            city: othersForm.city,
+            state: othersForm.state,
+            pincode: othersForm.pincode,
+            lat: 0,
+            lng: 0,
+          };
 
       if (!deliverySource) {
         showToast('error', 'Address', 'Select a delivery address');
@@ -563,74 +567,112 @@ export default function AddressesScreen() {
                 <Ionicons name="arrow-forward" size={14} color="#4b6f9e" />
               </TouchableOpacity>
             </View>
-            
-      ) : (
-  <View>
-    <View style={styles.couponRow}>
-      {appliedCoupon ? (
-        <View style={styles.couponApplied}>
-          <Ionicons name="pricetag" size={15} color="#16a34a" />
-          <Text style={styles.couponAppliedText}>
-            {appliedCoupon.code} · –₹{appliedCoupon.discountAmount}
-          </Text>
-          <TouchableOpacity onPress={handleRemoveCoupon} style={{ marginLeft: 6 }}>
-            <Ionicons name="close-circle" size={17} color="#dc2626" />
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <TextInput
-            style={styles.couponInput}
-            placeholder="Coupon code"
-            placeholderTextColor="#94a3b8"
-            value={couponInput}
-            onChangeText={t => { setCouponInput(t.toUpperCase()); setCouponError(''); }}
-            autoCapitalize="characters"
-            returnKeyType="done"
-            onSubmitEditing={handleApplyCoupon}
-          />
-          <TouchableOpacity
-            style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon) && { opacity: 0.5 }]}
-            onPress={handleApplyCoupon}
-            disabled={!couponInput.trim() || isApplyingCoupon}
-          >
-            {isApplyingCoupon ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.couponApplyText}>Apply</Text>
-            )}
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
 
-    {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
+          ) : (
+            <View>
+              {coupons.length > 0 && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', marginBottom: 6 }}>
+                    AVAILABLE COUPONS
+                  </Text>
 
-    <TouchableOpacity 
-      style={[styles.confirmBtn, isPlacingOrder && { opacity: 0.8 }]} 
-      onPress={handleFinalConfirm} 
-      disabled={isPlacingOrder}
-      activeOpacity={0.85}
-    >
-      <View style={styles.confirmBtnInner}>
-        {isPlacingOrder ? (
-          <ActivityIndicator color="#fff" style={{ flex: 1 }} />
-        ) : (
-          <>
-            <View style={styles.confirmBtnLeft}>
-              <Text style={styles.confirmBtnItemCount}>{items.length} item{items.length > 1 ? 's' : ''}</Text>
-              <Text style={styles.confirmBtnText}>Pay & Place Order</Text>
+                  {coupons.map((c: any) => (
+                    <TouchableOpacity
+                      key={c._id}
+                      onPress={() => {
+                        setCouponInput(c.code);
+                        handleApplyCoupon();
+                      }}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: '#e2e8f0',
+                        borderRadius: 10,
+                        padding: 10,
+                        marginBottom: 6,
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <View>
+                        <Text style={{ fontWeight: '800', color: '#7c3aed' }}>{c.code}</Text>
+                        <Text style={{ fontSize: 11, color: '#64748b' }}>
+                          {c.description || 'No description'}
+                        </Text>
+                      </View>
+
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#16a34a' }}>
+                        TAP
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              <View style={styles.couponRow}>
+                {appliedCoupon ? (
+                  <View style={styles.couponApplied}>
+                    <Ionicons name="pricetag" size={15} color="#16a34a" />
+                    <Text style={styles.couponAppliedText}>
+                      {appliedCoupon.code} · –₹{appliedCoupon.discountAmount}
+                    </Text>
+                    <TouchableOpacity onPress={handleRemoveCoupon} style={{ marginLeft: 6 }}>
+                      <Ionicons name="close-circle" size={17} color="#dc2626" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <TextInput
+                      style={styles.couponInput}
+                      placeholder="Coupon code"
+                      placeholderTextColor="#94a3b8"
+                      value={couponInput}
+                      onChangeText={t => { setCouponInput(t.toUpperCase()); setCouponError(''); }}
+                      autoCapitalize="characters"
+                      returnKeyType="done"
+                      onSubmitEditing={handleApplyCoupon}
+                    />
+                    <TouchableOpacity
+                      style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon) && { opacity: 0.5 }]}
+                      onPress={handleApplyCoupon}
+                      disabled={!couponInput.trim() || isApplyingCoupon}
+                    >
+                      {isApplyingCoupon ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.couponApplyText}>Apply</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+
+              {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.confirmBtn, isPlacingOrder && { opacity: 0.8 }]}
+                onPress={handleFinalConfirm}
+                disabled={isPlacingOrder}
+                activeOpacity={0.85}
+              >
+                <View style={styles.confirmBtnInner}>
+                  {isPlacingOrder ? (
+                    <ActivityIndicator color="#fff" style={{ flex: 1 }} />
+                  ) : (
+                    <>
+                      <View style={styles.confirmBtnLeft}>
+                        <Text style={styles.confirmBtnItemCount}>{items.length} item{items.length > 1 ? 's' : ''}</Text>
+                        <Text style={styles.confirmBtnText}>Pay & Place Order</Text>
+                      </View>
+                      <View style={styles.confirmBtnRight}>
+                        <Text style={styles.confirmBtnAmount}>₹{finalAmount}</Text>
+                        <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.8)" />
+                      </View>
+                    </>
+                  )}
+                </View>
+              </TouchableOpacity>
             </View>
-            <View style={styles.confirmBtnRight}>
-              <Text style={styles.confirmBtnAmount}>₹{finalAmount}</Text>
-              <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.8)" />
-            </View>
-          </>
-        )}
-      </View>
-    </TouchableOpacity>
-  </View>
-)}
+          )}
         </View>
       )}
 

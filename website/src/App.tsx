@@ -34,6 +34,79 @@ import ContactUs from './pages/ContactUs';
 
 const TENANT_SCOPE_KEY = 'website_cart_tenant_scope';
 
+const formatTime = (iso?: string | null) => {
+  if (!iso) return '';
+
+  return new Date(iso).toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  });
+};
+
+
+const ClosingWarningCard = ({ show, countdown, endTime, formatCountdown, formatTime }: {
+  show: boolean;
+  countdown: number;
+  endTime: string | null | undefined;
+  formatCountdown: (secs: number) => string;
+  formatTime: (iso: string) => string;
+}) => {
+  if (!show) return null;
+
+  // Goes red as time runs out: >3min = amber, 1-3min = orange, <1min = red
+  const pct = countdown / 300;
+  const gradient = countdown > 180
+    ? 'from-amber-400 to-orange-400'
+    : countdown > 60
+      ? 'from-orange-400 to-red-400'
+      : 'from-red-500 to-red-600';
+  const pulse = countdown <= 60 ? 'animate-pulse' : '';
+
+  return (
+    <div className={`w-full mb-4 rounded-2xl bg-gradient-to-r ${gradient} p-[2px] shadow-lg animate-fadeIn`}>
+      <div className="bg-white rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+        {/* Icon */}
+        <div className={`shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md ${pulse}`}>
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+
+        {/* Text */}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Closing Soon</p>
+          <p className="text-sm font-bold text-slate-800 leading-tight">
+            Complete your order before{' '}
+            <span className={`font-black bg-gradient-to-r ${gradient} bg-clip-text text-transparent`}>
+              {formatTime(endTime)}
+            </span>
+          </p>
+        </div>
+
+        {/* Countdown */}
+        <div className={`shrink-0 text-right`}>
+          <p className={`text-2xl font-black tabular-nums bg-gradient-to-r ${gradient} bg-clip-text text-transparent ${pulse}`}>
+            {formatCountdown(countdown)}
+          </p>
+          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">remaining</p>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-3 pb-2 pt-1">
+        <div className="h-1 w-full bg-white/40 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-white rounded-full transition-all duration-1000"
+            style={{ width: `${pct * 100}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const App = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -80,12 +153,79 @@ const App = () => {
   const timerRef = useRef<any>(null);
 
 
-  const { data: storeStatus } = useGetStoreStatusQuery(undefined, {
-    pollingInterval: 30000 // Every 30 seconds: call API again → update UI automatically
+  const { data: storeStatus, refetch: refetchStoreStatus } = useGetStoreStatusQuery(undefined, {
+    pollingInterval: 5000 // Every 30 seconds: call API again → update UI automatically
   });
 
-  const isClosed = storeStatus?.isClosed ?? false;
-  const reason = storeStatus?.reason ?? "";
+  const isClosed = !(storeStatus?.isOpen ?? true);
+  const reason   = storeStatus?.reason ?? "";
+
+  // ── 5-minute closing warning ───────────────────────────────────────────────
+const [showClosingWarning, setShowClosingWarning] = useState(false);
+  const [closingCountdown, setClosingCountdown]     = useState(300);
+  const cachedEndTime = useRef<string | null>(null);
+  const intervalRef = useRef<any>(null);
+
+
+   const refetchRef = useRef(refetchStoreStatus);
+  useEffect(() => { refetchRef.current = refetchStoreStatus; }, [refetchStoreStatus]);
+  const startCountdown = () => {
+    const endTimeToUse = cachedEndTime.current;
+    if (!endTimeToUse) return;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    const endMs      = new Date(endTimeToUse).getTime();
+    const fiveMinsMs = 5 * 60 * 1000;
+    const tick = () => {
+      const msLeft = endMs - Date.now();
+      if (msLeft <= fiveMinsMs && msLeft > 0) {
+        setShowClosingWarning(true);
+        setClosingCountdown(Math.floor(msLeft / 1000));
+      } else {
+        setShowClosingWarning(false);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        if (msLeft <= 0) refetchRef.current();
+      }
+    };
+    tick();
+    intervalRef.current = setInterval(tick, 1000);
+  };
+
+  useEffect(() => {
+    if (storeStatus?.endTime) cachedEndTime.current = storeStatus.endTime;
+    if (storeStatus && !storeStatus.isOpen) {
+      setShowClosingWarning(false);
+      return;
+    }
+    startCountdown();
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [storeStatus?.isOpen, storeStatus?.endTime]);
+
+  const formatCountdown = (secs) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+
+  // Restart countdown when tab becomes visible again
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') startCountdown();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
+  // Watch for store open time — refetch instantly when it arrives
+  useEffect(() => {
+    if (!isClosed || !storeStatus?.nextChange) return;
+    const openMs = new Date(storeStatus.nextChange).getTime();
+    const msUntilOpen = openMs - Date.now();
+    if (msUntilOpen <= 0 || msUntilOpen > 10 * 60 * 1000) return;
+    const id = setTimeout(() => refetchStoreStatus(), msUntilOpen);
+    return () => clearTimeout(id);
+  }, [isClosed, storeStatus?.nextChange]);
+
 
   // RESET LOGIC: Clears filters when switching between Home and Browse
   useEffect(() => {
@@ -188,46 +328,64 @@ const App = () => {
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc] text-[#1e293b] font-sans">
 
+
+      {/* ── Store closed overlay ── */}
       {isClosed && (
         <div className="fixed inset-0 bg-gradient-to-br from-black/70 to-black/50 backdrop-blur-md z-[9999] flex items-center justify-center px-4">
+          <div className="bg-white p-8 rounded-3xl text-center max-w-md w-full shadow-2xl animate-fadeIn">
 
-          <div className="bg-white p-8 rounded-3xl text-center max-w-md w-full shadow-2xl transform animate-fadeIn">
-
-            {/* Icon */}
             <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-lg">
               <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
 
-            {/* Title */}
-            <h2 className="text-2xl font-black mb-3 text-gray-900">
-              Store Closed
-            </h2>
+            <h2 className="text-2xl font-black mb-3 text-gray-900">Store Closed</h2>
 
-            {/* Reason */}
             <p className="text-base text-gray-600 mb-6 leading-relaxed">
               {reason || "We are currently not accepting orders"}
             </p>
 
-            {storeStatus?.nextChange && (
-              <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-                <p className="text-sm font-semibold text-red-700">
-                  Next update
+            {/* REGULAR schedule */}
+            {storeStatus?.type === "TIME" && storeStatus?.startTime && storeStatus?.endTime && (
+              <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-left">
+                <p className="text-sm font-bold text-red-700 mb-1">Store Timings</p>
+                <p className="text-sm text-red-600 font-semibold">
+                  {formatTime(storeStatus.startTime)} → {formatTime(storeStatus.endTime)}
                 </p>
-                <p className="text-sm text-red-600 mt-1">
-                  {storeStatus.nextChange}
-                </p>
+                <p className="text-xs text-gray-400 mt-1">Daily schedule</p>
               </div>
             )}
 
-            {/* Optional: Contact Info */}
-            <p className="text-xs text-gray-500 mt-6">
+            {/* OCCASIONAL schedule */}
+            {storeStatus?.type === "DATE" && storeStatus?.startDate && storeStatus?.endDate && (
+              <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-left">
+                <p className="text-sm font-bold text-orange-700 mb-2">Temporarily Closed</p>
+                <div className="flex items-center gap-2 text-sm text-orange-700 font-semibold">
+                  <span>
+                    {new Date(storeStatus.startDate).toLocaleString('en-IN', {
+                      day: 'numeric', month: 'short',
+                      hour: 'numeric', minute: '2-digit', hour12: true,
+                    })}
+                  </span>
+                  <span className="text-orange-400">→</span>
+                  <span>
+                    {new Date(storeStatus.endDate).toLocaleString('en-IN', {
+                      day: 'numeric', month: 'short',
+                      hour: 'numeric', minute: '2-digit', hour12: true,
+                    })}
+                  </span>
+                </div>
+                {storeStatus?.reason && (
+                  <p className="text-xs text-gray-500 mt-2 font-medium">{storeStatus.reason}</p>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400 mt-6">
               Please check back later or contact us for more information
             </p>
-
           </div>
-
         </div>
       )}
 
@@ -273,6 +431,13 @@ const App = () => {
           <Routes>
             <Route path="/" element={
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <ClosingWarningCard
+                  show={showClosingWarning}
+                  countdown={closingCountdown}
+                  endTime={storeStatus?.endTime}
+                  formatCountdown={formatCountdown}
+                  formatTime={formatTime}
+                />
                 <PromoBanners />
                 <LeafBanner />
                 <CategoryStrip
@@ -318,6 +483,7 @@ const App = () => {
                   )}
                 </div>
 
+      
                 <ProductGrid products={paginatedProducts} />
                 <Pagination
                   totalItems={filteredProducts.length}
@@ -362,6 +528,13 @@ const App = () => {
                     </p>
                   )}
                 </div>
+                <ClosingWarningCard
+                  show={showClosingWarning}
+                  countdown={closingCountdown}
+                  endTime={storeStatus?.endTime}
+                  formatCountdown={formatCountdown}
+                  formatTime={formatTime}
+                />
                 <ProductGrid products={paginatedProducts} />
                 <Pagination
                   totalItems={filteredProducts.length}

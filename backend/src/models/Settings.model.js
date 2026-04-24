@@ -18,6 +18,10 @@ const settingsSchema = new mongoose.Schema(
       default: 500,
       min: 0,
     },
+    allowReportIssue: {
+  type: Boolean,
+  default: true
+},
     discountType: {
       type: String,
       enum: ["NONE", "PERCENTAGE", "FLAT"],

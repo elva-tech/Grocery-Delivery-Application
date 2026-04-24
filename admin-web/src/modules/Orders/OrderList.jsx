@@ -107,12 +107,26 @@ const OrderList = () => {
   };
 
   const columns = [
-    { header: 'Order ID', accessor: 'id' },
+{
+  header: 'Order ID',
+  render: (_, row) => {
+    const orderId = row.id || row._id;
+    return (
+      <span>
+        {orderId ? `${orderId.slice(0, 6)}...` : '-'}
+      </span>
+    );
+  }
+},
     { header: 'Customer', render: (_, row) => row.customerName || row.customer || 'Guest User' },
     {
       header: 'Address',
       render: (_, row) => (
-        <span className="text-xs truncate max-w-[200px] block">{row.address?.full || 'No Address'}</span>
+        <span className="text-xs max-w-[200px] block">
+  {row.address?.full
+    ? `${row.address.full.slice(0, 15)}...`
+    : 'No Address'}
+</span>
       )
     },
     {

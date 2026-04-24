@@ -136,7 +136,7 @@ export default function HomeScreen() {
           const list = json.banners ?? json ?? [];
           if (list.length) setBanners(list.map((b: any) => ({ id: b._id ?? b.id, imageUrl: b.imageUrl, image: b.image, title: b.title })));
         })
-        .catch(() => {});
+        .catch(() => { });
     })();
   }, []);
 
@@ -295,33 +295,51 @@ export default function HomeScreen() {
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
         renderItem={({ item }) => {
+          const isOutOfStock = item.stock === 0;
           const thumb = resolveProductImageUri(item);
           return (
-          <TouchableOpacity
-            style={styles.productCard}
-            onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
-          >
-            <View style={styles.imageWrapper}>
-              {thumb ? (
-                <Image
-                  source={{ uri: thumb }}
-                  style={styles.productImage}
-                  contentFit={getFitMode(thumb)}
-                />
-              ) : (
-                <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
-                  <Ionicons name="image-outline" size={28} color="#94a3b8" />
-                </View>
-              )}
-            </View>
-            <View style={styles.productInfo}>
-              <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-              <Text style={styles.productPrice}>₹{item.price}</Text>
-              <TouchableOpacity style={[styles.addButton, isStoreClosed && { backgroundColor: '#94a3b8' }]} onPress={() => handleAddToCart(item)}>
-                <Text style={styles.addText}>ADD</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.productCard}
+              onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
+            >
+              <View style={styles.imageWrapper}>
+                {isOutOfStock && (
+                  <View style={{
+                    position: 'absolute',
+                    top: 2,
+                    left: 2,
+                    backgroundColor: '#ef4444',
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 4,
+                    zIndex: 10
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>
+                      OUT OF STOCK
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.productInfo}>
+                <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+                <Text style={styles.productPrice}>₹{item.price}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.addButton,
+                    (isStoreClosed || isOutOfStock) && { backgroundColor: '#94a3b8', borderColor: '#94a3b8' }
+                  ]}
+                  onPress={() => {
+                    if (isOutOfStock) return;
+                    handleAddToCart(item);
+                  }}
+                  disabled={isStoreClosed || isOutOfStock}
+                >
+                  <Text style={styles.addText}>
+                    {isOutOfStock ? 'OUT' : 'ADD'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
           );
         }}
       />

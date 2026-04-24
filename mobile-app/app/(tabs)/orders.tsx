@@ -49,7 +49,7 @@ export default function OrdersScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
   const { token } = useSelector((state: RootState) => state.auth);
-  
+
   // INTEGRATED: Fetch remote settings
   const { data: settings } = useGetAppSettingsQuery();
 
@@ -70,7 +70,7 @@ export default function OrdersScreen() {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmConfig, setConfirmConfig] = useState<{title: string, msg: string, action: () => void} | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{ title: string, msg: string, action: () => void } | null>(null);
 
   // ── Rating state ──────────────────────────────────────────────────────────
   const [ratingOrder, setRatingOrder] = useState<any>(null);  // order pending a rating prompt
@@ -180,7 +180,7 @@ export default function OrdersScreen() {
       action: async () => {
         try {
           // #region agent log
-          fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H2',location:'orders.tsx:cancelAction',message:'Calling cancel API',data:{orderId:orderToCancel?.id??null},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'eaad9a' }, body: JSON.stringify({ sessionId: 'eaad9a', runId: 'pre-fix', hypothesisId: 'H2', location: 'orders.tsx:cancelAction', message: 'Calling cancel API', data: { orderId: orderToCancel?.id ?? null }, timestamp: Date.now() }) }).catch(() => { });
           // #endregion
           await cancelOrderApi(orderToCancel.id);
           setOrders(prev =>
@@ -235,7 +235,7 @@ export default function OrdersScreen() {
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('success', 'Report Sent', 'Admin will review.');
-      
+
       setShowIssueModal(false);
       setSelectedOrder(null);
       resetIssueReportFields();
@@ -259,7 +259,7 @@ export default function OrdersScreen() {
     setIsSubmittingRating(true);
     try {
       // #region agent log
-      fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H2',location:'orders.tsx:submitRating',message:'Submitting rating',data:{orderId:ratingOrder?._id??ratingOrder?.id??null,rating:starValue},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'eaad9a' }, body: JSON.stringify({ sessionId: 'eaad9a', runId: 'pre-fix', hypothesisId: 'H2', location: 'orders.tsx:submitRating', message: 'Submitting rating', data: { orderId: ratingOrder?._id ?? ratingOrder?.id ?? null, rating: starValue }, timestamp: Date.now() }) }).catch(() => { });
       // #endregion
       await rateOrderApi(ratingOrder._id ?? ratingOrder.id, starValue, ratingComment);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -332,7 +332,7 @@ export default function OrdersScreen() {
         <View style={styles.footer}>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => {
             // #region agent log
-            fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H1',location:'orders.tsx:viewButton',message:'View button pressed',data:{orderId:item?.id??null,orderMongoId:item?._id??null,status:item?.status??null},timestamp:Date.now()})}).catch(()=>{});
+            fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'eaad9a' }, body: JSON.stringify({ sessionId: 'eaad9a', runId: 'pre-fix', hypothesisId: 'H1', location: 'orders.tsx:viewButton', message: 'View button pressed', data: { orderId: item?.id ?? null, orderMongoId: item?._id ?? null, status: item?.status ?? null }, timestamp: Date.now() }) }).catch(() => { });
             // #endregion
             setSelectedOrder(item);
           }}>
@@ -349,7 +349,7 @@ export default function OrdersScreen() {
             style={styles.rateBtn}
             onPress={() => {
               // #region agent log
-              fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H1',location:'orders.tsx:rateButton',message:'Rate button pressed',data:{orderId:item?.id??null,orderMongoId:item?._id??null,hasRating:Boolean(item?.rating?.value)},timestamp:Date.now()})}).catch(()=>{});
+              fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'eaad9a' }, body: JSON.stringify({ sessionId: 'eaad9a', runId: 'pre-fix', hypothesisId: 'H1', location: 'orders.tsx:rateButton', message: 'Rate button pressed', data: { orderId: item?.id ?? null, orderMongoId: item?._id ?? null, hasRating: Boolean(item?.rating?.value) }, timestamp: Date.now() }) }).catch(() => { });
               // #endregion
               setStarValue(0); setRatingComment(''); setRatingOrder(item);
             }}
@@ -396,26 +396,26 @@ export default function OrdersScreen() {
       <Modal visible={!!selectedOrder && !showIssueModal} animationType="slide" transparent onRequestClose={() => setSelectedOrder(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-  <View style={{ flex: 1 }}>
-    <Text style={styles.modalTitle}>Order Summary</Text>
-    <Text
-      numberOfLines={1}
-      style={{
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#64748b',
-        marginTop: 2
-      }}
-    >
-      Order #{(selectedOrder?._id ?? selectedOrder?.id)}
-    </Text>
-  </View>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Order Summary</Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '600',
+                    color: '#64748b',
+                    marginTop: 2
+                  }}
+                >
+                  Order #{(selectedOrder?._id ?? selectedOrder?.id)}
+                </Text>
+              </View>
 
-  <TouchableOpacity onPress={() => setSelectedOrder(null)}>
-    <Ionicons name="close-circle" size={32} color="#cbd5e1" />
-  </TouchableOpacity>
-</View>
+              <TouchableOpacity onPress={() => setSelectedOrder(null)}>
+                <Ionicons name="close-circle" size={32} color="#cbd5e1" />
+              </TouchableOpacity>
+            </View>
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {/* Delivery info row */}
               {(selectedOrder?.address || selectedOrder?.deliverySlot) && (
@@ -437,20 +437,20 @@ export default function OrdersScreen() {
               {selectedOrder?.items?.map((product: any, idx: number) => {
                 const thumb = resolveProductImageUri(product);
                 return (
-                <View key={idx} style={styles.productRow}>
-                  {thumb ? (
-                    <Image source={{ uri: thumb }} style={styles.productImage} />
-                  ) : (
-                    <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
-                      <Ionicons name="image-outline" size={22} color="#94a3b8" />
+                  <View key={idx} style={styles.productRow}>
+                    {thumb ? (
+                      <Image source={{ uri: thumb }} style={styles.productImage} />
+                    ) : (
+                      <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="image-outline" size={22} color="#94a3b8" />
+                      </View>
+                    )}
+                    <View style={styles.productInfo}>
+                      <Text style={styles.productName}>{product.name}</Text>
+                      <Text style={styles.productMeta}>{product.quantity} x {product.unit}</Text>
                     </View>
-                  )}
-                  <View style={styles.productInfo}>
-                    <Text style={styles.productName}>{product.name}</Text>
-                    <Text style={styles.productMeta}>{product.quantity} x {product.unit}</Text>
+                    <Text style={styles.productPrice}>₹{product.price * product.quantity}</Text>
                   </View>
-                  <Text style={styles.productPrice}>₹{product.price * product.quantity}</Text>
-                </View>
                 );
               })}
 
@@ -475,7 +475,7 @@ export default function OrdersScreen() {
                 <Text style={styles.billLabel}>Total Paid</Text>
                 <Text style={styles.billValue}>₹{selectedOrder?.totalAmount}</Text>
               </View>
-              
+
               {/* INTEGRATED: CANCEL ORDER BUTTON TOGGLE */}
               {(selectedOrder?.status === 'PLACED' || selectedOrder?.status === 'CONFIRMED') && settings?.allowOrderCancellation && (
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(selectedOrder)}>
@@ -520,9 +520,9 @@ export default function OrdersScreen() {
               <Text style={styles.label}>Reason for report</Text>
               <View style={styles.reasonGrid}>
                 {REPORT_REASONS.map((r) => (
-                  <TouchableOpacity 
-                    key={r} 
-                    style={[styles.reasonChip, selectedReason === r && styles.reasonChipActive]} 
+                  <TouchableOpacity
+                    key={r}
+                    style={[styles.reasonChip, selectedReason === r && styles.reasonChipActive]}
                     onPress={() => setSelectedReason(r)}
                   >
                     <Text style={[styles.reasonChipText, selectedReason === r && styles.reasonChipTextActive]}>{r}</Text>
@@ -570,7 +570,7 @@ export default function OrdersScreen() {
           </View>
         </View>
       </Modal>
-      
+
       {/* CONFIRMATION POPUP */}
       <Modal visible={showConfirmModal} transparent animationType="fade">
         <View style={styles.alertOverlay}>
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
   header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   headerTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b' },
   list: { padding: 16 },
-  
+
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   orderId: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
@@ -664,25 +664,25 @@ const styles = StyleSheet.create({
   itemCount: { color: '#64748b', fontSize: 14, fontWeight: '600' },
   totalPrice: { fontWeight: '900', color: '#1e293b', fontSize: 18 },
   footer: { flexDirection: 'row', gap: 10 },
-  
+
   primaryBtn: { flex: 1, backgroundColor: '#4b6f9e', height: 48, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   primaryBtnText: { color: '#fff', fontWeight: '800' },
   secondaryBtn: { flex: 0.5, height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center' },
   secondaryBtnText: { color: '#64748b', fontWeight: '700' },
-  
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   modalTitle: { fontSize: 22, fontWeight: '900', color: '#1e293b' },
   modalScroll: { marginBottom: 20 },
-  
+
   productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   productImage: { width: 60, height: 60, borderRadius: 14, backgroundColor: '#f8fafc' },
   productInfo: { flex: 1, marginLeft: 16 },
   productName: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 2 },
   productMeta: { fontSize: 13, color: '#94a3b8' },
   productPrice: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
-  
+
   modalFooter: { borderTopWidth: 1, borderColor: '#f1f5f9', paddingTop: 20 },
   billRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   billLabel: { fontSize: 18, fontWeight: '700', color: '#64748b' },
@@ -691,7 +691,7 @@ const styles = StyleSheet.create({
   cancelBtnText: { color: '#ef4444', fontWeight: '800', fontSize: 16 },
   reportBtn: { marginTop: 20, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   reportBtnText: { color: '#f59e0b', fontWeight: '800', fontSize: 15 },
-  
+
   label: { fontSize: 14, fontWeight: '800', color: '#64748b', marginTop: 20, marginBottom: 12 },
   reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   reasonChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },

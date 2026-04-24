@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState } from '@/store/store';
@@ -20,26 +20,168 @@ import { extractTenantFromUrl, saveTenantId } from '@/src/utils/tenantStorage';
 
 SplashScreen.preventAutoHideAsync();
 
+const formatTime = (iso?: string) => {
+  if (!iso) return '';
+
+  return new Date(iso).toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  });
+};
+
+function ClosingWarningCard({ countdown, endTime }: { countdown: number; endTime?: string | null }) {
+  const pct = countdown / 300;
+
+  const bgColor = countdown > 180 ? '#f59e0b' : countdown > 60 ? '#f97316' : '#ef4444';
+  const pulse = countdown <= 60;
+
+  const fmt = (iso?: string | null) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('en-IN', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+    });
+  };
+
+  const fmtCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  return (
+    <View style={{
+      marginHorizontal: 16, marginBottom: 12,
+      borderRadius: 16, overflow: 'hidden',
+      shadowColor: bgColor, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+    }}>
+      {/* Card body */}
+      <View style={{
+        backgroundColor: '#fff',
+        borderWidth: 2, borderColor: bgColor,
+        borderRadius: 16, padding: 14,
+        flexDirection: 'row', alignItems: 'center', gap: 12,
+      }}>
+        {/* Icon */}
+        <View style={{
+          width: 40, height: 40, borderRadius: 12,
+          backgroundColor: bgColor,
+          justifyContent: 'center', alignItems: 'center',
+        }}>
+          <Text style={{ fontSize: 18 }}>⏱️</Text>
+        </View>
+
+        {/* Text */}
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase' }}>
+            Closing Soon
+          </Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b', marginTop: 2 }}>
+            Order before{' '}
+            <Text style={{ color: bgColor, fontWeight: '900' }}>{fmt(endTime)}</Text>
+          </Text>
+        </View>
+
+        {/* Countdown */}
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontSize: 24, fontWeight: '900', color: bgColor, fontVariant: ['tabular-nums'] }}>
+            {fmtCountdown(countdown)}
+          </Text>
+          <Text style={{ fontSize: 9, color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            remaining
+          </Text>
+        </View>
+      </View>
+
+      {/* Progress bar */}
+      <View style={{ height: 4, backgroundColor: '#f1f5f9', marginHorizontal: 4, borderRadius: 4, overflow: 'hidden' }}>
+        <View style={{
+          height: '100%', width: `${pct * 100}%`,
+          backgroundColor: bgColor, borderRadius: 4,
+        }} />
+      </View>
+    </View>
+  );
+}
+
 function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const dispatch = useDispatch();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [mounted, setMounted] = useState(false);
-const [animationFinished, setAnimationFinished] = useState(false);
+  const [animationFinished, setAnimationFinished] = useState(false);
 
-useEffect(() => {
-  const timeout = setTimeout(() => {
-    setAnimationFinished(true);
-  }, 3000); // max wait 3s
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setAnimationFinished(true);
+    }, 3000); // max wait 3s
 
-  return () => clearTimeout(timeout);
-}, []);
+    return () => clearTimeout(timeout);
+  }, []);
   const [authRestored, setAuthRestored] = useState(false);
 
   // Store Status - fetched from backend
-  const { data: storeStatus } = useGetStoreStatusQuery();
-const isClosed = storeStatus?.isClosed;
+const { data: storeStatus, refetch: refetchStoreStatus } = useGetStoreStatusQuery(undefined, {
+  pollingInterval: 5000,
+});
+const isClosed = !(storeStatus?.isOpen ?? true);
+
+ const [closingCountdown, setClosingCountdown] = useState(300);
+  const [showClosingWarning, setShowClosingWarning] = useState(false);
+  const cachedEndTime = useRef<string | null>(null);
+  const intervalRef = useRef<any>(null);
+
+  const startCountdown = () => {
+    const endTimeToUse = cachedEndTime.current;
+    if (!endTimeToUse) return;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    const endMs      = new Date(endTimeToUse).getTime();
+    const fiveMinsMs = 5 * 60 * 1000;
+    const tick = () => {
+      const msLeft = endMs - Date.now();
+      if (msLeft <= fiveMinsMs && msLeft > 0) {
+        setShowClosingWarning(true);
+        setClosingCountdown(Math.floor(msLeft / 1000));
+      } else {
+        setShowClosingWarning(false);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        if (msLeft <= 0) refetchStoreStatus();
+      }
+    };
+    tick();
+    intervalRef.current = setInterval(tick, 1000);
+  };
+
+  useEffect(() => {
+    if (storeStatus?.endTime) cachedEndTime.current = storeStatus.endTime;
+    if (storeStatus && !storeStatus.isOpen) {
+      setShowClosingWarning(false);
+      return;
+    }
+    startCountdown();
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [storeStatus?.isOpen, storeStatus?.endTime]);
+
+  // Restart countdown when app comes back to foreground
+  useEffect(() => {
+    const { AppState } = require('react-native');
+    const sub = AppState.addEventListener('change', (state: string) => {
+      if (state === 'active') startCountdown();
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Watch for store open time — refetch instantly when it arrives
+  useEffect(() => {
+    if (!isClosed || !storeStatus?.nextChange) return;
+    const openMs = new Date(storeStatus.nextChange).getTime();
+    const msUntilOpen = openMs - Date.now();
+    if (msUntilOpen <= 0 || msUntilOpen > 10 * 60 * 1000) return;
+    const id = setTimeout(() => refetchStoreStatus(), msUntilOpen);
+    return () => clearTimeout(id);
+  }, [isClosed, storeStatus?.nextChange]);
 
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
@@ -100,7 +242,7 @@ const isClosed = storeStatus?.isClosed;
 
   useEffect(() => {
     if (!mounted || !segments?.length || !fontsLoaded || !animationFinished || !authRestored) return;
-    
+
     const rootSegment = segments[0];
     const inAuthFlow = rootSegment === 'auth';
 
@@ -131,62 +273,94 @@ const isClosed = storeStatus?.isClosed;
   return (
     <>
       <StatusBar style="dark" translucent />
-  
-      <Stack screenOptions={{ headerShown: false }}>
+
+   <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="auth/landing" />
         <Stack.Screen name="auth/store-code" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="product/[id]" options={{ headerShown: true, headerTransparent: true, headerTitle: '' }} />
       </Stack>
-  
+
+      {/* ── 5-min closing warning card ── */}
+      {showClosingWarning && !isClosed && (
+        <View style={{ position: 'absolute', bottom: 90, left: 0, right: 0, zIndex: 999 }}>
+          <ClosingWarningCard countdown={closingCountdown} endTime={storeStatus?.endTime} />
+        </View>
+      )}
+
       {/* 🔥 GLOBAL STORE CLOSED POPUP */}
       {isClosed && (
         <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.65)',
-          zIndex: 9999,
-          justifyContent: 'center',
-          alignItems: 'center'
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 9999,
+          justifyContent: 'center', alignItems: 'center',
         }}>
           <View style={{
-            backgroundColor: '#fff',
-            padding: 28,
-            borderRadius: 24,
-            width: '85%',
-            alignItems: 'center',
-            shadowColor: '#000',
-            shadowOpacity: 0.2,
-            shadowRadius: 10,
-            elevation: 10
+            backgroundColor: '#fff', padding: 28, borderRadius: 24,
+            width: '85%', alignItems: 'center', shadowColor: '#000',
+            shadowOpacity: 0.2, shadowRadius: 10, elevation: 10,
           }}>
-            <Text style={{ fontSize: 22, fontWeight: '900' }}>
+            {/* Icon */}
+            <View style={{
+              width: 64, height: 64, borderRadius: 32,
+              backgroundColor: '#ef4444', justifyContent: 'center',
+              alignItems: 'center', marginBottom: 16,
+            }}>
+              <Text style={{ fontSize: 28 }}>🔒</Text>
+            </View>
+
+            <Text style={{ fontSize: 22, fontWeight: '900', color: '#111' }}>
               Store Closed
             </Text>
-  
-            <Text style={{ marginTop: 10, textAlign: 'center', color: '#555' }}>
-              {storeStatus?.reason}
+
+            <Text style={{ marginTop: 8, textAlign: 'center', color: '#555', lineHeight: 20 }}>
+              {storeStatus?.reason || "We are currently not accepting orders"}
             </Text>
-  
-            {(storeStatus as any)?.type === "TIME" && (
-              <Text style={{ marginTop: 12, fontWeight: '600' }}>
-                {(storeStatus as any).startTime} - {(storeStatus as any).endTime}
-              </Text>
+
+            {/* REGULAR */}
+            {storeStatus?.type === "TIME" && storeStatus?.startTime && storeStatus?.endTime && (
+              <View style={{
+                marginTop: 16, backgroundColor: '#fef2f2',
+                borderRadius: 12, padding: 14, width: '100%',
+              }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#b91c1c', marginBottom: 4 }}>
+                  Store Timings
+                </Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#dc2626' }}>
+                  {formatTime(storeStatus.startTime)} → {formatTime(storeStatus.endTime)}
+                </Text>
+                <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                  Daily schedule
+                </Text>
+              </View>
             )}
-  
-            {(storeStatus as any)?.type === "DATE" && (
-              <>
-                <Text style={{ marginTop: 12 }}>
-                  {(storeStatus as any).startDate} → {(storeStatus as any).endDate}
+
+            {/* OCCASIONAL */}
+            {storeStatus?.type === "DATE" && storeStatus?.startDate && storeStatus?.endDate && (
+              <View style={{
+                marginTop: 16, backgroundColor: '#fff7ed',
+                borderRadius: 12, padding: 14, width: '100%',
+              }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#c2410c', marginBottom: 6 }}>
+                  Temporarily Closed
                 </Text>
-  
-                <Text style={{ marginTop: 4, fontWeight: '600' }}>
-                  {(storeStatus as any).startTime} - {(storeStatus as any).endTime}
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#ea580c' }}>
+                  {new Date(storeStatus.startDate).toLocaleString('en-IN', {
+                    day: 'numeric', month: 'short',
+                    hour: 'numeric', minute: '2-digit', hour12: true,
+                  })}
+                  {" → "}
+                  {new Date(storeStatus.endDate).toLocaleString('en-IN', {
+                    day: 'numeric', month: 'short',
+                    hour: 'numeric', minute: '2-digit', hour12: true,
+                  })}
                 </Text>
-              </>
+                {storeStatus?.reason && (
+                  <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+                    {storeStatus.reason}
+                  </Text>
+                )}
+              </View>
             )}
           </View>
         </View>

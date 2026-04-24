@@ -27,10 +27,10 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
   const dispatch = useDispatch();
   const { showToast } = useToast();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
-  
+
   // NEW: Fetch remote features
   const { data: settings } = useGetAppSettingsQuery();
-  
+
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
@@ -49,8 +49,8 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
 
   useEffect(() => {
     if (!isAuthenticated) {
-        navigate('/');
-        return;
+      navigate('/');
+      return;
     }
     loadOrders();
     if (location.state?.fromCheckout) {
@@ -58,67 +58,67 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
     }
   }, [isAuthenticated]);
 
-const loadOrders = async () => {
-  try {
-    setLoading(true);
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
 
-    const apiData = await getUserOrders();
+      const apiData = await getUserOrders();
 
-    if (!apiData || !Array.isArray(apiData)) {
-      throw new Error("Invalid order data");
+      if (!apiData || !Array.isArray(apiData)) {
+        throw new Error("Invalid order data");
+      }
+
+      setOrders(apiData);
+
+      if (selectedOrder) {
+        const updatedSelected = apiData.find((o: any) => o.id === selectedOrder.id);
+        if (updatedSelected) setSelectedOrder(updatedSelected);
+      } else if (location.state?.fromCheckout && apiData.length > 0) {
+        setSelectedOrder(apiData[0]);
+      }
+
+    } catch (error) {
+      console.error("Failed to load orders:", error);
+
+      showToast('error', 'Failed to load orders. Please try again.');
+
+      setOrders([]); // safe fallback
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReorder = (items: any[]) => {
+    items.forEach(item => {
+      dispatch(addToCart({
+        id: item.productId,          // ✅ FIX (cart id)
+        productId: item.productId,   // ✅ IMPORTANT (backend use)
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        image: resolveImageUrl(item),
+        imageUrl: item.imageUrl ?? item.image,
+      }));
+    });
+
+    openCart();
+  };
+
+  const handleCancelOrder = async () => {
+    if (!selectedOrder) return;
+
+    const res = await cancelOrderApi(selectedOrder.id);
+
+    if (!res.success) {
+      showToast('error', res.message || 'Cancel failed');
+      return;
     }
 
-    setOrders(apiData);
+    showToast('success', 'Order cancelled successfully');
 
-    if (selectedOrder) {
-      const updatedSelected = apiData.find((o: any) => o.id === selectedOrder.id);
-      if (updatedSelected) setSelectedOrder(updatedSelected);
-    } else if (location.state?.fromCheckout && apiData.length > 0) {
-      setSelectedOrder(apiData[0]);
-    }
-
-  } catch (error) {
-    console.error("Failed to load orders:", error);
-
-    showToast('error', 'Failed to load orders. Please try again.');
-
-    setOrders([]); // safe fallback
-  } finally {
-    setLoading(false);
-  }
-};
-
- const handleReorder = (items: any[]) => {
-  items.forEach(item => {
-    dispatch(addToCart({
-      id: item.productId,          // ✅ FIX (cart id)
-      productId: item.productId,   // ✅ IMPORTANT (backend use)
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: resolveImageUrl(item),
-      imageUrl: item.imageUrl ?? item.image,
-    }));
-  });
-
-  openCart();
-};
-
- const handleCancelOrder = async () => {
-  if (!selectedOrder) return;
-
-  const res = await cancelOrderApi(selectedOrder.id);
-
-  if (!res.success) {
-    showToast('error', res.message || 'Cancel failed');
-    return;
-  }
-
-  showToast('success', 'Order cancelled successfully');
-
-  await loadOrders();        // ✅ reload
-  setIsCancelModalOpen(false); // ✅ close modal
-};
+    await loadOrders();        // ✅ reload
+    setIsCancelModalOpen(false); // ✅ close modal
+  };
   const handleReportSuccess = async () => {
     await loadOrders();
     setIsReportModalOpen(false);
@@ -188,24 +188,23 @@ const loadOrders = async () => {
               <p className="text-emerald-600 font-bold text-sm">Your fresh supplies are being packed.</p>
             </div>
           </div>
-          <button onClick={() => setShowSuccess(false)} className="bg-white/50 p-2 rounded-full hover:bg-white text-emerald-900"><X size={18}/></button>
+          <button onClick={() => setShowSuccess(false)} className="bg-white/50 p-2 rounded-full hover:bg-white text-emerald-900"><X size={18} /></button>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
         <div className="md:col-span-5 space-y-8">
           <h1 className="text-3xl font-black text-slate-900 mb-6 px-2 italic uppercase tracking-tighter">Order History.</h1>
-          
+
           {sections.map((section) => section.data.length > 0 && (
             <div key={section.title} className="space-y-4">
               <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{section.title}</h2>
               {section.data.map((order) => (
-                <div 
+                <div
                   key={order.id}
                   onClick={() => setSelectedOrder(order)}
-                  className={`group cursor-pointer p-6 rounded-[2rem] border-2 transition-all ${
-                    selectedOrder?.id === order.id ? 'border-[#4b6f9e] bg-white shadow-xl translate-x-2' : 'border-transparent bg-white hover:border-slate-100 shadow-sm'
-                  }`}
+                  className={`group cursor-pointer p-6 rounded-[2rem] border-2 transition-all ${selectedOrder?.id === order.id ? 'border-[#4b6f9e] bg-white shadow-xl translate-x-2' : 'border-transparent bg-white hover:border-slate-100 shadow-sm'
+                    }`}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div>
@@ -225,7 +224,7 @@ const loadOrders = async () => {
                   {/* Inline rating badge on card */}
                   {order.rating?.value && (
                     <div className="mt-3 flex items-center gap-1.5">
-                      {[1,2,3,4,5].map(s => (
+                      {[1, 2, 3, 4, 5].map(s => (
                         <Star key={s} size={12}
                           className={s <= order.rating.value ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}
                         />
@@ -250,8 +249,8 @@ const loadOrders = async () => {
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedOrder.deliverySlot}</p>
                 </div>
                 <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Deliver to</p>
-                    <p className="text-xs font-bold text-slate-600 max-w-[150px] truncate">{selectedOrder.address}</p>
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Deliver to</p>
+                  <p className="text-xs font-bold text-slate-600 max-w-[150px] truncate">{selectedOrder.address}</p>
                 </div>
               </div>
 
@@ -277,14 +276,14 @@ const loadOrders = async () => {
                   <span className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Grand Total</span>
                   <span className="text-2xl font-black text-slate-900">₹{selectedOrder.totalAmount}</span>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   {selectedOrder.status === 'DELIVERED' && (
                     <>
                       <button onClick={() => handleReorder(selectedOrder.items)} className="flex items-center justify-center gap-2 bg-[#1e293b] text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all">
                         <RotateCcw size={14} /> Reorder
                       </button>
-                      
+
 
                       <button
                         onClick={() => handleDownloadInvoice(selectedOrder.id)}
@@ -305,7 +304,7 @@ const loadOrders = async () => {
                       ) : (
                         <div className="flex flex-col items-center justify-center border-2 border-amber-100 bg-amber-50 py-3 rounded-2xl gap-1">
                           <div className="flex gap-0.5">
-                            {[1,2,3,4,5].map(s => (
+                            {[1, 2, 3, 4, 5].map(s => (
                               <Star key={s} size={14} className={s <= selectedOrder.rating.value ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'} />
                             ))}
                           </div>
@@ -317,7 +316,10 @@ const loadOrders = async () => {
 
                       {/* REPORT ISSUE TOGGLE */}
                       {settings?.allowReportIssue && (
-                        <button onClick={() => setIsReportModalOpen(true)} className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all">
+                        <button
+                          onClick={() => setIsReportModalOpen(true)}
+                          className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all"
+                        >
                           <AlertCircle size={14} /> Report Issue
                         </button>
                       )}
@@ -332,30 +334,27 @@ const loadOrders = async () => {
 
                   {selectedOrder.status === 'OUT_FOR_DELIVERY' && (
                     <button className="col-span-2 flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-400 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
-                       <Clock size={14} /> Tracking in Progress...
+                      <Clock size={14} /> Tracking in Progress...
                     </button>
                   )}
 
                   {['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder.status) && (
-                    <div className={`col-span-2 border-2 p-5 rounded-[2rem] space-y-3 animate-in fade-in zoom-in-95 ${
-                      selectedOrder.status === 'REFUND_APPROVED' ? 'bg-emerald-50 border-emerald-100' : 
-                      selectedOrder.status === 'REFUND_REJECTED' ? 'bg-red-50 border-red-100' : 
-                      'bg-purple-50 border-purple-100'
-                    }`}>
+                    <div className={`col-span-2 border-2 p-5 rounded-[2rem] space-y-3 animate-in fade-in zoom-in-95 ${selectedOrder.status === 'REFUND_APPROVED' ? 'bg-emerald-50 border-emerald-100' :
+                        selectedOrder.status === 'REFUND_REJECTED' ? 'bg-red-50 border-red-100' :
+                          'bg-purple-50 border-purple-100'
+                      }`}>
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg text-white ${
-                          selectedOrder.status === 'REFUND_APPROVED' ? 'bg-emerald-500' : 
-                          selectedOrder.status === 'REFUND_REJECTED' ? 'bg-red-500' : 'bg-purple-600'
-                        }`}>
-                          {selectedOrder.status === 'REFUND_APPROVED' ? <CheckCircle2 size={16} /> : 
-                           selectedOrder.status === 'REFUND_REJECTED' ? <X size={16} /> : 
-                           <Clock size={16} />}
+                        <div className={`p-2 rounded-lg text-white ${selectedOrder.status === 'REFUND_APPROVED' ? 'bg-emerald-500' :
+                            selectedOrder.status === 'REFUND_REJECTED' ? 'bg-red-500' : 'bg-purple-600'
+                          }`}>
+                          {selectedOrder.status === 'REFUND_APPROVED' ? <CheckCircle2 size={16} /> :
+                            selectedOrder.status === 'REFUND_REJECTED' ? <X size={16} /> :
+                              <Clock size={16} />}
                         </div>
                         <div>
-                          <p className={`text-[10px] font-black uppercase tracking-widest ${
-                            selectedOrder.status === 'REFUND_APPROVED' ? 'text-emerald-700' : 
-                            selectedOrder.status === 'REFUND_REJECTED' ? 'text-red-700' : 'text-purple-700'
-                          }`}>
+                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedOrder.status === 'REFUND_APPROVED' ? 'text-emerald-700' :
+                              selectedOrder.status === 'REFUND_REJECTED' ? 'text-red-700' : 'text-purple-700'
+                            }`}>
                             {STATUS_THEME[selectedOrder.status]?.label}
                           </p>
                           <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
@@ -374,8 +373,8 @@ const loadOrders = async () => {
                       )}
 
                       {selectedOrder.status !== 'ISSUE_REPORTED' && (
-                        <button 
-                          onClick={() => handleReorder(selectedOrder.items)} 
+                        <button
+                          onClick={() => handleReorder(selectedOrder.items)}
                           className="w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-colors"
                         >
                           Reorder These Items
@@ -403,23 +402,23 @@ const loadOrders = async () => {
 
       {isCancelModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-300">
-                <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mb-6">
-                    <AlertTriangle size={32} />
-                </div>
-                <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase italic tracking-tighter">Cancel Order?</h3>
-                <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">This action cannot be undone. Are you sure you want to cancel this fresh delivery?</p>
-                <div className="flex gap-3">
-                    <button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">No, Keep It</button>
-                    <button onClick={handleCancelOrder} className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-200 transition-all">Yes, Cancel</button>
-                </div>
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mb-6">
+              <AlertTriangle size={32} />
             </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase italic tracking-tighter">Cancel Order?</h3>
+            <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">This action cannot be undone. Are you sure you want to cancel this fresh delivery?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">No, Keep It</button>
+              <button onClick={handleCancelOrder} className="flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-200 transition-all">Yes, Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 
-      <ReportIssueModal 
-        isOpen={isReportModalOpen} 
-        onClose={() => setIsReportModalOpen(false)} 
+      <ReportIssueModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
         order={selectedOrder}
         onSuccess={handleReportSuccess}
       />

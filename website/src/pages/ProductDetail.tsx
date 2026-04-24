@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ChevronLeft, ShoppingBag, ShieldCheck, 
+import {
+  ChevronLeft, ShoppingBag, ShieldCheck,
   Leaf, ThermometerSnowflake, Plus, Minus, CheckCircle2,
 } from 'lucide-react';
 
@@ -29,6 +29,7 @@ const ProductDetail = () => {
 
   // 1. Logic: Find Current Product
   const product = useMemo(() => allProducts.find(p => p.id === productId), [productId, allProducts]);
+  const isOutOfStock = product?.stock === 0;
 
   // 2. Logic: Dynamic Related Products (same parent category)
   const relatedProducts = useMemo(() => {
@@ -38,7 +39,7 @@ const ProductDetail = () => {
       .slice(0, 4);
   }, [product, productId, allProducts]);
 
-  const cartItem = useSelector((state: RootState) => 
+  const cartItem = useSelector((state: RootState) =>
     state.cart.items.find(item => item.id === productId)
   );
 
@@ -50,18 +51,18 @@ const ProductDetail = () => {
     <div className="min-h-screen bg-[#f8fafc] pb-24 animate-in fade-in duration-500">
       {/* Navigation */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        <button 
+        <button
           onClick={() => navigate(-1)}
           className="group flex items-center gap-2 text-slate-500 hover:text-[#4b6f9e] transition-all font-black uppercase text-xs tracking-widest"
         >
-          <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> 
+          <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
           Back to Shop
         </button>
       </div>
 
       <main className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-20">
-          
+
           {/* LEFT: Image Gallery */}
           <div className="flex flex-col gap-6 overflow-hidden">
             {/* Main Image: Fixed Aspect Ratio */}
@@ -75,11 +76,16 @@ const ProductDetail = () => {
               ) : (
                 <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-300">No Image Available</span>
               )}
-              
+
               <div className="absolute top-6 left-6 md:top-8 md:left-8 bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-2 border border-slate-100 shadow-sm">
                 <div className={`w-2 h-2 rounded-full ${product.stock > 10 ? 'bg-green-500' : 'bg-orange-500 animate-pulse'}`} />
                 <span className="text-[10px] font-black uppercase tracking-tighter text-slate-700">
-                  {product.stock > 10 ? 'In Stock' : `Hurry, only ${product.stock} left`}
+                  
+                  {product.stock === 0
+                    ? 'Out of Stock'
+                    : product.stock > 10
+                      ? 'In Stock'
+                      : `Hurry, only ${product.stock} left`}
                 </span>
               </div>
             </div>
@@ -88,7 +94,7 @@ const ProductDetail = () => {
             {images.length > 1 && (
               <div className="flex gap-4 overflow-x-auto pb-4 px-2 snap-x snap-mandatory scrollbar-hide lg:justify-start">
                 {images.map((img, idx) => (
-                  <button 
+                  <button
                     key={idx}
                     onClick={() => setActiveImg(idx)}
                     className={`flex-shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-2xl border-2 transition-all p-2 bg-white snap-center ${activeImg === idx ? 'border-[#4b6f9e] shadow-lg scale-105' : 'border-transparent opacity-60 hover:opacity-100'}`}
@@ -110,7 +116,7 @@ const ProductDetail = () => {
               <div className="h-6 w-1 bg-[#4b6f9e] rounded-full"></div>
               <span className="text-[#4b6f9e] font-black text-xs uppercase tracking-widest">Premium Choice</span>
             </div>
-            
+
             <h1 className="text-3xl md:text-5xl font-black text-slate-900 leading-tight mb-2 tracking-tight">
               {product.name}
             </h1>
@@ -139,13 +145,13 @@ const ProductDetail = () => {
 
             {/* Content Filler: Product Description Section */}
 
-        <div className="mb-10 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
-  <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 mb-3">Product Description</h4>
-  <p className="text-slate-600 text-sm leading-relaxed font-medium">
-    {/* REPLACE THE HARDCODED TEXT WITH THIS */}
-    {product.description || `Freshly sourced ${product.name}. Undergoes rigorous quality checks to ensure you receive only the best produce.`}
-  </p>
-</div>
+            <div className="mb-10 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+              <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 mb-3">Product Description</h4>
+              <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                {/* REPLACE THE HARDCODED TEXT WITH THIS */}
+                {product.description || `Freshly sourced ${product.name}. Undergoes rigorous quality checks to ensure you receive only the best produce.`}
+              </p>
+            </div>
             {/* Info Table */}
             {/* <div className="grid grid-cols-3 gap-2 mb-8 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
               <div className="flex flex-col gap-1">
@@ -184,13 +190,17 @@ const ProductDetail = () => {
             {/* Action Area */}
             <div className="mt-auto flex items-center gap-4">
               {!cartItem ? (
-                <button 
+
+                //out of stock fix
+                <button
                   onClick={() => dispatch(addToCart(product))}
-                  disabled={product.stock <= 0}
-                  className={`flex-1 ${product.stock <= 0 ? 'bg-slate-300' : 'bg-[#4b6f9e] hover:bg-[#1e293b]'} text-white h-20 rounded-[2rem] font-black text-xl flex items-center justify-center gap-3 shadow-xl shadow-blue-900/20 transition-all transform active:scale-95`}
+                  disabled={isOutOfStock}
+                  className={`flex-1 ${isOutOfStock
+                      ? 'bg-slate-300 cursor-not-allowed'
+                      : 'bg-[#4b6f9e] hover:bg-[#1e293b]'
+                    } text-white h-20 rounded-[2rem] font-black text-xl flex items-center justify-center gap-3`}
                 >
-                  <ShoppingBag size={24} /> 
-                  {product.stock <= 0 ? 'Out of Stock' : 'Add to Basket'}
+                  {isOutOfStock ? 'Out of Stock' : 'Add to Basket'}
                 </button>
               ) : (
                 <div className="flex-1 flex items-center bg-white border-2 border-[#4b6f9e] h-20 rounded-[2rem] overflow-hidden shadow-lg shadow-blue-900/5">
@@ -220,7 +230,7 @@ const ProductDetail = () => {
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">You Might Also Like</h3>
               <p className="text-sm text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-1">Similar items in {product.subcategory || product.category}</p>
             </div>
-            
+
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
               {relatedProducts.map((item) => (
                 <ProductCard key={item.id} product={item} />
