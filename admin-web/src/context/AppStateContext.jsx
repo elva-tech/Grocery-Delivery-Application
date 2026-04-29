@@ -152,7 +152,7 @@ export const AppStateProvider = ({ children }) => {
           amount: r.refundAmount,
           comment: r.customerComment,
           adminComment: r.resolutionNote,
-          evidence: r.evidence || '',
+         evidence: r.evidenceImage || r.evidence || '',
         }));
         setReturns(normalized);
       } catch (err) {
@@ -181,7 +181,7 @@ export const AppStateProvider = ({ children }) => {
         amount: r.refundAmount,
         comment: r.customerComment,
         adminComment: r.resolutionNote,
-        evidence: r.evidence || '',
+        evidence: r.evidenceImage || r.evidence || '',
       }));
       setReturns(normalized);
     } catch (err) {

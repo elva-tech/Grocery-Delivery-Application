@@ -2,7 +2,7 @@ import { useLocation } from 'react-router-dom';
 import { APP_CONFIG } from '../api/mockdata';
 import { useTenantBranding } from '../context/TenantBrandingContext';
 
-const CONTENT = (brand: string, supportEmail: string, supportPhone: string, address: string) => ({
+const CONTENT = (brand: string, supportEmail: string, supportPhone: string, address: string, supportHours : string) => ({
   '/about': {
     title: `About ${brand}.`,
     text: `At ${brand}, we are committed to a smooth shopping experience from browse to delivery. Our platform connects you with curated products and reliable fulfillment.
@@ -12,12 +12,13 @@ We focus on transparency, clear communication, and careful handling of every ord
 ${brand} stands for fair practices, responsive support, and continuous improvement for our customers and partners.`
   },
   '/contact': {
-    title: 'Get in Touch.',
-    text: `We are here to assist you with any queries regarding your orders, subscriptions, or feedback.
+  title: 'Get in Touch.',
+  text: `We are here to assist you with any queries regarding your orders, subscriptions, or feedback.
 
 Customer Support:
 Email: ${supportEmail}
 Phone: ${supportPhone}
+Hours: ${supportHours}
 
 Corporate Office:
 ${brand}
@@ -72,14 +73,21 @@ You can set up recurring orders for your daily essentials. You have full control
 
 const LegalPage = () => {
   const { pathname } = useLocation();
-  const { storeName, tagline, raw } = useTenantBranding();
+  const { storeName, tagline, raw, loading } = useTenantBranding();
+
+  if (loading) return (
+    <div className="max-w-4xl mx-auto px-6 py-20 min-h-screen flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-[#4b6f9e] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
   const brand = storeName;
-  const supportEmail = raw?.contactEmail?.trim() || APP_CONFIG.supportEmail;
-  const supportPhone = raw?.phoneNumber?.trim() || APP_CONFIG.contactNumber;
+const supportEmail = raw?.supportEmail?.trim() || '';
+const supportPhone = raw?.supportPhone?.trim() || '';
+const supportHours = raw?.supportHours?.trim() || "Mon–Sat 9:00 AM – 6:00 PM";
   const address = raw?.storeAddress?.trim() || APP_CONFIG.address;
   const page =
-    CONTENT(brand, supportEmail, supportPhone, address)[pathname as keyof ReturnType<typeof CONTENT>] ||
-    CONTENT(brand, supportEmail, supportPhone, address)['/about'];
+    CONTENT(brand, supportEmail, supportPhone,supportHours, address)[pathname as keyof ReturnType<typeof CONTENT>] ||
+    CONTENT(brand, supportEmail, supportPhone,supportHours, address)['/about'];
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-20 min-h-screen">

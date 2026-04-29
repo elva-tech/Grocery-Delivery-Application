@@ -100,16 +100,21 @@ export const getUserOrders = async () => {
     if (!res.data?.orders) {
       throw new Error("Invalid response");
     }
-
-    return res.data.orders.map((order: any) => ({
+   console.log("RAW ORDER SAMPLE:", JSON.stringify(res.data.orders[0]));
+  return res.data.orders.map((order: any) => ({
       id: order.id,
+      _id: order.id,
       status: order.status,
       totalAmount: order.totalAmount,
       createdAt: order.createdAt,
       address: order.address,
       deliverySlot: order.deliverySlot,
       invoiceAvailable: Boolean(order.invoiceAvailable),
-      items: order.items || []
+      items: order.items || [],
+      adminNote: order.adminNote || order.resolutionNote || order.returnRequest?.resolutionNote || '',
+      resolutionNote: order.resolutionNote || order.adminNote || order.returnRequest?.resolutionNote || '',
+      rating: order.rating || null,
+      returnStatus: order.returnRequest?.status || null,
     }));
 
   } catch (error) {
@@ -156,8 +161,8 @@ export const processAdminRefundApi = async (orderId: string, decision: 'APPROVE'
     const orders = JSON.parse(existingOrders);
     const updatedOrders = orders.map((o: any) => {
       if (o.id === orderId) {
-        return { 
-          ...o, 
+        return {
+          ...o,
           status: decision === 'APPROVE' ? 'REFUND_APPROVED' : 'REFUND_REJECTED',
           adminNote: adminNote,
           resolvedAt: new Date().toISOString()
@@ -219,6 +224,27 @@ export const placeOrderApi = async (payload: {
   return res.data; // { orderId, totalAmount, orderStatus, ... }
 };
 
+// export const reportOrderIssueApi = async (payload: {
+//   orderId: string;
+//   reason: string;
+//   comment: string;
+//   evidenceUrl: string;
+// }) => {
+//   const token = localStorage.getItem('token');
+//   if (!token) throw new Error('Unauthorized');
+//   const res = await axios.post(
+//     `${API_URL}/report-issue`,
+//     payload,
+//     {
+//       headers: {
+//         Authorization: `Bearer ${token}`,
+//         'x-tenant-id': getTenantId(),
+//       },
+//     }
+//   );
+//   return res.data;
+// };
+
 export const reportOrderIssueApi = async (payload: {
   orderId: string;
   reason: string;
@@ -227,8 +253,10 @@ export const reportOrderIssueApi = async (payload: {
 }) => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('Unauthorized');
+
+ console.log("FINAL PAYLOAD TO BACKEND:", JSON.stringify(payload));
   const res = await axios.post(
-    `${API_URL}/report-issue`,
+    `${API_BASE_URL}/api/returns/create`,
     payload,
     {
       headers: {
@@ -237,9 +265,9 @@ export const reportOrderIssueApi = async (payload: {
       },
     }
   );
+
   return res.data;
 };
-
 export const rateOrderApi = async (orderId: string, rating: number, comment: string) => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('Unauthorized');

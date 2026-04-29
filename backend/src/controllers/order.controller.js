@@ -383,46 +383,56 @@ exports.getCustomerOrderHistory = async (req, res) => {
 
     const filter = {
       userId,
-      $or: [
-        { tenantId: tenantId },
-        { tenantId: { $exists: false } },
-        { tenantId: null }
-      ]
+      tenantId,
     };
     if (status) {
       filter.orderStatus = status;
     }
 
-    const orders = await Order.find(filter)
+ const orders = await Order.find(filter)
       .sort({ createdAt: -1 });
 
-    const formattedOrders = orders.map(order => ({
-      id: order._id,                          // ✅ IMPORTANT (frontend expects id)
-      status: order.orderStatus,              // ✅ rename
-      totalAmount: order.totalAmount,
-      paymentStatus: order.paymentStatus,
-      createdAt: order.createdAt,
+    // Fetch return requests for these orders in one query
+    const ReturnRequest = require("../models/ReturnRequest.model");
+    const orderIds = orders.map(o => o._id);
+    const returnRequests = await ReturnRequest.find({
+      orderId: { $in: orderIds }
+    }).lean();
+    const returnMap = {};
+    for (const r of returnRequests) {
+      returnMap[String(r.orderId)] = r;
+    }
 
-      // ✅ ADD THESE (you already store them)
-      address: formatDeliveryAddressForCustomer(order.deliveryAddress),
-      deliverySlot: order.deliverySlot || "Standard Delivery",
-      invoiceAvailable: Boolean(order.invoiceAsset?.imageUrl),
-
-      // ✅ SEND ITEMS PROPERLY
-      items: order.items.map((item) => {
-        const imageUrl = resolveOrderItemImageUrl(item);
-        return {
-          productId: item.productId,
-          id: item.productId,
-          name: item.name,
-          quantity: item.qty,
-          price: item.price,
-          unit: item.unit || "pcs",
-          imageUrl,
-          image: imageUrl,
-        };
-      }),
-    }));
+    const formattedOrders = orders.map(order => {
+      const returnReq = returnMap[String(order._id)];
+      return {
+        id: order._id,
+        status: order.orderStatus,
+        totalAmount: order.totalAmount,
+        paymentStatus: order.paymentStatus,
+        createdAt: order.createdAt,
+        address: formatDeliveryAddressForCustomer(order.deliveryAddress),
+        deliverySlot: order.deliverySlot || "Standard Delivery",
+        invoiceAvailable: Boolean(order.invoiceAsset?.imageUrl),
+        adminNote: returnReq?.resolutionNote || order.adminNote || "",
+        resolutionNote: returnReq?.resolutionNote || "",
+        returnStatus: returnReq?.status || null,
+        rating: order.rating || null,
+        items: order.items.map((item) => {
+          const imageUrl = resolveOrderItemImageUrl(item);
+          return {
+            productId: item.productId,
+            id: item.productId,
+            name: item.name,
+            quantity: item.qty,
+            price: item.price,
+            unit: item.unit || "pcs",
+            imageUrl,
+            image: imageUrl,
+          };
+        }),
+      };
+    });
 
     res.status(200).json({
       message: "Orders fetched successfully",

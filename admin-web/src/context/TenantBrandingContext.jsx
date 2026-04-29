@@ -29,8 +29,17 @@ export function TenantBrandingProvider({ children }) {
     return apiService
       .getStoreProfile()
       .then((data) => {
-        setRaw(data);
-      })
+  setRaw(data);
+
+  // ADDED LOCAL-STORAGE FOR CACHE
+  localStorage.setItem(
+    "tenant_branding",
+    JSON.stringify({
+      storeName: data.storeName,
+      logo: data.logo
+    })
+  );
+})
       .catch((e) => {
         setError(
           e?.response?.data?.message ||

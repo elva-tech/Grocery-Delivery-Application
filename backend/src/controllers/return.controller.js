@@ -55,11 +55,21 @@ exports.createReturnRequest = async (req, res) => {
     }
 
     // Ensure order belongs to the logged-in user
-    if (order.userId.toString() !== req.user.userId) {
+    // if (order.userId.toString() !== req.user.userId) {
+    //     return res.status(403).json({
+    //         success: false,
+    //         message: "Unauthorized order access"
+    //     });
+    // }
+
+    // Ensure order belongs to the logged-in user
+    if (order.userId && req.user.userId && order.userId.toString() !== req.user.userId.toString()) {
         return res.status(403).json({
             success: false,
             message: "Unauthorized order access"
         });
+        console.log("order.userId:", order.userId?.toString());
+    console.log("req.user.userId:", req.user.userId);
     }
     
     // calculate refund amount from order
@@ -199,8 +209,9 @@ exports.approveReturn = async (req, res) => {
 
     await request.save();
 
-    await Order.findByIdAndUpdate(request.orderId, {
-      orderStatus: "REFUNDED"
+   await Order.findByIdAndUpdate(request.orderId, {
+      orderStatus: "REFUND_APPROVED",
+      adminNote: resolutionNote || "",
     });
 
     res.json({
@@ -260,10 +271,14 @@ exports.rejectReturn = async (req, res) => {
       });
     }
 
-    request.status = "rejected";
+   request.status = "rejected";
     request.resolutionNote = resolutionNote;
-
     await request.save();
+
+    await Order.findByIdAndUpdate(request.orderId, {
+      orderStatus: "REFUND_REJECTED",
+      adminNote: resolutionNote || "",
+    });
 
     res.json({
       success: true,

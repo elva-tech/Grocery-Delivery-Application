@@ -239,6 +239,11 @@ const ProductList = () => {
           onCancel={() => setShowCatForm(false)}
           onSubmit={(cat) => {
             addCategory(cat);
+            setSuccessData({
+              mode: 'category',
+              name: cat?.name || '',
+            });
+            setShowSuccess(true);
             setShowCatForm(false);
           }}
         />
@@ -422,7 +427,11 @@ const ProductList = () => {
         </div>
 
         <h2 className="text-xl font-black text-slate-800">
-          {successData?.mode === 'edit' ? 'Product Updated' : 'Product Added'}
+          {successData?.mode === 'edit'
+            ? 'Product Updated'
+            : successData?.mode === 'category'
+              ? 'Category Added'
+              : 'Product Added'}
         </h2>
 
         <p className="text-slate-500 text-sm">
@@ -434,10 +443,12 @@ const ProductList = () => {
             : 'has been added successfully.'}
         </p>
 
-        <div className="text-xs text-slate-400 space-y-1">
-          <p>₹{successData?.price} • {successData?.unit}</p>
-          <p>Stock: {successData?.stock}</p>
-        </div>
+        {successData?.mode !== 'category' && (
+          <div className="text-xs text-slate-400 space-y-1">
+            <p>₹{successData?.price} • {successData?.unit}</p>
+            <p>Stock: {successData?.stock}</p>
+          </div>
+        )}
 
       </div>
 

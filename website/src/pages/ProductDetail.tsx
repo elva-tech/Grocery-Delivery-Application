@@ -76,16 +76,20 @@ const ProductDetail = () => {
               ) : (
                 <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-300">No Image Available</span>
               )}
-
-              <div className="absolute top-6 left-6 md:top-8 md:left-8 bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-2 border border-slate-100 shadow-sm">
-                <div className={`w-2 h-2 rounded-full ${product.stock > 10 ? 'bg-green-500' : 'bg-orange-500 animate-pulse'}`} />
-                <span className="text-[10px] font-black uppercase tracking-tighter text-slate-700">
-                  
+              <div className="absolute top-6 left-6 md:top-8 md:left-8 z-20">
+                <span
+                  className={`text-white text-[8px] px-2 py-0.5 rounded-md font-bold ${product.stock === 0
+                      ? 'bg-red-500'
+                      : product.stock <= 10
+                        ? 'bg-orange-400'
+                        : 'hidden'
+                    }`}
+                >
                   {product.stock === 0
-                    ? 'Out of Stock'
+                    ? 'OUT OF STOCK'
                     : product.stock > 10
-                      ? 'In Stock'
-                      : `Hurry, only ${product.stock} left`}
+                      ? 'IN STOCK'
+                      : `LOW STOCK`}
                 </span>
               </div>
             </div>
@@ -196,8 +200,8 @@ const ProductDetail = () => {
                   onClick={() => dispatch(addToCart(product))}
                   disabled={isOutOfStock}
                   className={`flex-1 ${isOutOfStock
-                      ? 'bg-slate-300 cursor-not-allowed'
-                      : 'bg-[#4b6f9e] hover:bg-[#1e293b]'
+                    ? 'bg-slate-300 cursor-not-allowed'
+                    : 'bg-[#4b6f9e] hover:bg-[#1e293b]'
                     } text-white h-20 rounded-[2rem] font-black text-xl flex items-center justify-center gap-3`}
                 >
                   {isOutOfStock ? 'Out of Stock' : 'Add to Basket'}

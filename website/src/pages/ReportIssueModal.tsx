@@ -5,11 +5,13 @@ import { reportOrderIssueApi } from '../api/ordersApi';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
 import { API_BASE_URL, getTenantId } from '../config';
 
+
+
 const REPORT_REASONS = ["Item damaged", "Wrong item received", "Quality issue", "Items missing", "Package tampered"];
 
 const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
   const { data: settings } = useGetAppSettingsQuery();
-  
+
   const [selectedReason, setSelectedReason] = useState('');
   const [comment, setComment] = useState('');
   const [preview, setPreview] = useState<string | null>(null);
@@ -38,60 +40,123 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
   // Safety: If feature is disabled via backend, do not render modal
   if (!isOpen || !settings?.allowReportIssue) return null;
 
+  // const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const file = e.target.files?.[0];
+  //   if (file) {
+  //     if (file.size > 5 * 1024 * 1024) {
+  //       return setError("Image size must be less than 5MB");
+  //     }
+  //     setError(null);
+  //     setEvidenceUrl('');
+  //     const url = URL.createObjectURL(file);
+  //     setPreview(url);
+
+  //     try {
+  //       setUploadingImage(true);
+  //       const formData = new FormData();
+  //       formData.append('file', file);
+
+  //       const token = localStorage.getItem('token');
+  //       const uploadRes = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
+  //         headers: {
+  //           'Content-Type': 'multipart/form-data',
+  //           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  //           'x-tenant-id': getTenantId(),
+  //         },
+  //       });
+
+  //       if (!uploadRes?.data?.url) {
+  //         throw new Error('Upload failed');
+  //       }
+
+  //       setEvidenceUrl(uploadRes.data.url);
+  //     } catch {
+  //       setEvidenceUrl('');
+  //       setError("Failed to upload image. Please try again.");
+  //     } finally {
+  //       setUploadingImage(false);
+  //     }
+  //   }
+  // };
+
+
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        return setError("Image size must be less than 5MB");
-      }
-      setError(null);
-      setEvidenceUrl('');
-      const url = URL.createObjectURL(file);
-      setPreview(url);
+    if (!file) return;
 
-      try {
-        setUploadingImage(true);
-        const formData = new FormData();
-        formData.append('file', file);
+    if (file.size > 5 * 1024 * 1024) {
+      return setError("Image size must be less than 5MB");
+    }
 
-        const token = localStorage.getItem('token');
-        const uploadRes = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
+    setError(null);
+    setEvidenceUrl('');
+
+    const previewUrl = URL.createObjectURL(file);
+    setPreview(previewUrl);
+
+    try {
+      setUploadingImage(true);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const token = localStorage.getItem('token');
+
+      const uploadRes = await axios.post(
+        `${API_BASE_URL}/api/upload/banners`,
+        formData,
+        {
           headers: {
             'Content-Type': 'multipart/form-data',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             'x-tenant-id': getTenantId(),
           },
-        });
-
-        if (!uploadRes?.data?.url) {
-          throw new Error('Upload failed');
         }
+      );
 
-        setEvidenceUrl(uploadRes.data.url);
-      } catch {
-        setEvidenceUrl('');
-        setError("Failed to upload image. Please try again.");
-      } finally {
-        setUploadingImage(false);
+      const imageUrl = uploadRes?.data?.url;
+
+      if (!imageUrl) {
+        throw new Error('Upload failed');
       }
+
+      setEvidenceUrl(imageUrl);
+
+    } catch (err) {
+      console.error(err);
+      setEvidenceUrl('');
+      setError("Failed to upload image. Please try again.");
+    } finally {
+      setUploadingImage(false);
     }
   };
 
-  const handleSubmit = async () => {
+
+ const handleSubmit = async () => {
+    console.log("ORDER OBJECT:", order);
+    console.log("PAYLOAD:", { orderId: order?._id, reason: selectedReason, evidenceUrl });
     if (!selectedReason) return setError("Please select a reason");
     if (!evidenceUrl) return setError("Evidence photo is required");
-    
+
     setLoading(true);
     setError(null);
 
     try {
+      console.log("SUBMIT PAYLOAD:", {
+        orderId: order?._id,
+        reason: selectedReason,
+        comment,
+        evidenceUrl
+      });
+
       await reportOrderIssueApi({
-        orderId: order.id,
+        orderId: order._id || order.id,
         reason: selectedReason,
         comment: comment.trim() || "No comment",
         evidenceUrl,
       });
-      onSuccess(); 
+      onSuccess();
       setStep(2);
     } catch (err) {
       setError("Failed to submit report. Please try again.");
@@ -110,7 +175,7 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
                 <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Report Issue.</h2>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Order #{order?.id}</p>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
+              <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
             </div>
 
             <div className="space-y-6">
@@ -124,10 +189,10 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">What went wrong?</label>
                 <div className="flex flex-wrap gap-2">
                   {REPORT_REASONS.map(r => (
-                    <button 
-                      key={r} 
+                    <button
+                      key={r}
                       type="button"
-                      onClick={() => { setSelectedReason(r); setError(null); }} 
+                      onClick={() => { setSelectedReason(r); setError(null); }}
                       className={`px-4 py-2 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${selectedReason === r ? 'border-[#4b6f9e] bg-blue-50 text-[#4b6f9e]' : 'border-slate-100 text-slate-500 hover:border-slate-200 hover:bg-slate-50'}`}
                     >
                       {r}
@@ -138,18 +203,18 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
 
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Additional Details (Optional)</label>
-                <textarea 
-                  className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-[#4b6f9e] outline-none text-sm font-bold h-24 resize-none transition-all placeholder:text-slate-300" 
-                  placeholder="Tell us more about the issue..." 
-                  value={comment} 
-                  onChange={(e) => setComment(e.target.value)} 
+                <textarea
+                  className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-[#4b6f9e] outline-none text-sm font-bold h-24 resize-none transition-all placeholder:text-slate-300"
+                  placeholder="Tell us more about the issue..."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
                 />
               </div>
 
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Photo Evidence</label>
-                <div 
-                  onClick={() => fileRef.current?.click()} 
+                <div
+                  onClick={() => fileRef.current?.click()}
                   className={`w-full h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden ${preview ? 'border-[#4b6f9e]' : 'border-slate-200 hover:bg-slate-50'}`}
                 >
                   {preview ? (
@@ -169,9 +234,9 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
                 <input type="file" ref={fileRef} className="hidden" onChange={handleFileChange} accept="image/*" />
               </div>
 
-              <button 
-                disabled={loading || uploadingImage} 
-                onClick={handleSubmit} 
+              <button
+                disabled={loading || uploadingImage || !evidenceUrl}
+                onClick={handleSubmit}
                 className="w-full bg-[#1e293b] text-white h-16 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4b6f9e] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200 disabled:opacity-50"
               >
                 {loading || uploadingImage ? <Loader2 className="animate-spin" /> : "Submit Report"}
@@ -180,17 +245,17 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
           </div>
         ) : (
           <div className="p-12 text-center animate-in zoom-in duration-500">
-              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner shadow-emerald-200/50">
-                <CheckCircle2 size={40} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Report Sent.</h3>
-              <p className="text-slate-500 font-bold text-sm mt-2 mb-10 leading-relaxed">Our support team will investigate and <br/> reach out within 24 hours.</p>
-              <button 
-                onClick={onClose} 
-                className="w-full border-2 border-slate-100 h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 hover:border-slate-200 transition-all"
-              >
-                Return to History
-              </button>
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner shadow-emerald-200/50">
+              <CheckCircle2 size={40} />
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Report Sent.</h3>
+            <p className="text-slate-500 font-bold text-sm mt-2 mb-10 leading-relaxed">Our support team will investigate and <br /> reach out within 24 hours.</p>
+            <button
+              onClick={onClose}
+              className="w-full border-2 border-slate-100 h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 hover:border-slate-200 transition-all"
+            >
+              Return to History
+            </button>
           </div>
         )}
       </div>

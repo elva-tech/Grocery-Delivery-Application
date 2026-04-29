@@ -41,7 +41,17 @@ const ReturnManagement = () => {
           <div key={request.id} className="bg-white border rounded-[24px] p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex flex-col lg:flex-row gap-6">
               <div className="w-full lg:w-48 h-48 rounded-2xl overflow-hidden bg-gray-100 border">
-                <img src={request.evidence} alt="Evidence" className="w-full h-full object-cover" />
+                {(request.evidenceImage || request.evidence) ? (
+                  <img
+                    src={request.evidenceImage || request.evidence}
+                    alt="Evidence"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs font-bold">
+                    No Image
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 space-y-3">

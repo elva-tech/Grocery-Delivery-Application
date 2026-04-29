@@ -153,8 +153,16 @@ export default function OrdersScreen() {
     formData.append('file', { uri: localUri, name, type: mime });
 
     try {
+      // const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/upload`, {
+      //   method: 'POST',
+      //   body: formData,
+      // });
+
       const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/upload`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
       const data = await res.json().catch(() => ({}));
@@ -453,7 +461,7 @@ export default function OrdersScreen() {
                   </View>
                 );
               })}
-
+{/* 
               {selectedOrder?.adminComment && (
                 <View style={styles.adminResponseBox}>
                   <View style={styles.adminResponseHeader}>
@@ -466,6 +474,18 @@ export default function OrdersScreen() {
                       Resolved on: {new Date(selectedOrder.resolvedAt).toLocaleDateString()}
                     </Text>
                   )}
+                </View>
+              )} */}
+
+              {(selectedOrder?.adminNote || selectedOrder?.resolutionNote || selectedOrder?.adminComment) && (
+                <View style={styles.adminResponseBox}>
+                  <View style={styles.adminResponseHeader}>
+                    <Ionicons name="chatbubble-ellipses" size={16} color="#4b6f9e" />
+                    <Text style={styles.adminResponseTitle}>ADMIN RESPONSE</Text>
+                  </View>
+                  <Text style={styles.adminResponseText}>
+                    "{selectedOrder.adminNote || selectedOrder.resolutionNote || selectedOrder.adminComment}"
+                  </Text>
                 </View>
               )}
             </ScrollView>
@@ -484,7 +504,10 @@ export default function OrdersScreen() {
               )}
 
               {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
-              {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && (
+              {/* {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && ( */}
+
+              {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
+              {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && !selectedOrder?.returnStatus && (
                 <TouchableOpacity
                   style={styles.reportBtn}
                   onPress={() => {

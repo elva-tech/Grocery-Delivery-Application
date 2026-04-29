@@ -21,6 +21,12 @@ const STATUS_THEME: any = {
   REFUND_REJECTED: { color: 'text-red-700', bg: 'bg-red-100', label: 'Refund Rejected' },
 };
 
+const hasOrderRating = (rating: any) => {
+  if (!rating) return false;
+  if (typeof rating === 'number') return rating > 0;
+  return Number(rating?.value || 0) > 0;
+};
+
 const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -222,11 +228,11 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
                     <p className="font-black text-slate-900">₹{order.totalAmount}</p>
                   </div>
                   {/* Inline rating badge on card */}
-                  {order.rating?.value && (
+                  {hasOrderRating(order.rating) && (
                     <div className="mt-3 flex items-center gap-1.5">
                       {[1, 2, 3, 4, 5].map(s => (
                         <Star key={s} size={12}
-                          className={s <= order.rating.value ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}
+                          className={s <= Number(order.rating?.value || order.rating || 0) ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}
                         />
                       ))}
                       {order.rating.comment && (
@@ -294,7 +300,7 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
                       </button>
 
                       {/* RATE ORDER BUTTON */}
-                      {!selectedOrder.rating?.value ? (
+                      {!hasOrderRating(selectedOrder.rating) ? (
                         <button
                           onClick={() => openRatingModal(selectedOrder.id)}
                           className="flex items-center justify-center gap-2 border-2 border-amber-200 text-amber-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-50 transition-all"
@@ -305,7 +311,7 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
                         <div className="flex flex-col items-center justify-center border-2 border-amber-100 bg-amber-50 py-3 rounded-2xl gap-1">
                           <div className="flex gap-0.5">
                             {[1, 2, 3, 4, 5].map(s => (
-                              <Star key={s} size={14} className={s <= selectedOrder.rating.value ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'} />
+                              <Star key={s} size={14} className={s <= Number(selectedOrder.rating?.value || selectedOrder.rating || 0) ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'} />
                             ))}
                           </div>
                           {selectedOrder.rating.comment && (
@@ -315,7 +321,17 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
                       )}
 
                       {/* REPORT ISSUE TOGGLE */}
-                      {settings?.allowReportIssue && (
+                      {/* {settings?.allowReportIssue && (
+                        <button
+                          onClick={() => setIsReportModalOpen(true)}
+                          className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all"
+                        >
+                          <AlertCircle size={14} /> Report Issue
+                        </button>
+                      )} */}
+
+                      {/* REPORT ISSUE TOGGLE — hide if already reported */}
+                      {settings?.allowReportIssue && !selectedOrder.returnStatus && (
                         <button
                           onClick={() => setIsReportModalOpen(true)}
                           className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all"
@@ -363,11 +379,11 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
                         </div>
                       </div>
 
-                      {selectedOrder.adminNote && (
+                    {(selectedOrder.adminNote || selectedOrder.resolutionNote) && (
                         <div className="bg-white/80 p-3 rounded-2xl border border-black/5 shadow-sm">
                           <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">Support Message:</p>
                           <p className="text-xs font-bold text-slate-700 leading-relaxed italic uppercase tracking-tight">
-                            "{selectedOrder.adminNote}"
+                            "{selectedOrder.adminNote || selectedOrder.resolutionNote}"
                           </p>
                         </div>
                       )}

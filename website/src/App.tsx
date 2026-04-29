@@ -32,6 +32,10 @@ import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
 import ContactUs from './pages/ContactUs';
 
+//tenant branding dynamic tab
+import { useTenantBranding } from './context/TenantBrandingContext';
+
+
 const TENANT_SCOPE_KEY = 'website_cart_tenant_scope';
 
 const formatTime = (iso?: string | null) => {
@@ -109,6 +113,10 @@ const ClosingWarningCard = ({ show, countdown, endTime, formatCountdown, formatT
 
 const App = () => {
   const dispatch = useDispatch();
+
+  // DYNAMIC BRANDING
+  const { storeName, raw } = useTenantBranding();
+
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -325,6 +333,32 @@ const [showClosingWarning, setShowClosingWarning] = useState(false);
       navigate('/', { replace: true });
     }
   }, [location.pathname, selectedAddress, items.length, navigate]);
+
+
+  // DYNAMIC TAB LOGO AND NAME 
+  useEffect(() => {
+  if (!raw) return;
+
+  // Title
+  if (storeName) {
+    document.title = storeName;
+  }
+
+  // Favicon
+  if (raw.logo) {
+    let link = document.querySelector("link[rel*='icon']");
+
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+
+    link.href = raw.logo;
+  }
+}, [storeName, raw]);
+
+
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc] text-[#1e293b] font-sans">
 

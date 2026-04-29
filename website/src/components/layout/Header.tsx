@@ -32,7 +32,7 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClick, onLoginClick }) => {
-  const { storeName, tagline, logo } = useTenantBranding();
+  const { storeName, tagline, logo, raw } = useTenantBranding();
   const { head: brandHead, tail: brandTail } = splitBrandWords(storeName);
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -347,20 +347,35 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
             <div className="flex flex-col gap-3 text-center">
               <div className="bg-slate-50 rounded-xl p-3">
                 <p className="text-xs text-slate-400 font-bold">EMAIL</p>
-                <p className="text-sm font-black text-slate-800 break-all">
-                  support@yourapp.com
-                </p>
+                <a
+                  href={`mailto:${raw?.supportEmail}`}
+                  className="text-sm font-black text-slate-800 break-all hover:text-[#4b6f9e]"
+                >
+                  {raw?.supportEmail || 'N/A'}
+                </a>
               </div>
 
               <div className="bg-slate-50 rounded-xl p-3">
                 <p className="text-xs text-slate-400 font-bold">PHONE</p>
-                <p className="text-sm font-black text-slate-800">
-                  +91 9876543210
-                </p>
+                <a
+                  href={`tel:${raw?.supportPhone}`}
+                  className="text-sm font-black text-slate-800 hover:text-[#4b6f9e]"
+                >
+                  {raw?.supportPhone || 'N/A'}
+                </a>
               </div>
+
+              {raw?.supportHours && (
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <p className="text-xs text-slate-400 font-bold">HOURS</p>
+                  <p className="text-sm font-black text-slate-800">
+                    {raw.supportHours}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        </div >
       )}
     </>
   );

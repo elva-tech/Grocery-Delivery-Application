@@ -1,4 +1,5 @@
 import React from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppStateProvider, useAppState } from './context/AppStateContext';
 import { ToastProvider } from './context/ToastContext';
@@ -18,6 +19,9 @@ import CouponManagement from './modules/Coupons/CouponManagement';
 import PaymentPlan from './modules/Settings/PaymentPlan';
 import Schedule from './modules/Settings/Schedule';
 import StoreProfilePage from './modules/Settings/StoreProfilePage';
+
+//TENANT BRANDING
+import { useTenantBranding } from './context/TenantBrandingContext';
 
 // Create a helper component to handle the conditional logic inside the Router
 const AppRoutes = () => {
@@ -63,6 +67,27 @@ const ReturnManagementWrapper = () => {
 };
 
 function App() {
+  const { storeName, raw } = useTenantBranding();
+
+  useEffect(() => {
+    if (!raw) return;
+
+    if (storeName) {
+      document.title = storeName + " Admin";
+    }
+
+    if (raw.logo) {
+      let link = document.querySelector("link[rel*='icon']");
+
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+
+      link.href = raw.logo;
+    }
+  }, [storeName, raw]);
   return (
     <ToastProvider>
       <AppStateProvider>

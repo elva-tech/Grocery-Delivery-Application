@@ -78,6 +78,11 @@ const Login = () => {
     }
   };
 
+  //TENANT BRANDING IN LOGIN SCREEN
+  const cached = JSON.parse(localStorage.getItem("tenant_branding") || "{}");
+const finalLogo = logo || cached.logo || APP_CONFIG.brand.logo;
+const finalName = storeName || cached.storeName || "";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full border border-gray-100">
@@ -86,14 +91,14 @@ const Login = () => {
         <div className="text-center mb-8">
           <div className="bg-primary-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden">
             <img
-              src={logo || APP_CONFIG.brand.logo}
-              alt={storeName}
+              src={finalLogo}
+              alt={finalName}
               className={logo ? 'w-10 h-10 object-cover rounded-lg' : 'w-10 h-10'}
             />
           </div>
 
           <h2 className="text-3xl font-bold text-gray-900">
-            {storeName}
+            {finalName && <h2>{finalName}</h2>}
           </h2>
           <p className="text-gray-600 mt-2">
             Admin Portal
