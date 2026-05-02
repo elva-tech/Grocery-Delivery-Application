@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
+import { Image } from "expo-image";
 import { Colors, Fonts } from "@/theme/theme";
 import { sendOtp } from "@/api/authApi";
+import { useTenantBranding } from "@/contexts/TenantBrandingContext";
 
 export default function Register() {
   const router = useRouter();
@@ -62,6 +64,16 @@ export default function Register() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container} bounces={false}>
+        <View style={styles.brandRow}>
+          <Image
+            source={logoUri ? { uri: logoUri } : require('../../assets/logo-2.png')}
+            style={styles.brandLogo}
+            contentFit="contain"
+          />
+          <Text style={[styles.brandName, { fontFamily: Fonts.bold }]} numberOfLines={1}>
+            {storeName}
+          </Text>
+        </View>
         <LottieView
           source={require('../../assets/animations/Cyber Security.json')}
           autoPlay loop style={styles.lottieHero}
@@ -152,6 +164,9 @@ export default function Register() {
 }
 
 const styles = StyleSheet.create({
+  brandRow: { alignItems: "center", marginBottom: 8 },
+  brandLogo: { width: 64, height: 64, borderRadius: 14, marginBottom: 6 },
+  brandName: { fontSize: 16, color: Colors.PRIMARY_TEXT, textAlign: "center", maxWidth: "100%" },
   container: { flexGrow: 1, backgroundColor: Colors.WHITE, padding: 24, justifyContent: "center" },
   lottieHero: { width: 250, height: 200, alignSelf: "center", marginBottom: 10 },
   title: { fontSize: 26, color: Colors.PRIMARY_TEXT, marginBottom: 8 },

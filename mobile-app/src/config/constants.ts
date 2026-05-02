@@ -1,3 +1,5 @@
+import { NativeModules, Platform } from 'react-native';
+
 import { getTenantId } from '../utils/getTenantId';
 
 /**
@@ -9,10 +11,39 @@ import { getTenantId } from '../utils/getTenantId';
 // API ENVIRONMENT URLS
 // ============================================
 
+/**
+ * In Expo Go / dev, the JS bundle URL contains the same host the device uses to reach Metro
+ * (e.g. hotspot: `http://192.168.43.12:8081/...`). Re-use that host for the API so you do not
+ * need to hand-edit IPs when switching Wi‑Fi / hotspot / USB.
+ */
+function inferPackagerHostname(): string | null {
+  if (Platform.OS === 'web') return null;
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL as string | undefined;
+    if (!scriptURL || typeof scriptURL !== 'string') return null;
+    const m = scriptURL.match(/\/\/([^/:?]+)/);
+    const host = m?.[1]?.trim();
+    if (!host || host === 'localhost' || host === '127.0.0.1') return null;
+    return host;
+  } catch {
+    return null;
+  }
+}
+
+/** Dev API: override with EXPO_PUBLIC_API_DEV_URL. Web uses localhost. Native infers host from Metro when possible. */
+function resolveDevelopmentApiUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_DEV_URL?.trim();
+  if (fromEnv) return fromEnv;
+  if (Platform.OS === 'web') return 'http://localhost:5000';
+  const host = inferPackagerHostname();
+  if (host) return `http://${host}:5000`;
+  return 'http://192.168.254.226:5000';
+}
+
 export const API_BASE_URL = {
-  // DEVELOPMENT: 'http://localhost:5000',
-  // DEVELOPMENT: 'http:///192.168.29.105:5000',
-  DEVELOPMENT: 'https://grocery-delivery-application-6n3w.onrender.com',
+  get DEVELOPMENT(): string {
+    return resolveDevelopmentApiUrl();
+  },
   STAGING: 'https://staging-api.egrocery.com',
   PRODUCTION: 'https://grocery-delivery-application-6n3w.onrender.com',
 };

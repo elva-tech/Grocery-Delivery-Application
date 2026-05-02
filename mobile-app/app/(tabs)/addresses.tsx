@@ -8,8 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { useDispatch, useSelector } from 'react-redux';
+
+import AddressMapPicker from '@/components/AddressMapPicker';
 
 import RazorpayCheckout from 'react-native-razorpay';
 
@@ -752,30 +753,18 @@ export default function AddressesScreen() {
         </View>
       </Modal>
 
-      {/* Map Modal */}
-      <Modal visible={showMap} animationType="fade">
-        <View style={{ flex: 1 }}>
-          <MapView
-            provider={PROVIDER_GOOGLE}
-            style={{ flex: 1 }}
-            initialRegion={region}
-            onRegionChangeComplete={r => {
-              setAddrLat(r.latitude);
-              setAddrLng(r.longitude);
-              fetchAddressFromBackend(r.latitude, r.longitude);
-            }}
-          />
-          <View style={styles.markerFixed} pointerEvents="none">
-            <Ionicons name="location" size={40} color="#ef4444" />
-          </View>
-          <View style={styles.mapFooter}>
-            <Text style={styles.mapAddr}>{isFetchingAddress ? 'Fetching address...' : line1}</Text>
-            <TouchableOpacity style={styles.mapConfirmBtn} onPress={() => setShowMap(false)}>
-              <Text style={styles.mapConfirmBtnText}>Confirm Location</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <AddressMapPicker
+        visible={showMap}
+        region={region}
+        line1={line1}
+        isFetchingAddress={isFetchingAddress}
+        onRegionChangeComplete={r => {
+          setAddrLat(r.latitude);
+          setAddrLng(r.longitude);
+          fetchAddressFromBackend(r.latitude, r.longitude);
+        }}
+        onConfirm={() => setShowMap(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -874,10 +863,4 @@ const styles = StyleSheet.create({
   editOthersBtn: { marginTop: 12, padding: 8, backgroundColor: '#f1f5f9', alignSelf: 'flex-start', borderRadius: 8 },
   editOthersText: { fontSize: 12, color: '#4b6f9e', fontWeight: '700' },
 
-  // Map
-  markerFixed: { position: 'absolute', top: '50%', left: '50%', marginLeft: -20, marginTop: -40 },
-  mapFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  mapAddr: { marginBottom: 15, color: '#1e293b', fontWeight: '500' },
-  mapConfirmBtn: { backgroundColor: '#4b6f9e', padding: 18, borderRadius: 12, alignItems: 'center' },
-  mapConfirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

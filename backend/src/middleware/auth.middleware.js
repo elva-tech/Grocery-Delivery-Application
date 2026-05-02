@@ -5,12 +5,6 @@ const Tenant = require("../models/Tenant.model");
 //  AUTH MIDDLEWARE (Verifies Token)
 const authMiddleware = async (req, res, next) => {
   try {
-
-    // Allow public auth routes (login / otp)
-    if (req.originalUrl.startsWith("/api/auth")) {
-      return next();
-    }
-
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {

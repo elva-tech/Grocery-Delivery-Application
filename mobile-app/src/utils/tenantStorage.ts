@@ -1,7 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeviceEventEmitter } from 'react-native';
 
 const TENANT_KEY = 'tenantId';
-const FALLBACK   = process.env.EXPO_PUBLIC_TENANT_ID || 'demo-tenant';
+const FALLBACK =
+  process.env.EXPO_PUBLIC_TENANT_ID?.trim() ||
+  process.env.EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID?.trim() ||
+  'puma';
 
 /**
  * Extract tenantId from a deep-link or HTTPS URL.
@@ -32,6 +36,7 @@ export function extractTenantFromUrl(url: string): string | null {
 export async function saveTenantId(tenantId: string): Promise<void> {
   await AsyncStorage.setItem(TENANT_KEY, tenantId);
   console.log('[tenant] saved:', tenantId);
+  DeviceEventEmitter.emit('tenant-changed');
 }
 
 /**
@@ -39,8 +44,8 @@ export async function saveTenantId(tenantId: string): Promise<void> {
  *
  * Resolution order:
  *   1. AsyncStorage (set via deep link / QR)
- *   2. EXPO_PUBLIC_TENANT_ID env var  (set per EAS build profile)
- *   3. 'demo-tenant'                  (local dev fallback)
+ *   2. EXPO_PUBLIC_TENANT_ID / EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID (EAS / .env)
+ *   3. 'puma'                         (local dev fallback)
  */
 export async function getActiveTenantId(): Promise<string> {
   try {

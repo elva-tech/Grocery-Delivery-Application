@@ -12,12 +12,15 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
+import { Image } from "expo-image";
 import { Colors, Fonts } from "@/theme/theme";
 import { sendOtp } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
+import { useTenantBranding } from "@/contexts/TenantBrandingContext";
 
 export default function Login() {
     const router = useRouter();
+    const { storeName, logoUri } = useTenantBranding();
     const [phone, setPhone] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -54,6 +57,16 @@ export default function Login() {
               style={{ flex: 1 }}
             >
               <ScrollView contentContainerStyle={styles.container} bounces={false}>
+                <View style={styles.brandRow}>
+                  <Image
+                    source={logoUri ? { uri: logoUri } : require('../../assets/logo-2.png')}
+                    style={styles.brandLogo}
+                    contentFit="contain"
+                  />
+                  <Text style={[styles.brandName, { fontFamily: Fonts.bold }]} numberOfLines={1}>
+                    {storeName}
+                  </Text>
+                </View>
                 <LottieView
                   source={require('../../assets/animations/truck.json')}
                   autoPlay
@@ -121,6 +134,22 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
+    brandRow: {
+        alignItems: "center",
+        marginBottom: 8,
+    },
+    brandLogo: {
+        width: 64,
+        height: 64,
+        borderRadius: 14,
+        marginBottom: 6,
+    },
+    brandName: {
+        fontSize: 16,
+        color: Colors.PRIMARY_TEXT,
+        textAlign: "center",
+        maxWidth: "100%",
+    },
     container: {
         flexGrow: 1,
         backgroundColor: Colors.WHITE,
