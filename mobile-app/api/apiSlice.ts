@@ -1,8 +1,9 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { API_BASE_URL } from '@/src/config/constants';
+import { ACTIVE_API_URL} from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
-const BASE = API_BASE_URL.DEVELOPMENT;
+const BASE = ACTIVE_API_URL || ACTIVE_API_URL.DEVELOPMENT;
+
 const tenantHeaders = async () => ({ 'x-tenant-id': await getActiveTenantId() });
 
 /* ---------------- TYPES ---------------- */

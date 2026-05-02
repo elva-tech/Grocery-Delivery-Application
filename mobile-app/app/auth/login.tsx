@@ -55,7 +55,7 @@ export default function Login() {
             >
               <ScrollView contentContainerStyle={styles.container} bounces={false}>
                 <LottieView
-                  source={require('../../assets/animations/Cyber Security.json')}
+                  source={require('../../assets/animations/truck.json')}
                   autoPlay
                   loop
                   style={styles.lottieHero}

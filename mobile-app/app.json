@@ -22,7 +22,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/logo-2.png"
+      "favicon": "./assets/logo-2.png"
     },
     "plugins": [
       "expo-router",
