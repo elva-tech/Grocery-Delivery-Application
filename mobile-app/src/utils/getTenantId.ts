@@ -3,6 +3,7 @@
  *
  * Set EXPO_PUBLIC_TENANT_ID per store (see eas.json).
  * Optional: EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID when TENANT_ID is unset in dev.
+ * Built-in default: puma (must match tenantStorage fallback).
  */
 export function getTenantId(): string {
   const envTenant = process.env.EXPO_PUBLIC_TENANT_ID?.trim();
@@ -11,8 +12,5 @@ export function getTenantId(): string {
   const localDefault = process.env.EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID?.trim();
   if (localDefault) return localDefault;
 
-  console.warn(
-    "[tenant] Set EXPO_PUBLIC_TENANT_ID (or EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID) so catalog and login target the same store."
-  );
-  return "demo-tenant";
+  return "puma";
 }

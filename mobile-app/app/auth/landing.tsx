@@ -1,25 +1,31 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
-import { Colors, Fonts } from "@/theme/theme"; // Use your theme!
+import { Colors, Fonts } from "@/theme/theme";
+import { useTenantBranding } from "@/contexts/TenantBrandingContext";
 
 export default function Landing() {
   const router = useRouter();
+  const { storeName, logoUri, heroTitle, heroSubtitle, loading } = useTenantBranding();
 
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <Image
-          source={require('../../assets/logo-2.png')}
-          style={styles.logoImage}
-          contentFit="contain"
-        />
+        {loading && !logoUri ? (
+          <ActivityIndicator size="large" color={Colors.PRIMARY} />
+        ) : (
+          <Image
+            source={logoUri ? { uri: logoUri } : require('../../assets/logo-2.png')}
+            style={styles.logoImage}
+            contentFit="contain"
+          />
+        )}
       </View>
 
-      <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Welcome to Enandi</Text>
+      <Text style={[styles.title, { fontFamily: Fonts.bold }]}>{heroTitle || `Welcome to ${storeName}`}</Text>
       <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>
-        Experience the purity of fresh milk delivered to your doorstep.
+        {heroSubtitle}
       </Text>
 
       <TouchableOpacity

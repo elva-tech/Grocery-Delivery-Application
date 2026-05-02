@@ -12,10 +12,12 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Fonts } from '@/theme/theme';
 import { updateProfileApi } from '@/api/ordersApi';
-import { APP_BRAND, SUPPORT_PHONE } from '@/src/config/constants';
+import { APP_BRAND } from '@/src/config/constants';
 import Constants from 'expo-constants';
+import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 
 export default function ProfileScreen() {
+  const { supportEmail, storeName } = useTenantBranding();
   const { user, token } = useSelector((state: RootState) => state.auth);
   const { items } = useSelector((state: RootState) => state.cart);
   const dispatch = useDispatch();
@@ -87,7 +89,13 @@ export default function ProfileScreen() {
     }
   };
 
-  const menuItems = [
+  const menuItems: {
+    icon: string;
+    label: string;
+    badge?: number;
+    subtitle?: string;
+    onPress: () => void;
+  }[] = [
     {
       icon: 'cart-outline',
       label: 'Cart',
@@ -121,7 +129,8 @@ export default function ProfileScreen() {
     {
       icon: 'help-circle-outline',
       label: 'Customer Support',
-      onPress: () => router.push('/(tabs)/terms?page=support')
+      subtitle: supportEmail.trim() || undefined,
+      onPress: () => router.push('/(tabs)/terms?page=support'),
     },
     {
       icon: 'document-text-outline',
@@ -199,7 +208,14 @@ export default function ProfileScreen() {
                 <View style={styles.iconCircle}>
                   <Ionicons name={item.icon as any} size={22} color={Colors.PRIMARY} />
                 </View>
-                <Text style={styles.menuText}>{item.label}</Text>
+                <View style={styles.menuLabelCol}>
+                  <Text style={styles.menuText}>{item.label}</Text>
+                  {item.subtitle ? (
+                    <Text style={styles.menuSubtitle} numberOfLines={1}>
+                      {item.subtitle}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
               <View style={styles.menuRight}>
                 {item.badge !== undefined && item.badge > 0 && (
@@ -223,7 +239,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <View style={styles.appInfo}>
-          <Text style={styles.appName}>{APP_BRAND} – Fresh Grocery Delivery</Text>
+          <Text style={styles.appName}>{storeName || APP_BRAND} – Fresh Grocery Delivery</Text>
           <Text style={styles.versionText}>Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
           <Text style={styles.copyrightText}>© {new Date().getFullYear()} {APP_BRAND}</Text>
         </View>
@@ -341,21 +357,35 @@ const styles = StyleSheet.create({
   },
   menuItem: { 
     flexDirection: 'row', 
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderBottomWidth: 1, 
     borderBottomColor: '#edf2f7'
   },
   menuLeft: { 
     flexDirection: 'row', 
-    alignItems: 'center', 
-    flex: 1 
+    alignItems: 'flex-start', 
+    flex: 1,
+    minWidth: 0,
+  },
+  menuLabelCol: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 2,
+  },
+  menuSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 3,
+    fontFamily: Fonts.regular,
   },
   menuRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: 8,
+    paddingTop: 10,
   },
   iconCircle: {
     width: 40, 
@@ -367,7 +397,6 @@ const styles = StyleSheet.create({
     marginRight: 12
   },
   menuText: { 
-    flex: 1, 
     fontSize: 16, 
     fontFamily: Fonts.medium,
     color: Colors.PRIMARY_TEXT 

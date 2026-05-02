@@ -17,6 +17,7 @@ import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import { extractTenantFromUrl, getActiveTenantId, saveTenantId } from '@/src/utils/tenantStorage';
+import { TenantBrandingProvider } from '@/contexts/TenantBrandingContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -205,10 +206,12 @@ const isClosed = storeStatus?.isClosed;
 export default function RootLayout() {
   return (
     <Provider store={store}>
-      <SafeAreaProvider>
-        <RootLayoutNav />
-        <Toast config={toastConfig} />
-      </SafeAreaProvider>
+      <TenantBrandingProvider>
+        <SafeAreaProvider>
+          <RootLayoutNav />
+          <Toast config={toastConfig} />
+        </SafeAreaProvider>
+      </TenantBrandingProvider>
     </Provider>
   );
 }

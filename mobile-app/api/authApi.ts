@@ -36,10 +36,15 @@ export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => 
     body: JSON.stringify({ phoneNumber }),
   });
 
-  const data = await response.json();
+  let data: SendOtpResponse;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Network error. Please check your connection.');
+  }
 
   if (!response.ok) {
-    throw new Error(data.message || 'Failed to send OTP');
+    throw new Error((data as any)?.message || 'Failed to send OTP');
   }
 
   return data;
@@ -64,35 +69,64 @@ export const verifyOtp = async (
     body: JSON.stringify({ phoneNumber, otp, ...(name && { name }) }),
   });
 
-  const data = await response.json();
+  let data: VerifyOtpResponse;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Invalid server response');
+  }
 
   if (!response.ok) {
-    throw new Error(data.message || 'Failed to verify OTP');
+    throw new Error(data?.message || 'Failed to verify OTP');
+  }
+  if (!data.token || !data.user) {
+    throw new Error(data.message || 'Verification failed');
   }
 
   return data;
 };
+
+/**
+ * PATCH /api/auth/profile — must send a valid Bearer token (pass fresh token from verify-otp before AsyncStorage is updated).
+ */
 export const updateProfile = async (
   data: {
     name?: string;
     email?: string;
     address?: string;
     alternatePhone?: string;
-  }
+  },
+  tokenOverride?: string
 ) => {
-  const token = await AsyncStorage.getItem('token');
+  const token = (tokenOverride?.trim() || (await AsyncStorage.getItem('token')) || '').trim();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
 
-  const response = await fetch(`${ACTIVE_API_URL}/api/auth/update-profile`, {
-    method: 'PUT',
+  const body: Record<string, string> = {};
+  if (data.name != null && String(data.name).trim().length > 0) {
+    body.name = String(data.name).trim();
+  }
+  if (data.email != null) body.email = String(data.email).trim();
+  if (data.alternatePhone != null) body.alternatePhone = String(data.alternatePhone).trim();
+
+  const response = await fetch(`${ACTIVE_API_URL}/api/auth/profile`, {
+    method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
       'x-platform': 'mobile',
+      'x-tenant-id': await getActiveTenantId(),
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(body),
   });
 
-  const resData = await response.json();
+  let resData: { message?: string };
+  try {
+    resData = await response.json();
+  } catch {
+    throw new Error('Invalid server response');
+  }
 
   if (!response.ok) {
     throw new Error(resData.message || 'Failed to update profile');

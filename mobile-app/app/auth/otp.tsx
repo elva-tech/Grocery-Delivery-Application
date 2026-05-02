@@ -4,10 +4,9 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useDispatch } from "react-redux";
 import { setCredentials } from "@/store/slices/authSlice";
 import { Colors, Fonts } from "@/theme/theme";
-import { sendOtp, verifyOtp } from "@/api/authApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from "lottie-react-native";
-import { updateProfile } from "@/api/authApi";
+import { sendOtp, verifyOtp, updateProfile } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
 import { getActiveTenantId } from "@/src/utils/tenantStorage";
 
@@ -76,7 +75,6 @@ export default function OTP() {
         mode === "signup" ? (name as string) : undefined,
         mode as "signup" | "login"
       );
-      if (!result.token || !result.user) throw new Error(result.message || 'Verification failed');
       const currentTenant = String(await getActiveTenantId()).trim().toLowerCase();
       const tokenTenant = String(result.user.tenantId || "").trim().toLowerCase();
       if (currentTenant && tokenTenant && currentTenant !== tokenTenant) {
@@ -84,16 +82,27 @@ export default function OTP() {
         throw new Error('This account belongs to a different store. Please switch store and login again.');
       }
 
+      await AsyncStorage.setItem('token', result.token);
+
       if (mode === "signup") {
-        await updateProfile({
-          name,
-          email,
-          address,
-          alternatePhone
-        });
+        try {
+          await updateProfile(
+            {
+              name: (name as string)?.trim() || result.user.name || '',
+              email,
+              alternatePhone,
+            },
+            result.token
+          );
+        } catch (profileErr: any) {
+          showToast(
+            'error',
+            'Profile',
+            profileErr?.message || 'Could not save email on the server. You can update your profile later.',
+          );
+        }
       }
 
-      await AsyncStorage.setItem('token', result.token);
       await AsyncStorage.setItem('user', JSON.stringify({
         id: result.user.id,
         phone: result.user.phoneNumber,
@@ -109,10 +118,10 @@ export default function OTP() {
           id: result.user.id,
           phone: result.user.phoneNumber,
           name: result.user.name,
-email: email || result.user.email,
-address: address || result.user.address,
-alternatePhone: alternatePhone || result.user.alternatePhone,
-tenantId: result.user.tenantId || currentTenant,
+          email: email || result.user.email,
+          address: address || result.user.address,
+          alternatePhone: alternatePhone || result.user.alternatePhone,
+          tenantId: result.user.tenantId || currentTenant,
         },
         token: result.token,
       }));
