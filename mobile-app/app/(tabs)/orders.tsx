@@ -6,7 +6,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal, ScrollView, TextInput, Alert
+  ActivityIndicator, RefreshControl, Modal, ScrollView, TextInput, Alert, Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -434,6 +434,28 @@ export default function OrdersScreen() {
                   )}
                 </View>
               )}
+              {selectedOrder?.status === 'OUT_FOR_DELIVERY' && (
+                <View style={styles.partnerBox}>
+                  <Text style={styles.partnerTitle}>Delivery Partner</Text>
+                  <Text style={styles.partnerName}>
+                    {selectedOrder?.deliveryPartner?.name || 'Will be assigned soon'}
+                  </Text>
+                  <Text style={styles.partnerPhone}>
+                    {selectedOrder?.deliveryPartner?.phoneNumber
+                      ? `Mobile: ${selectedOrder.deliveryPartner.phoneNumber}`
+                      : 'Mobile number will appear once assigned'}
+                  </Text>
+                  {selectedOrder?.deliveryPartner?.phoneNumber && (
+                    <TouchableOpacity
+                      style={styles.partnerCallBtn}
+                      onPress={() => Linking.openURL(`tel:${selectedOrder.deliveryPartner.phoneNumber}`)}
+                    >
+                      <Ionicons name="call-outline" size={15} color="#fff" />
+                      <Text style={styles.partnerCallBtnText}>Contact Partner</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
               {selectedOrder?.items?.map((product: any, idx: number) => {
                 const thumb = resolveProductImageUri(product);
                 return (
@@ -790,6 +812,12 @@ const styles = StyleSheet.create({
   deliveryInfoBox: { backgroundColor: '#f0f7ff', borderRadius: 12, padding: 12, marginBottom: 16, gap: 8 },
   deliveryInfoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   deliveryInfoText: { fontSize: 13, color: '#334155', flex: 1, lineHeight: 18 },
+  partnerBox: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#bfdbfe' },
+  partnerTitle: { fontSize: 11, fontWeight: '900', color: '#1d4ed8', textTransform: 'uppercase', marginBottom: 4, letterSpacing: 0.6 },
+  partnerName: { fontSize: 15, fontWeight: '800', color: '#1e293b' },
+  partnerPhone: { fontSize: 13, color: '#475569', marginTop: 3 },
+  partnerCallBtn: { marginTop: 10, backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6 },
+  partnerCallBtnText: { color: '#fff', fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80, gap: 12 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#64748b' },
   emptySubtitle: { fontSize: 13, color: '#94a3b8', textAlign: 'center', paddingHorizontal: 32 },

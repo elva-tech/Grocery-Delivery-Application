@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { API_BASE_URL, TENANT_ID } from '../config';
+import { API_BASE_URL, getTenantId } from '../config';
 
 /* -------- helpers -------- */
 const toCatId = (name: string) =>
@@ -7,19 +7,25 @@ const toCatId = (name: string) =>
 const toSubId = (name: string) =>
   `sub_${name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}`;
 
-/* -------- in-memory cache to avoid double-fetching -------- */
-let _productsCache: Product[] | null = null;
-let _cacheExpiry = 0;
+/* -------- in-memory cache to avoid double-fetching (must be scoped by tenant) -------- */
+type ProductsCacheEntry = { tenantId: string; data: Product[]; expiry: number };
+let _productsCache: ProductsCacheEntry | null = null;
 const CACHE_TTL = 60_000; // 1 minute
 
-const fetchProductsFromApi = async (): Promise<Product[]> => {
+const fetchProductsFromApi = async (tenantId: string): Promise<Product[]> => {
   const now = Date.now();
-  if (_productsCache && now < _cacheExpiry) return _productsCache;
+  if (
+    _productsCache &&
+    _productsCache.tenantId === tenantId &&
+    now < _productsCache.expiry
+  ) {
+    return _productsCache.data;
+  }
 
   const response = await fetch(`${API_BASE_URL}/api/products`, {
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': TENANT_ID,
+      'x-tenant-id': tenantId,
     },
   });
 
@@ -27,28 +33,46 @@ const fetchProductsFromApi = async (): Promise<Product[]> => {
   const data = await response.json();
   const raw: any[] = data.products || [];
 
-  _productsCache = raw.map((p): Product => ({
-    id: String(p.productId),
-    parentCategoryId: p.category ? toCatId(p.category) : '',
-    subCategoryId: p.subcategory ? toSubId(p.subcategory) : '',
-    category: p.category || '',
-    subcategory: p.subcategory || '',
-    name: p.name,
-    description: p.description || '',
-    price: p.price,
-    unit: p.unit || '',
-    image: p.imageUrl ? [p.imageUrl] : ['/placeholder.png'],
-    stock: p.availableQty ?? 0,
-  }));
+  const mapped = raw.map((p): Product => {
+    const urls: string[] = [];
+    if (Array.isArray(p.images)) {
+      for (const img of p.images) {
+        if (img && typeof img === 'object' && typeof (img as { url?: string }).url === 'string') {
+          const u = (img as { url: string }).url.trim();
+          if (u) urls.push(u);
+        }
+      }
+    }
+    if (urls.length === 0 && typeof p.imageUrl === 'string' && p.imageUrl.trim()) {
+      urls.push(p.imageUrl.trim());
+    }
+    const mongoId = p.productId ?? p._id;
+    return {
+      id: mongoId != null ? String(mongoId) : '',
+      parentCategoryId: p.category ? toCatId(p.category) : '',
+      subCategoryId: p.subcategory ? toSubId(p.subcategory) : '',
+      category: p.category || '',
+      subcategory: p.subcategory || '',
+      name: p.name,
+      description: p.description || '',
+      price: p.price,
+      unit: p.unit || '',
+      image: urls.length ? urls : ['/placeholder.png'],
+      stock: p.availableQty ?? 0,
+    };
+  }).filter((p) => p.id.length > 0);
 
-  _cacheExpiry = Date.now() + CACHE_TTL;
-  return _productsCache;
+  _productsCache = {
+    tenantId,
+    data: mapped,
+    expiry: Date.now() + CACHE_TTL,
+  };
+  return mapped;
 };
 
-/* Invalidate cache (call after admin creates/updates products) */
+/* Invalidate cache (call after admin creates/updates products or tenant switch) */
 export const invalidateProductsCache = () => {
   _productsCache = null;
-  _cacheExpiry = 0;
 };
 
 /* ---------------- TYPES ---------------- */
@@ -104,7 +128,7 @@ export const apiSlice = createApi({
     getCategories: builder.query<Category[], void>({
       queryFn: async () => {
         try {
-          const products = await fetchProductsFromApi();
+          const products = await fetchProductsFromApi(getTenantId());
           const parentMap = new Map<string, { name: string; image: string }>();
           const subMap = new Map<string, { name: string; image: string; parentId: string }>();
 
@@ -146,10 +170,10 @@ export const apiSlice = createApi({
     }),
 
     /* ----------- PRODUCTS ----------- */
-    getProducts: builder.query<Product[], void>({
-      queryFn: async () => {
+    getProducts: builder.query<Product[], string>({
+      queryFn: async (tenantId) => {
         try {
-          const data = await fetchProductsFromApi();
+          const data = await fetchProductsFromApi(tenantId);
           return { data };
         } catch (error: any) {
           return { error: { status: 'FETCH_ERROR', error: error.message } };
@@ -160,7 +184,7 @@ export const apiSlice = createApi({
     getFeaturedProducts: builder.query<Product[], void>({
       queryFn: async () => {
         try {
-          const data = await fetchProductsFromApi();
+          const data = await fetchProductsFromApi(getTenantId());
           return { data: data.slice(0, 4) };
         } catch (error: any) {
           return { error: { status: 'FETCH_ERROR', error: error.message } };
@@ -171,7 +195,7 @@ export const apiSlice = createApi({
     getProductsByCategory: builder.query<Product[], string>({
       queryFn: async (catId) => {
         try {
-          const data = await fetchProductsFromApi();
+          const data = await fetchProductsFromApi(getTenantId());
           return {
             data: data.filter(
               (p) => p.parentCategoryId === catId || p.subCategoryId === catId
@@ -194,7 +218,7 @@ export const apiSlice = createApi({
       queryFn: async () => {
         try {
           const res = await fetch(`${API_BASE_URL}/api/store/status`, {
-            headers: { 'x-tenant-id': TENANT_ID },
+            headers: { 'x-tenant-id': getTenantId() },
           });
           if (!res.ok) throw new Error('store status fetch failed');
           const data = await res.json();
@@ -228,7 +252,7 @@ export const apiSlice = createApi({
 
           // Fetch live settings — no hardcoded fallbacks; fail loudly if unavailable
           const settingsRes = await fetch(`${API_BASE_URL}/api/settings`, {
-            headers: { 'x-tenant-id': TENANT_ID },
+            headers: { 'x-tenant-id': getTenantId() },
           });
           if (!settingsRes.ok) throw new Error('Failed to fetch store settings');
           const s = await settingsRes.json();

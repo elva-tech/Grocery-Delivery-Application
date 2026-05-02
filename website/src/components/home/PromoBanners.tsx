@@ -41,7 +41,13 @@ const PromoBanners = () => {
   }
 
   if (loading || banners.length === 0) {
-    return null;
+    return (
+      <div className="mb-10 w-full h-[240px] md:h-[400px] rounded-[2.5rem] bg-slate-100 animate-pulse flex items-center justify-center">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+          Loading banners...
+        </p>
+      </div>
+    );
   }
 
   return (

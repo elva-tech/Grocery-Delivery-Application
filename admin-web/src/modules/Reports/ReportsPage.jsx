@@ -3,11 +3,13 @@ import { useAppState } from '../../context/AppStateContext';
 import DataTable from '../../components/shared/DataTable';
 import { apiService } from '../../services/apiService';
 import CustomButton from '../../components/shared/CustomButton';
-import { TrendingUp, ShoppingBag, FileText, Search, X, Download } from 'lucide-react';
+import { TrendingUp, ShoppingBag, FileText, Search, X, Download, Loader2, AlertCircle } from 'lucide-react';
 import Pagination from '../../components/shared/Pagination';
 import usePagination from '../../hooks/usePagination';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 const ReportsPage = () => {
+  const { storeName } = useTenantBranding();
   const { orders } = useAppState();
 
   const [activeTab, setActiveTab] = useState('REVENUE');
@@ -15,11 +17,13 @@ const ReportsPage = () => {
 
 const [inventory, setInventory] = useState([]);
 const [loading, setLoading] = useState(false);
+const [inventoryError, setInventoryError] = useState('');
 
 useEffect(() => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
+      setInventoryError('');
 
       const res = await apiService.getInventory();
 
@@ -34,6 +38,7 @@ useEffect(() => {
     } catch (err) {
       console.error("Inventory error:", err);
       setInventory([]);
+      setInventoryError('Failed to load inventory report');
     } finally {
       setLoading(false);
     }
@@ -41,6 +46,25 @@ useEffect(() => {
 
   fetchInventory();
 }, []);
+
+const refetchInventory = async () => {
+  try {
+    setLoading(true);
+    setInventoryError('');
+    const res = await apiService.getInventory();
+    if (res.success) {
+      setInventory(res.data);
+    } else {
+      setInventory([]);
+      setInventoryError('Failed to load inventory report');
+    }
+  } catch (err) {
+    setInventory([]);
+    setInventoryError('Failed to load inventory report');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // 1. TOTAL REVENUE - count DELIVERED or PAID orders, exclude CANCELLED
   const totalRevenue = useMemo(() => {
@@ -87,7 +111,9 @@ useEffect(() => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `FreshRoot_${activeTab}_Report.csv`;
+    const slug =
+      storeName.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/gi, '') || 'Store';
+    a.download = `${slug}_${activeTab}_Report.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -241,17 +267,39 @@ const {
       </div>
 
       <div className="bg-white p-8 rounded-[32px] border shadow-sm">
-        <DataTable 
-  columns={reportConfigs[activeTab].columns} 
-  data={paginatedItems} 
-/>
-<Pagination
-  totalItems={filteredData.length}
-  pageSize={pageSize}
-  currentPage={currentPage}
-  onPageChange={setCurrentPage}
-  onPageSizeChange={setPageSize}
-/>
+        {activeTab === 'INVENTORY' && loading ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading inventory report...</p>
+          </div>
+        ) : activeTab === 'INVENTORY' && inventoryError ? (
+          <div className="py-8 flex items-start gap-3 bg-red-50 border border-red-100 rounded-2xl p-4">
+            <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-red-700">{inventoryError}</p>
+              <button
+                onClick={refetchInventory}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <DataTable
+              columns={reportConfigs[activeTab].columns}
+              data={paginatedItems}
+            />
+            <Pagination
+              totalItems={filteredData.length}
+              pageSize={pageSize}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
+          </>
+        )}
       </div>
     </div>
   );

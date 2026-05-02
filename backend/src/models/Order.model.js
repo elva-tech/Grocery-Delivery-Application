@@ -18,6 +18,10 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    customerPhone: {
+      type: String,
+      default: "",
+    },
 
     items: [
       {
@@ -100,9 +104,25 @@ const orderSchema = new mongoose.Schema(
     },
 
     deliveryAddress: {
+      isMyAddress: { type: Boolean, default: true },
+      recipientName: { type: String, default: "" },
+      recipientPhone: { type: String, default: "" },
       line1: String,
+      line2: { type: String, default: "" },
+      landmark: { type: String, default: "" },
+      city: { type: String, default: "" },
+      state: { type: String, default: "" },
+      pincode: { type: String, default: "" },
       lat: Number,
       lng: Number,
+    },
+    billingAddress: {
+      line1: String,
+      line2: { type: String, default: "" },
+      landmark: { type: String, default: "" },
+      city: { type: String, default: "" },
+      state: { type: String, default: "" },
+      pincode: { type: String, default: "" },
     },
 
     // Rider assignment fields
@@ -148,6 +168,12 @@ const orderSchema = new mongoose.Schema(
       value: { type: Number, min: 1, max: 5, default: null },
       comment: { type: String, default: "" },
       createdAt: { type: Date, default: null },
+    },
+    invoiceAsset: {
+      imageUrl: { type: String, default: "" },
+      imagePublicId: { type: String, default: "" },
+      fileType: { type: String, default: "application/pdf" },
+      generatedAt: { type: Date, default: null },
     },
   },
   { timestamps: true }

@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { APP_CONFIG } from '../../config/appConfig';
 import { useNavigate, Link } from 'react-router-dom';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 const Signup = () => {
+  const { storeName, logo } = useTenantBranding();
   const { signup } = useAuth();
   const navigate = useNavigate();
   
@@ -50,11 +52,15 @@ const Signup = () => {
         
         {/* Header (MATCHING LOGIN) */}
         <div className="text-center mb-8">
-          <div className="bg-primary-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <img src={APP_CONFIG.brand.logo} alt="FreshRoot" className="w-10 h-10" />
+          <div className="bg-primary-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden">
+            <img
+              src={logo || APP_CONFIG.brand.logo}
+              alt={storeName}
+              className={logo ? 'w-10 h-10 object-cover rounded-lg' : 'w-10 h-10'}
+            />
           </div>
           <h2 className="text-3xl font-bold text-gray-900">Create Account</h2>
-          <p className="text-gray-600 mt-2">Join the {APP_CONFIG.brand.name} Team</p>
+          <p className="text-gray-600 mt-2">Join the {storeName} team</p>
         </div>
 
         <div onKeyPress={handleKeyPress}>

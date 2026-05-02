@@ -1,14 +1,31 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Twitter, Facebook, Instagram, Linkedin } from 'lucide-react';
 import { useGetCategoriesQuery } from '../../api/apiSlice';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
+
+function splitBrandWords(storeName: string) {
+  const words = storeName.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { head: 'STORE', tail: '' };
+  if (words.length === 1) {
+    const w = words[0].toUpperCase();
+    const mid = Math.max(1, Math.floor(w.length / 2));
+    return { head: w.slice(0, mid), tail: w.slice(mid) };
+  }
+  return {
+    head: words.slice(0, -1).join(' ').toUpperCase(),
+    tail: words[words.length - 1].toUpperCase(),
+  };
+}
 
 interface FooterProps {
   onCategoryClick?: (id: string) => void;
 }
 
 const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
-  const { data: categories = [] } = useGetCategoriesQuery();
+  const { storeName, tagline } = useTenantBranding();
+  const brand = useMemo(() => splitBrandWords(storeName), [storeName]);
+  const { data: categories = [], isLoading: categoriesLoading } = useGetCategoriesQuery();
   const navigate = useNavigate();
 
   const usefulLinks = [
@@ -38,6 +55,11 @@ const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
           <div className="lg:col-span-8">
             <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-[0.2em] italic">Categories</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-y-4 gap-x-4">
+              {categoriesLoading && (
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 col-span-full">
+                  Loading categories...
+                </p>
+              )}
               {categories.map((cat: any) => (
                 <button 
                   key={cat.id} 
@@ -74,10 +96,16 @@ const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
             {/* BRAND & COPYRIGHT */}
             <div className="space-y-1 text-center md:text-left">
               <h2 className="text-2xl font-black tracking-tighter italic uppercase text-slate-900">
-                ENANDI<span className="text-[#4b6f9e]">APP.</span>
+                {brand.head}
+                {brand.tail ? (
+                  <>
+                    {' '}
+                    <span className="text-[#4b6f9e]">{brand.tail}</span>
+                  </>
+                ) : null}
               </h2>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                © 2026 Pure Dairy Culture
+                © {new Date().getFullYear()} {tagline}
               </p>
             </div>
 
@@ -104,7 +132,7 @@ const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
 
         {/* DISCLAIMER */}
         <p className="mt-12 text-[10px] text-slate-300 leading-relaxed text-center italic font-medium max-w-3xl mx-auto">
-          Delivering purity to your doorstep. All product images and trademarks are property of Enandi Pure Dairy Culture.
+          Product images and trademarks belong to their respective owners. {storeName} is operated as an independent storefront.
         </p>
       </div>
     </footer>

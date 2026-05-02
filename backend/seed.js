@@ -8,7 +8,7 @@ const Product = require("./src/models/Product.model");
 const Inventory = require("./src/models/Inventory.model");
 
 // ─── PRODUCT CATALOGUE ────────────────────────────────────────────────────────
-// Each entry: { name, category, subcategory, price, unit, imageUrl, qty }
+// Each entry: { name, category, subcategory, price, unit, imageUrl, qty } — imageUrl mapped to images[] on insert
 const CATALOGUE = [
 
   // ════════════════ DAIRY & EGGS ════════════════
@@ -172,9 +172,10 @@ async function seed() {
 
   // ── Products + Inventory ───────────────────────────────────────────────────
   const productDocs = await Product.insertMany(
-    CATALOGUE.map(({ qty: _qty, ...rest }) => ({
+    CATALOGUE.map(({ qty: _qty, imageUrl, ...rest }) => ({
       tenantId,
       ...rest,
+      images: imageUrl ? [{ url: imageUrl, public_id: "" }] : [],
       isAvailable: true,
     }))
   );

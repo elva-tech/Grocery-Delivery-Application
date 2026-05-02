@@ -11,6 +11,12 @@ const BannerSchema = new mongoose.Schema(
     type: String,
     required: true
   },
+
+  /** Cloudinary public_id for delete/replace (optional on legacy rows). */
+  imagePublicId: {
+    type: String,
+    default: "",
+  },
   
   // Deprecated — keep optional for backward compatibility
   image: {

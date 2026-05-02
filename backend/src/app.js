@@ -9,12 +9,24 @@ const webhookRoutes = require("./routes/webhook.routes");
 
 const app = express();
 
-// Middlewares
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'x-platform'],
-}));
+// Middlewares — reflect Origin so browsers get a concrete ACAO value (preflight + custom headers)
+app.use(
+  cors({
+    origin: true,
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-tenant-id",
+      "x-platform",
+      "Accept",
+      "Accept-Language",
+      "X-Requested-With",
+    ],
+    optionsSuccessStatus: 204,
+    maxAge: 86400,
+  })
+);
 
 // Webhook routes registered BEFORE express.json() to preserve raw body for signature verification
 app.use("/api/webhooks", webhookRoutes);
@@ -47,6 +59,7 @@ const unitRoutes       = require('./routes/unit.routes');
 const uploadRoutes     = require("./routes/upload.routes");
 const billingRoutes           = require('./routes/billing.routes');
 const storeAvailabilityRoutes = require('./routes/storeAvailability.routes');
+const addressRoutes           = require("./routes/address.routes");
 const tenantRoutes            = require('./routes/tenant.routes');
 const superRoutes             = require('./routes/super.routes');
 const { startStoreScheduler } = require('./services/storeScheduler.service');
@@ -74,6 +87,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/coupons",  couponRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/billing",  billingRoutes);
+app.use("/api/addresses", addressRoutes);
 
 
 // Start store open/close scheduler (every 60s, respects manualOverride)

@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux';
 import { X, User, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { setCredentials } from '../../store/slices/authSlice';
 import { sendOtp, verifyOtp } from '../../api/authApi';
+import { getTenantId } from '../../utils/getTenantId';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -109,10 +110,21 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     try {
       const response = await verifyOtp(phone, otpCode, mode === 'signup' ? name : undefined, mode);
       if (response.success && response.token) {
+        const currentTenant = String(getTenantId() || '').trim().toLowerCase();
+        const tokenTenant = String(response.user?.tenantId || '').trim().toLowerCase();
+        if (currentTenant && tokenTenant && currentTenant !== tokenTenant) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('jwtToken');
+          setError('You are logged into a different store tab. Please refresh and login again.');
+          setLoading(false);
+          return;
+        }
         const userData = {
           id: response.user?.id || Math.random().toString(36).substr(2, 9),
-          phone: phone,
+          phone: response.user?.phoneNumber || phone,
           name: response.user?.name || 'User',
+          tenantId: response.user?.tenantId || currentTenant,
         };
         // Store token and user data in localStorage for persistence
         localStorage.setItem('token', response.token);

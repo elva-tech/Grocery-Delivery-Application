@@ -26,12 +26,6 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
     
-    address: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-    
     alternatePhone: {
       type: String,
       default: "",

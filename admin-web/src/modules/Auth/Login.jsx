@@ -3,8 +3,10 @@ import { useAuth } from '../../context/AuthContext';
 import { APP_CONFIG } from '../../config/appConfig';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/apiService';
+import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 const Login = () => {
+  const { storeName, logo } = useTenantBranding();
   const { login } = useAuth();
   const navigate = useNavigate();
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -56,7 +58,10 @@ const Login = () => {
       }
     } catch (err) {
       console.error('Verify OTP error:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Verification failed';
+      const errorMessage =
+        (err.response && err.response.data && err.response.data.message) ||
+        err.message ||
+        'Verification failed';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -79,12 +84,16 @@ const Login = () => {
         
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="bg-primary-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <img src={APP_CONFIG.brand.logo} alt="FreshRoot" className="w-10 h-10" />
+          <div className="bg-primary-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden">
+            <img
+              src={logo || APP_CONFIG.brand.logo}
+              alt={storeName}
+              className={logo ? 'w-10 h-10 object-cover rounded-lg' : 'w-10 h-10'}
+            />
           </div>
 
           <h2 className="text-3xl font-bold text-gray-900">
-            {APP_CONFIG.brand.name}
+            {storeName}
           </h2>
           <p className="text-gray-600 mt-2">
             Admin Portal
@@ -207,9 +216,9 @@ const Login = () => {
 
           {/* Demo box */}
           <div className="mt-6 p-4 bg-primary-50 rounded-lg border border-primary-200">
-            <p className="text-sm text-primary-900 font-medium text-center">Demo Credentials</p>
-            <p className="text-sm text-primary-700 text-center mt-1">
-              Any 10-digit number | OTP:{' '}
+            <p className="text-sm text-primary-900 font-medium text-center">Signing in</p>
+            <p className="text-xs text-primary-800 text-center mt-2 leading-relaxed">
+              Use the <strong>same 10-digit phone</strong> you set when this store was created (super admin → create store). Static OTP for dev:{' '}
               <span className="font-mono font-bold">123456</span>
             </p>
           </div>

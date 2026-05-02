@@ -9,19 +9,37 @@ const api = axios.create({
   timeout: 10000,
 });
 
-/* -------- ATTACH TOKEN AUTOMATICALLY -------- */
+/* -------- ATTACH TOKEN + TENANT (send-otp needs tenant before JWT exists) -------- */
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("jwtToken");
-  console.log('[AUTH DEBUG] Using token:', token);
+  const envTenant = String(import.meta.env.VITE_TENANT_ID || "").trim().toLowerCase();
+  if (envTenant) {
+    config.headers["x-tenant-id"] = envTenant;
+  }
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
-      if (payload.tenantId) {
+      if (!config.headers["x-tenant-id"] && payload.tenantId) {
         config.headers["x-tenant-id"] = payload.tenantId;
       }
-    } catch { /* malformed token */ }
+    } catch {
+      /* malformed token */
+    }
+  }
+
+  // When calling a remote API (e.g. Render), hostname is not localhost — backend needs x-tenant-id.
+  if (!config.headers["x-tenant-id"]) {
+    if (typeof window !== "undefined") {
+      const host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1") {
+        const local = String(
+          import.meta.env.VITE_LOCAL_DEFAULT_TENANT_ID || "demo-tenant"
+        ).trim();
+        config.headers["x-tenant-id"] = local;
+      }
+    }
   }
 
   return config;
@@ -64,6 +82,31 @@ updateProduct: async (productId, payload) => {
     return res.data;
   },
 
+  deleteProductImage: async (productId, publicId) => {
+    if (!productId || !publicId) {
+      throw new Error("productId and public_id are required");
+    }
+    const res = await api.delete(`/api/products/${productId}/image`, {
+      data: { public_id: publicId },
+    });
+    return res.data;
+  },
+
+  /** Multipart append; persists images on the product so delete-by-public_id works before Save. */
+  appendProductImages: async (productId, files) => {
+    if (!productId || !files?.length) {
+      throw new Error("productId and files are required");
+    }
+    const formData = new FormData();
+    for (const f of files) {
+      formData.append("files", f);
+    }
+    const res = await api.post(`/api/products/${productId}/images`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
   /* -------- GET ALL RETURN REQUESTS -------- */
 
   getAllReturns: async () => {
@@ -89,7 +132,11 @@ updateProduct: async (productId, payload) => {
   },
 
   verifyOtp: async (phoneNumber, otp) => {
-    const res = await api.post("/api/auth/verify-otp", { phoneNumber, otp });
+    const res = await api.post("/api/auth/verify-otp", {
+      phoneNumber,
+      otp,
+      forAdminLogin: true,
+    });
     return res.data;
   },
 
@@ -200,12 +247,20 @@ createBanner: async (payload) => {
   }
 },
 
-uploadFile: async (file) => {
+uploadFile: async (file, uploadCategory = "products", slotOpts = {}) => {
+  const category = ["products", "banners", "returns"].includes(uploadCategory)
+    ? uploadCategory
+    : "products";
   try {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await api.post("/api/upload", formData, {
-      headers: { "Content-Type": "multipart/form-data" }
+    const params = new URLSearchParams();
+    if (slotOpts.productId) params.set("productId", String(slotOpts.productId));
+    if (slotOpts.slotIndex != null) params.set("slotIndex", String(slotOpts.slotIndex));
+    const q = params.toString();
+    const url = `/api/upload/${category}${q ? `?${q}` : ""}`;
+    const res = await api.post(url, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
   } catch (error) {
@@ -313,6 +368,15 @@ deleteBanner: async (id) => {
 
   getAccountStatus: async () => {
     const res = await api.get("/api/tenant/account-status");
+    return res.data;
+  },
+
+  updateTenantSupportContact: async ({ supportEmail, supportPhone, supportHours }) => {
+    const res = await api.patch("/api/tenant/support-contact", {
+      supportEmail,
+      supportPhone,
+      supportHours,
+    });
     return res.data;
   },
 

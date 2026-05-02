@@ -3,7 +3,7 @@ import { X, Camera, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { reportOrderIssueApi } from '../api/ordersApi';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, getTenantId } from '../config';
 
 const REPORT_REASONS = ["Item damaged", "Wrong item received", "Quality issue", "Items missing", "Package tampered"];
 
@@ -54,8 +54,13 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
         const formData = new FormData();
         formData.append('file', file);
 
+        const token = localStorage.getItem('token');
         const uploadRes = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'x-tenant-id': getTenantId(),
+          },
         });
 
         if (!uploadRes?.data?.url) {

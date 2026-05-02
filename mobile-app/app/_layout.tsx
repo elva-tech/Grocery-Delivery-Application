@@ -11,10 +11,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import { setCredentials } from '@/store/slices/authSlice';
 import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
+import { extractTenantFromUrl, getActiveTenantId, saveTenantId } from '@/src/utils/tenantStorage';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -56,7 +58,14 @@ const isClosed = storeStatus?.isClosed;
           AsyncStorage.getItem(CART_STORAGE_KEY),
         ]);
         if (token && userStr) {
-          dispatch(setCredentials({ user: JSON.parse(userStr), token }));
+          const parsedUser = JSON.parse(userStr);
+          const savedTenant = String(parsedUser?.tenantId || '').trim().toLowerCase();
+          const activeTenant = String(await getActiveTenantId()).trim().toLowerCase();
+          if (!savedTenant || (activeTenant && savedTenant !== activeTenant)) {
+            await AsyncStorage.multiRemove(['token', 'user', 'jwtToken']);
+          } else {
+            dispatch(setCredentials({ user: parsedUser, token }));
+          }
         }
         if (cartStr) {
           dispatch(hydrateCart(JSON.parse(cartStr)));
@@ -67,6 +76,25 @@ const isClosed = storeStatus?.isClosed;
         setAuthRestored(true);
       }
     })();
+  }, []);
+
+  // ── Deep link / QR tenant resolution ────────────────────────────────────────
+  useEffect(() => {
+    // Cold start: app opened via deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        const tenantId = extractTenantFromUrl(url);
+        if (tenantId) saveTenantId(tenantId);
+      }
+    });
+
+    // Warm start: app already open when deep link arrives
+    const sub = Linking.addEventListener('url', (event) => {
+      const tenantId = extractTenantFromUrl(event.url);
+      if (tenantId) saveTenantId(tenantId);
+    });
+
+    return () => sub.remove();
   }, []);
 
   useEffect(() => { setMounted(true); }, []);
@@ -113,6 +141,7 @@ const isClosed = storeStatus?.isClosed;
   
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="auth/landing" />
+        <Stack.Screen name="auth/store-code" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="product/[id]" options={{ headerShown: true, headerTransparent: true, headerTitle: '' }} />
       </Stack>
@@ -149,20 +178,20 @@ const isClosed = storeStatus?.isClosed;
               {storeStatus?.reason}
             </Text>
   
-            {storeStatus?.type === "TIME" && (
+            {(storeStatus as any)?.type === "TIME" && (
               <Text style={{ marginTop: 12, fontWeight: '600' }}>
-                {storeStatus.startTime} - {storeStatus.endTime}
+                {(storeStatus as any).startTime} - {(storeStatus as any).endTime}
               </Text>
             )}
   
-            {storeStatus?.type === "DATE" && (
+            {(storeStatus as any)?.type === "DATE" && (
               <>
                 <Text style={{ marginTop: 12 }}>
-                  {storeStatus.startDate} → {storeStatus.endDate}
+                  {(storeStatus as any).startDate} → {(storeStatus as any).endDate}
                 </Text>
   
                 <Text style={{ marginTop: 4, fontWeight: '600' }}>
-                  {storeStatus.startTime} - {storeStatus.endTime}
+                  {(storeStatus as any).startTime} - {(storeStatus as any).endTime}
                 </Text>
               </>
             )}

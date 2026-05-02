@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
 import PromoBanners from './components/home/PromoBanners';
@@ -15,9 +15,16 @@ import OrderSuccess from './pages/OrderSuccess';
 import Addresses from './pages/Addresses';
 import LoginModal from './components/ui/LoginModal';
 import { getCartCalculation } from './api/ordersApi';
-import { useGetProductsQuery } from './api/apiSlice';
+import {
+  useGetProductsQuery,
+  useGetStoreStatusQuery,
+  invalidateProductsCache,
+  apiSlice,
+} from './api/apiSlice';
 import type { RootState } from './store/store';
-import { ChevronRight, Search, X } from 'lucide-react';
+import { getTenantId } from './utils/getTenantId';
+import { clearCart } from './store/slices/cartSlice';
+import { AlertCircle, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import Pagination from './components/ui/Pagination';
 import confetti from 'canvas-confetti';
 import Footer from './components/layout/Footer';
@@ -25,9 +32,10 @@ import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
 import ContactUs from './pages/ContactUs';
 
-import { useGetStoreStatusQuery } from './api/apiSlice';
+const TENANT_SCOPE_KEY = 'website_cart_tenant_scope';
 
 const App = () => {
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,8 +58,30 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
 
-  const { data: products = [] } = useGetProductsQuery();
+  const {
+    data: products = [],
+    isLoading: isProductsLoading,
+    isFetching: isProductsFetching,
+    isError: isProductsError,
+    refetch: refetchProducts,
+  } = useGetProductsQuery(getTenantId());
   const { items } = useSelector((state: RootState) => state.cart);
+
+  /** If tenant scope changes (env / host), cart + product cache must reset or checkout uses wrong product IDs. */
+  useEffect(() => {
+    const t = getTenantId();
+    try {
+      const prev = sessionStorage.getItem(TENANT_SCOPE_KEY);
+      if (prev && prev !== t) {
+        dispatch(clearCart());
+        invalidateProductsCache();
+        dispatch(apiSlice.util.resetApiState());
+      }
+      sessionStorage.setItem(TENANT_SCOPE_KEY, t);
+    } catch {
+      /* private mode */
+    }
+  }, [dispatch]);
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const timerRef = useRef<any>(null);
 
@@ -294,14 +324,42 @@ const App = () => {
                   )}
                 </div>
 
-                <ProductGrid products={paginatedProducts} />
-                <Pagination
-                  totalItems={filteredProducts.length}
-                  pageSize={pageSize}
-                  currentPage={safePage}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
-                />
+                {isProductsLoading || (isProductsFetching && products.length === 0) ? (
+                  <div className="py-20 flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-8 h-8 text-[#4b6f9e] animate-spin" />
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+                      Loading products...
+                    </p>
+                  </div>
+                ) : isProductsError ? (
+                  <div className="py-16 px-4">
+                    <div className="max-w-xl mx-auto bg-red-50 border border-red-100 rounded-2xl p-5 flex items-start gap-3">
+                      <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                      <div className="space-y-3">
+                        <p className="text-sm font-bold text-red-700">
+                          We could not load products right now.
+                        </p>
+                        <button
+                          onClick={() => refetchProducts()}
+                          className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <ProductGrid products={paginatedProducts} />
+                    <Pagination
+                      totalItems={filteredProducts.length}
+                      pageSize={pageSize}
+                      currentPage={safePage}
+                      onPageChange={setCurrentPage}
+                      onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                    />
+                  </>
+                )}
               </div>
             } />
 
@@ -338,14 +396,42 @@ const App = () => {
                     </p>
                   )}
                 </div>
-                <ProductGrid products={paginatedProducts} />
-                <Pagination
-                  totalItems={filteredProducts.length}
-                  pageSize={pageSize}
-                  currentPage={safePage}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
-                />
+                {isProductsLoading || (isProductsFetching && products.length === 0) ? (
+                  <div className="py-20 flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-8 h-8 text-[#4b6f9e] animate-spin" />
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+                      Loading products...
+                    </p>
+                  </div>
+                ) : isProductsError ? (
+                  <div className="py-16 px-4">
+                    <div className="max-w-xl mx-auto bg-red-50 border border-red-100 rounded-2xl p-5 flex items-start gap-3">
+                      <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                      <div className="space-y-3">
+                        <p className="text-sm font-bold text-red-700">
+                          We could not load products right now.
+                        </p>
+                        <button
+                          onClick={() => refetchProducts()}
+                          className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <ProductGrid products={paginatedProducts} />
+                    <Pagination
+                      totalItems={filteredProducts.length}
+                      pageSize={pageSize}
+                      currentPage={safePage}
+                      onPageChange={setCurrentPage}
+                      onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                    />
+                  </>
+                )}
               </div>
             } />
 

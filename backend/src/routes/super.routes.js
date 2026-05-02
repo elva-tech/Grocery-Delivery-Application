@@ -1,5 +1,6 @@
 const express = require("express");
 const router  = express.Router();
+const upload = require("../middleware/uploadGeneric");
 const { superAuthMiddleware } = require("../middleware/superAuth.middleware");
 const {
   login,
@@ -9,6 +10,7 @@ const {
   updateTenantDetails,
   getBillingOverview,
   markInvoicePaid,
+  uploadTenantLogoBySuperAdmin,
 } = require("../controllers/superAdmin.controller");
 
 // Public
@@ -21,5 +23,12 @@ router.patch("/tenant/:id/status",                 superAuthMiddleware, updateSt
 router.patch("/tenant/:id/details",                superAuthMiddleware, updateTenantDetails);
 router.get("/billing",                             superAuthMiddleware, getBillingOverview);
 router.patch("/tenant/:id/invoice/mark-paid",      superAuthMiddleware, markInvoicePaid);
+
+router.post(
+  "/tenant-logo",
+  superAuthMiddleware,
+  upload.single("file"),
+  uploadTenantLogoBySuperAdmin
+);
 
 module.exports = router;

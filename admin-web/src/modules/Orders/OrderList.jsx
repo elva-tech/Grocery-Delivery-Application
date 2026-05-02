@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppState } from '../../context/AppStateContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../../components/shared/DataTable';
 import {
   Bike, CheckCircle, PackageCheck, Truck, X, User, CheckCircle2,
@@ -20,6 +21,7 @@ const StarRating = ({ value }) => (
 );
 
 const OrderList = () => {
+  const { showToast } = useToast();
   const { orders, riders, updateOrderStatus, assignRider, markCODPaid, refreshOrders } = useAppState();
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
@@ -91,7 +93,7 @@ const OrderList = () => {
       
     } catch (error) {
       console.error("Failed to assign rider:", error);
-      alert('Failed to assign rider. Please try again.');
+      showToast('error', 'Failed to assign rider. Please try again.');
     } finally {
       // Close modal regardless of success or error
       setSelectedOrderId(null);
@@ -332,7 +334,7 @@ const OrderList = () => {
                     try {
                       await markCODPaid(row.id);
                     } catch {
-                      alert('Failed to mark as paid. Please try again.');
+                      showToast('error', 'Failed to mark as paid. Please try again.');
                     }
                   }}
                   className="flex items-center gap-1 bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-600 transition-all shadow-sm"
@@ -437,7 +439,7 @@ const OrderList = () => {
                       await markCODPaid(viewingOrder.id);
                       setViewingOrder(prev => ({ ...prev, paymentStatus: 'PAID' }));
                     } catch {
-                      alert('Failed to mark as paid. Please try again.');
+                      showToast('error', 'Failed to mark as paid. Please try again.');
                     } finally {
                       setMarkingPaid(false);
                     }

@@ -9,6 +9,8 @@ const BannerManagement = () => {
   const [file, setFile] = useState(null);
   const [bannerList, setBannerList] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
+  const [listError, setListError] = useState('');
   const [toast, setToast] = useState(null); // { type: 'success'|'error', message: string }
   const [fieldError, setFieldError] = useState(''); // inline validation error
 
@@ -36,10 +38,16 @@ const BannerManagement = () => {
 
   const fetchBanners = async () => {
     try {
+      setLoadingList(true);
+      setListError('');
       const res = await apiService.getBanners();
       setBannerList(res.data?.data || res.data || []);
     } catch (error) {
       console.error('Failed to load banners:', error);
+      setListError('Failed to load banners');
+      setBannerList([]);
+    } finally {
+      setLoadingList(false);
     }
   };
 
@@ -75,7 +83,7 @@ const BannerManagement = () => {
     setUploading(true);
 
     try {
-      const uploadResponse = await apiService.uploadFile(file);
+      const uploadResponse = await apiService.uploadFile(file, "banners");
       const imageUrl = uploadResponse?.url || uploadResponse?.data?.url;
 
       if (!imageUrl) {
@@ -84,7 +92,11 @@ const BannerManagement = () => {
 
       await apiService.createBanner({
         title: title.trim(),
-        imageUrl
+        imageUrl,
+        imagePublicId:
+          typeof uploadResponse?.public_id === "string"
+            ? uploadResponse.public_id.trim()
+            : "",
       });
 
       setTitle("");
@@ -214,7 +226,23 @@ const BannerManagement = () => {
             <span className="bg-emerald-500 w-2 h-2 rounded-full animate-ping" />
           </h2>
 
-          {bannerList.length === 0 ? (
+          {loadingList ? (
+            <div className="bg-white rounded-[28px] border border-slate-100 p-12 flex flex-col items-center justify-center text-center">
+              <Loader2 size={34} className="text-emerald-500 animate-spin mb-3" />
+              <p className="font-bold text-slate-500">Loading banners...</p>
+            </div>
+          ) : listError ? (
+            <div className="bg-red-50 rounded-[28px] border border-red-100 p-8 flex flex-col items-center justify-center text-center">
+              <XCircle size={34} className="text-red-400 mb-3" />
+              <p className="font-bold text-red-600">{listError}</p>
+              <button
+                onClick={fetchBanners}
+                className="mt-4 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+              >
+                Retry
+              </button>
+            </div>
+          ) : bannerList.length === 0 ? (
             <div className="bg-white rounded-[28px] border border-dashed border-slate-200 p-12 flex flex-col items-center justify-center text-center">
               <ImageIcon size={40} className="text-slate-200 mb-3" />
               <p className="font-bold text-slate-400">No banners yet</p>

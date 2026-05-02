@@ -116,6 +116,18 @@ const verifyOtp = async (req, res) => {
     let user = await User.findOne({ tenantId, phoneNumber: phone });
 
     if (!user) {
+      const forAdminLogin =
+        req.body?.forAdminLogin === true ||
+        String(req.headers["x-admin-login"] || "").trim() === "1";
+
+      if (forAdminLogin) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "No account for this phone in this store. Use the same 10-digit number you entered when the store was created (store admin phone), not a random demo number.",
+        });
+      }
+
       // First-time login for this phone on this tenant → auto-create CUSTOMER account
       if (!name || name.trim().length < 2) {
         return res.status(400).json({
@@ -183,7 +195,7 @@ module.exports = { sendOtp, verifyOtp, updateProfile };
 ================================ */
 async function updateProfile(req, res) {
   try {
-    const { name, email, address, alternatePhone } = req.body;
+    const { name, email, alternatePhone } = req.body;
 
     if (!name || name.trim().length < 2) {
       return res.status(400).json({ success: false, message: 'Name must be at least 2 characters' });
@@ -194,7 +206,6 @@ async function updateProfile(req, res) {
     };
     
     if (email !== undefined) updateData.email = email;
-    if (address !== undefined) updateData.address = address;
     if (alternatePhone !== undefined) updateData.alternatePhone = alternatePhone;
     
     const user = await User.findByIdAndUpdate(
@@ -205,7 +216,7 @@ async function updateProfile(req, res) {
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     return res.status(200).json({
       success: true,
-      user: { id: user._id, phoneNumber: user.phoneNumber, name: user.name, email: user.email, address: user.address, alternatePhone: user.alternatePhone,  role: user.role, tenantId: user.tenantId },
+      user: { id: user._id, phoneNumber: user.phoneNumber, name: user.name, email: user.email, alternatePhone: user.alternatePhone, role: user.role, tenantId: user.tenantId },
     });
   } catch (error) {
     console.error('updateProfile error:', error);

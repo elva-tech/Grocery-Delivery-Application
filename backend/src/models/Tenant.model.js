@@ -64,10 +64,64 @@ const tenantSchema = new mongoose.Schema(
       lowercase: true,
       default: "",
     },
+    /** Customer-facing support (editable by store admin; may differ from owner contact). */
+    supportEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+    },
+    supportPhone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    supportHours: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    /** Optional storefront copy (website hero, header tagline, etc.) */
+    tagline: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    heroBadge: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    heroTitle: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    heroSubtitle: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     adminPassword: {
       type: String,
       default: "",
       select: false, // never returned in queries by default
+    },
+    storeCode: {
+      type: String,
+      unique: true,
+      sparse: true,   // allows multiple null/missing values
+      trim: true,
+      uppercase: true,
+    },
+    deepLink: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    qrCode: {
+      type: String,  // base64 data-URL of the QR PNG
+      default: "",
     },
   },
   { timestamps: true }

@@ -4,16 +4,49 @@ import DataTable from '../../components/shared/DataTable';
 import CustomButton from '../../components/shared/CustomButton';
 import ProductForm from './ProductForm';
 import CategoryForm from './CategoryForm';
-import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight, Search, X } from 'lucide-react';
+import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight, Search, X, Loader, AlertCircle } from 'lucide-react';
 import Pagination from '../../components/shared/Pagination';
 import usePagination from '../../hooks/usePagination';
 import { APP_CONFIG } from '../../config/appConfig';
 import { apiService } from '../../services/apiService';
+import { useToast } from '../../context/ToastContext';
 import resolveImageUrl from '../../utils/resolveImageUrl';
 
-const ProductList = () => {
+/** Build { url, public_id }[] for API from form `image` (strings and/or { url, public_id }). */
+const buildImagesPayload = (imageField) => {
+  if (!Array.isArray(imageField)) return [];
+  return imageField
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        const url = entry.trim();
+        return url ? { url, public_id: '' } : null;
+      }
+      if (entry && typeof entry === 'object' && typeof entry.url === 'string') {
+        const url = entry.url.trim();
+        if (!url) return null;
+        return {
+          url,
+          public_id: typeof entry.public_id === 'string' ? entry.public_id.trim() : '',
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+};
 
-  const { products, categories, addProduct, updateProduct, deleteProduct, refreshProducts, addCategory } = useAppState();
+const ProductList = () => {
+  const { showToast } = useToast();
+  const {
+    products,
+    categories,
+    loading,
+    error,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    refreshProducts,
+    addCategory,
+  } = useAppState();
 
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -154,7 +187,7 @@ const ProductList = () => {
 
         <div>
           <h1 className="text-3xl font-bold text-[#1A4D2E]">
-            {APP_CONFIG.brand.name} Inventory
+            Inventory
           </h1>
           <p className="text-slate-500">
             Live Backend Sync: {products.length} Products
@@ -224,6 +257,7 @@ const ProductList = () => {
       {(showForm || editingItem) && (
 
         <ProductForm
+          onImagesPersisted={refreshProducts}
 
           initialValues={{
             ...editingItem,
@@ -243,17 +277,23 @@ const ProductList = () => {
 
               const catObj = categories.find(c => c.id === v.parentCategoryId);
               const subCatObj = categories.find(c => c.id === v.subCategoryId);
+              const freeCat =
+                typeof v.freeCategoryName === 'string' ? v.freeCategoryName.trim() : '';
+              const freeSub =
+                typeof v.freeSubcategoryName === 'string' ? v.freeSubcategoryName.trim() : '';
 
+              const imagesPayload = buildImagesPayload(v.image);
               const payload = {
                 name: v.name,
                 description: v.description || '',
-                category: catObj?.name || v.parentCategoryId,
-                subcategory: subCatObj?.name || v.subCategoryId,
+                category: catObj?.name || freeCat || v.parentCategoryId,
+                subcategory: subCatObj?.name || freeSub || v.subCategoryId || '',
                 price: Number(v.price),
                 unit: `${v.unitValue} ${v.unitType}`,
                 stocks: Number(v.stock),
                 threshold: v.threshold != null ? Number(v.threshold) : 10,
-                imageUrl: resolveImageUrl({ image: v.image }) || ''
+                images: imagesPayload,
+                imageUrl: imagesPayload[0]?.url || '',
               };
 
               if (editingItem) {
@@ -265,23 +305,25 @@ const ProductList = () => {
 
                 await apiService.updateProduct(productId, payload);
                 await updateProduct();
+                setSuccessData({
+                  mode: 'edit',
+                  name: v.name,
+                  price: v.price,
+                  unit: `${v.unitValue} ${v.unitType}`,
+                  stock: v.stock,
+                });
+                setShowSuccess(true);
 
               } else {
 
                 await apiService.addProduct(payload);
                 await addProduct();
                 setSuccessData({
+                  mode: 'add',
                   name: v.name,
                   price: v.price,
                   unit: `${v.unitValue} ${v.unitType}`,
-                  stock: v.stock
-                });
-
-                setSuccessData({
-                  name: v.name,
-                  price: v.price,
-                  unit: `${v.unitValue} ${v.unitType}`,
-                  stock: v.stock
+                  stock: v.stock,
                 });
 
                 setShowSuccess(true);
@@ -294,9 +336,9 @@ const ProductList = () => {
 
               console.error("Product save error:", error);
 
-              alert(
-                error.response?.data?.message ||
-                "Error saving product"
+              showToast(
+                'error',
+                error.response?.data?.message || 'Error saving product'
               );
 
             }
@@ -305,7 +347,25 @@ const ProductList = () => {
         />
       )}
 
-      {!showForm && !editingItem && (
+      {!showForm && !editingItem && loading ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3">
+          <Loader className="w-8 h-8 text-emerald-600 animate-spin" />
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading inventory...</p>
+        </div>
+      ) : !showForm && !editingItem && error ? (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start gap-3">
+          <AlertCircle className="text-red-600 mt-0.5" size={18} />
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-red-700">{error}</p>
+            <button
+              onClick={() => refreshProducts()}
+              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : !showForm && !editingItem && (
         <>
           <DataTable
             columns={columns}
@@ -390,13 +450,16 @@ const ProductList = () => {
         </div>
 
         <h2 className="text-xl font-black text-slate-800">
-          Product Added
+          {successData?.mode === 'edit' ? 'Product Updated' : 'Product Added'}
         </h2>
 
         <p className="text-slate-500 text-sm">
           <span className="font-bold text-slate-700">
             {successData?.name}
-          </span> has been added successfully.
+          </span>{' '}
+          {successData?.mode === 'edit'
+            ? 'has been saved successfully.'
+            : 'has been added successfully.'}
         </p>
 
         <div className="text-xs text-slate-400 space-y-1">

@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2, Star } from 'lucide-react';
 import type { RootState } from '../store/store';
-import { getUserOrders, cancelOrderApi, rateOrderApi } from '../api/ordersApi';
+import { getUserOrders, cancelOrderApi, rateOrderApi, downloadOrderSummaryPdfApi } from '../api/ordersApi';
 import { addToCart } from '../store/slices/cartSlice';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ReportIssueModal from './ReportIssueModal';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
 import { resolveImageUrl } from '../utils/resolveImageUrl';
+import { useToast } from '../context/ToastContext';
 
 const STATUS_THEME: any = {
   PLACED: { color: 'text-slate-500', bg: 'bg-slate-50', label: 'Order Placed' },
@@ -24,6 +25,7 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
+  const { showToast } = useToast();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   
   // NEW: Fetch remote features
@@ -43,6 +45,7 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
   const [ratingComment, setRatingComment] = useState('');
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [ratingError, setRatingError] = useState('');
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -77,8 +80,7 @@ const loadOrders = async () => {
   } catch (error) {
     console.error("Failed to load orders:", error);
 
-    // ✅ SHOW USER ERROR
-    alert("Failed to load orders. Please try again.");
+    showToast('error', 'Failed to load orders. Please try again.');
 
     setOrders([]); // safe fallback
   } finally {
@@ -108,11 +110,11 @@ const loadOrders = async () => {
   const res = await cancelOrderApi(selectedOrder.id);
 
   if (!res.success) {
-    alert(res.message || "Cancel failed");
+    showToast('error', res.message || 'Cancel failed');
     return;
   }
 
-  alert("Order cancelled successfully");
+  showToast('success', 'Order cancelled successfully');
 
   await loadOrders();        // ✅ reload
   setIsCancelModalOpen(false); // ✅ close modal
@@ -146,6 +148,17 @@ const loadOrders = async () => {
       setRatingError(err?.response?.data?.message || err?.message || 'Failed to submit rating.');
     } finally {
       setIsSubmittingRating(false);
+    }
+  };
+
+  const handleDownloadInvoice = async (orderId: string) => {
+    try {
+      setIsDownloadingInvoice(true);
+      await downloadOrderSummaryPdfApi(orderId);
+    } catch (err: any) {
+      showToast('error', err?.response?.data?.message || err?.message || 'Failed to download order summary.');
+    } finally {
+      setIsDownloadingInvoice(false);
     }
   };
 
@@ -273,6 +286,14 @@ const loadOrders = async () => {
                       </button>
                       
 
+                      <button
+                        onClick={() => handleDownloadInvoice(selectedOrder.id)}
+                        disabled={isDownloadingInvoice}
+                        className="flex items-center justify-center gap-2 border-2 border-emerald-200 text-emerald-700 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isDownloadingInvoice ? <Loader2 size={14} className="animate-spin" /> : 'Download Order Summary'}
+                      </button>
+
                       {/* RATE ORDER BUTTON */}
                       {!selectedOrder.rating?.value ? (
                         <button
@@ -310,9 +331,30 @@ const loadOrders = async () => {
                   )}
 
                   {selectedOrder.status === 'OUT_FOR_DELIVERY' && (
-                    <button className="col-span-2 flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-400 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
-                       <Clock size={14} /> Tracking in Progress...
-                    </button>
+                    <div className="col-span-2 space-y-3">
+                      <button className="w-full flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-400 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-not-allowed">
+                        <Clock size={14} /> Tracking in Progress...
+                      </button>
+                      <div className="border-2 border-blue-100 bg-blue-50 rounded-2xl p-4">
+                        <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-1">Delivery Partner</p>
+                        <p className="text-sm font-black text-slate-800">
+                          {selectedOrder.deliveryPartner?.name || 'Will be assigned soon'}
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                          {selectedOrder.deliveryPartner?.phoneNumber
+                            ? `Mobile: ${selectedOrder.deliveryPartner.phoneNumber}`
+                            : 'Mobile number will appear once assigned'}
+                        </p>
+                        {selectedOrder.deliveryPartner?.phoneNumber && (
+                          <a
+                            href={`tel:${selectedOrder.deliveryPartner.phoneNumber}`}
+                            className="inline-flex mt-3 items-center justify-center rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                          >
+                            Contact Partner
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   )}
 
                   {['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder.status) && (

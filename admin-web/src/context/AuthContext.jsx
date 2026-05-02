@@ -5,9 +5,25 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
 
+  const envTenantId = String(import.meta.env.VITE_TENANT_ID || '').trim().toLowerCase();
+
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('freshroot_user');
-    return savedUser ? JSON.parse(savedUser) : null;
+    if (!savedUser) return null;
+    try {
+      const parsed = JSON.parse(savedUser);
+      const savedTenant = String(parsed?.tenantId || '').trim().toLowerCase();
+      // If env tenant changed, force fresh login for correct tenant context.
+      if (envTenantId && savedTenant && savedTenant !== envTenantId) {
+        localStorage.removeItem('freshroot_user');
+        localStorage.removeItem('jwtToken');
+        localStorage.removeItem('token');
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
   });
 
   const login = async (phoneNumber, otp) => {
@@ -35,7 +51,11 @@ export const AuthProvider = ({ children }) => {
       return { success: false, message: response.message || "Login failed" };
     } catch (error) {
       console.error("Login error:", error);
-      return { success: false, message: error.message || "Login failed" };
+      const msg =
+        (error.response && error.response.data && error.response.data.message) ||
+        error.message ||
+        "Login failed";
+      return { success: false, message: msg };
     }
   };
 

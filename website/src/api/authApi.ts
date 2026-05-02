@@ -2,7 +2,7 @@
  * Backend API configuration and authentication endpoints
  */
 
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, getTenantId } from '../config';
 
 export interface SendOtpResponse {
   success: boolean;
@@ -17,6 +17,7 @@ export interface VerifyOtpResponse {
     id: string;
     phoneNumber: string;
     name?: string;
+    tenantId?: string;
   };
 }
 
@@ -30,6 +31,7 @@ export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => 
       headers: {
         'Content-Type': 'application/json',
         'x-platform': 'web',
+        'x-tenant-id': getTenantId(),
       },
       body: JSON.stringify({ phoneNumber }),
     });
@@ -62,6 +64,7 @@ export const verifyOtp = async (
       headers: {
         'Content-Type': 'application/json',
         'x-platform': 'web',
+        'x-tenant-id': getTenantId(),
       },
       body: JSON.stringify({ phoneNumber, otp, mode, ...(name && { name }) }),
     });

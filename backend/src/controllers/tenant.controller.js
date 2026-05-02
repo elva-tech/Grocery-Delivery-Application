@@ -3,6 +3,7 @@ const User     = require("../models/User.model");
 const Store    = require("../models/Store.model");
 const Settings = require("../models/Settings.model");
 const bcrypt   = require("bcryptjs");
+const QRCode   = require("qrcode");
 const { seedPlans, getOrCreateSubscription } = require("../services/billing.service");
 
 /* ─────────────────────────────────────────────
@@ -11,6 +12,23 @@ const { seedPlans, getOrCreateSubscription } = require("../services/billing.serv
 
 const BASE_DOMAIN      = "enandi.com";
 const TENANT_ID_REGEX  = /^[a-z0-9-]+$/;
+
+/* ─────────────────────────────────────────────
+   STORE CODE GENERATOR
+───────────────────────────────────────────── */
+
+/**
+ * Generates a unique 4-character uppercase alphanumeric storeCode.
+ * Retries up to 20 times before throwing.
+ */
+async function generateStoreCode() {
+  for (let i = 0; i < 20; i++) {
+    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const exists = await Tenant.exists({ storeCode: code });
+    if (!exists) return code;
+  }
+  throw new Error("Could not generate a unique storeCode after 20 attempts.");
+}
 
 /* ─────────────────────────────────────────────
    HELPERS
@@ -120,7 +138,9 @@ exports.getTenantDetails = async (req, res) => {
   }
 
   const tenant = await Tenant.findOne({ tenantId })
-    .select("tenantId name logo storeAddress contactEmail phoneNumber plan customerDomain adminDomain ownerName")
+    .select(
+      "tenantId name logo storeAddress contactEmail phoneNumber plan customerDomain adminDomain ownerName tagline heroBadge heroTitle heroSubtitle supportEmail supportPhone supportHours"
+    )
     .lean();
 
   if (!tenant) {
@@ -143,8 +163,118 @@ exports.getTenantDetails = async (req, res) => {
     storeAddress:  tenant.storeAddress || "",
     contactEmail:  tenant.contactEmail || "",
     phoneNumber:   tenant.phoneNumber || "",
+    customerDomain: tenant.customerDomain || "",
+    adminDomain:   tenant.adminDomain || "",
+    tagline:       tenant.tagline || "",
+    heroBadge:     tenant.heroBadge || "",
+    heroTitle:     tenant.heroTitle || "",
+    heroSubtitle:  tenant.heroSubtitle || "",
     plan:          activePlan,
     status:        tenant.status || "ACTIVE",
+    supportEmail:  tenant.supportEmail || "",
+    supportPhone:  tenant.supportPhone || "",
+    supportHours:  tenant.supportHours || "",
+  });
+};
+
+/* ─────────────────────────────────────────────
+   PATCH /api/tenant/support-contact
+   Admin only — customer-facing support details
+───────────────────────────────────────────── */
+exports.updateTenantSupportContact = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: "tenantId missing from session" });
+    }
+
+    const { supportEmail, supportPhone, supportHours } = req.body;
+    const email = String(supportEmail || "")
+      .trim()
+      .toLowerCase();
+    const phoneRaw = String(supportPhone || "").trim();
+    const hours = String(supportHours || "").trim();
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Support email is required" });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: "Invalid support email" });
+    }
+
+    const phoneDigits = phoneRaw.replace(/\D/g, "");
+    if (phoneDigits.length < 10) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Support phone must include at least 10 digits" });
+    }
+    const phone = phoneDigits.slice(-10);
+
+    if (!hours || hours.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Support hours are required (e.g. Mon–Sat 9:00 AM – 6:00 PM)",
+      });
+    }
+
+    const updated = await Tenant.findOneAndUpdate(
+      { tenantId },
+      {
+        $set: {
+          supportEmail: email,
+          supportPhone: phone,
+          supportHours: hours.slice(0, 400),
+        },
+      },
+      { new: true }
+    )
+      .select("tenantId supportEmail supportPhone supportHours")
+      .lean();
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Tenant not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Support details saved",
+      supportEmail: updated.supportEmail,
+      supportPhone: updated.supportPhone,
+      supportHours: updated.supportHours,
+    });
+  } catch (err) {
+    console.error("[updateTenantSupportContact]", err);
+    return res.status(500).json({ success: false, message: "Failed to save support details" });
+  }
+};
+/*____________________________________________
+   GET /api/tenant/by-code/:storeCode
+   Public — resolves a 4-char storeCode to tenantId + basic store info
+───────────────────────────────────────────── */
+exports.getTenantByCode = async (req, res) => {
+  const { storeCode } = req.params;
+  if (!storeCode) {
+    return res.status(400).json({ success: false, message: "storeCode is required" });
+  }
+
+  const tenant = await Tenant.findOne({
+    storeCode: storeCode.toUpperCase(),
+    isActive:  true,
+  })
+    .select("tenantId name logo storeCode deepLink")
+    .lean();
+
+  if (!tenant) {
+    return res.status(404).json({ success: false, message: "Invalid store code" });
+  }
+
+  return res.json({
+    success:   true,
+    tenantId:  tenant.tenantId,
+    storeName: tenant.name,
+    logo:      tenant.logo || "",
+    storeCode: tenant.storeCode,
+    deepLink:  tenant.deepLink || `enandi://${tenant.tenantId}`,
   });
 };
 
@@ -193,7 +323,20 @@ exports.createTenant = async (req, res) => {
       contactEmail,
       plan: requestedPlan,
       password,
+      tagline,
+      heroBadge,
+      heroTitle,
+      heroSubtitle,
+      supportEmail: rawSupportEmail,
+      supportPhone: rawSupportPhone,
+      supportHours: rawSupportHours,
     } = req.body;
+
+    const trimStr = (v, max = 500) => {
+      const s = typeof v === "string" ? v.trim() : "";
+      if (!s) return "";
+      return s.length > max ? s.slice(0, max) : s;
+    };
 
     // ── Input validation ────────────────────────────────────────────────
     if (!storeName || !storeName.trim()) {
@@ -217,6 +360,28 @@ exports.createTenant = async (req, res) => {
       if (!emailRe.test(contactEmail.trim())) {
         return res.status(400).json({ success: false, message: "contactEmail format is invalid" });
       }
+    }
+
+    let initialSupportEmail = "";
+    let initialSupportPhone = "";
+    let initialSupportHours = "";
+    if (rawSupportEmail && String(rawSupportEmail).trim()) {
+      const se = String(rawSupportEmail).trim().toLowerCase();
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(se)) {
+        return res.status(400).json({ success: false, message: "supportEmail format is invalid" });
+      }
+      initialSupportEmail = se;
+    }
+    if (rawSupportPhone && String(rawSupportPhone).trim()) {
+      const sd = String(rawSupportPhone).replace(/\D/g, "");
+      if (sd.length < 10) {
+        return res.status(400).json({ success: false, message: "supportPhone must include at least 10 digits" });
+      }
+      initialSupportPhone = sd.slice(-10);
+    }
+    if (rawSupportHours && String(rawSupportHours).trim()) {
+      initialSupportHours = trimStr(rawSupportHours, 400);
     }
 
     // ── Password validation ─────────────────────────────────────────────
@@ -258,6 +423,11 @@ exports.createTenant = async (req, res) => {
     const customerDomain = `${tenantId}.${BASE_DOMAIN}`;
     const adminDomain    = `admin.${tenantId}.${BASE_DOMAIN}`;
 
+    // ── Generate storeCode, deepLink, QR ────────────────────────────────
+    const storeCode = await generateStoreCode();
+    const deepLink  = `enandi://${tenantId}`;
+    const qrCode    = await QRCode.toDataURL(deepLink);
+
     // ── 1. Create Tenant record ─────────────────────────────────────────
     await Tenant.create({
       tenantId,
@@ -273,6 +443,16 @@ exports.createTenant = async (req, res) => {
       storeAddress:   storeAddress ? storeAddress.trim() : "",
       contactEmail:   contactEmail ? contactEmail.trim().toLowerCase() : "",
       adminPassword:  hashedPassword,
+      tagline:        trimStr(tagline),
+      heroBadge:      trimStr(heroBadge),
+      heroTitle:      trimStr(heroTitle),
+      heroSubtitle:   trimStr(heroSubtitle),
+      supportEmail:   initialSupportEmail,
+      supportPhone:   initialSupportPhone,
+      supportHours:   initialSupportHours,
+      storeCode,
+      deepLink,
+      qrCode,
     });
 
     // ── 2. Create Admin User ────────────────────────────────────────────
@@ -306,6 +486,9 @@ exports.createTenant = async (req, res) => {
       customerDomain,
       adminDomain,
       adminUserId:    adminUser._id,
+      storeCode,
+      deepLink,
+      qrCode,
       message:        "Store created successfully",
     });
   } catch (err) {
