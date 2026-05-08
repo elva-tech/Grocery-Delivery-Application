@@ -7,6 +7,7 @@ import { getAddressFromCoords } from '../../api/addresses';
 import type { RootState } from '../../store/store';
 import AddressModal from './AddressModal';
 import { useTenantBranding } from '../../context/TenantBrandingContext';
+import { WEB_COPY } from '../../constants/copy';
 
 import { Headset } from 'lucide-react';
 
@@ -97,10 +98,10 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
               </div>
 
               <h2 className="text-3xl font-black text-slate-900 italic uppercase tracking-tighter mb-3 leading-none">
-                Experience {storeName}.
+                {WEB_COPY.header.appPromoTitlePrefix} {storeName} {WEB_COPY.header.appPromoTitleSuffix}
               </h2>
               <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">
-                Download our mobile app for faster checkout, live tracking, and exclusive offers.
+                {WEB_COPY.header.appPromoDescription}
               </p>
 
               <div className="flex flex-col gap-3">
@@ -134,7 +135,7 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
                 onClick={closeAppModal}
                 className="mt-8 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
               >
-                Continue on Web
+                {WEB_COPY.header.continueOnWebsite}
               </button>
             </div>
           </div>
@@ -164,9 +165,11 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
                   <span className="text-[#4b6f9e]">{brandTail}</span>
                 ) : null}
               </span>
-              <span className="hidden sm:block text-[8px] font-black text-[#4b6f9e] tracking-[0.4em] uppercase opacity-50 group-hover:opacity-100 transition-opacity truncate">
-                {tagline}
-              </span>
+              {tagline ? (
+                <span className="hidden sm:block text-[8px] font-black text-[#4b6f9e] tracking-[0.4em] uppercase opacity-50 group-hover:opacity-100 transition-opacity truncate">
+                  {tagline}
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -248,7 +251,7 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
               className="bg-[#1e293b] text-white h-10 sm:h-12 px-3 sm:px-5 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-4 hover:bg-[#4b6f9e] transition-all shadow-xl shadow-slate-200 active:scale-95"
             >
               <div className="flex flex-col items-start leading-tight border-r border-white/10 pr-2 sm:pr-4">
-                <span className="hidden sm:block text-[8px] font-black uppercase tracking-widest opacity-50">Basket</span>
+                <span className="hidden sm:block text-[8px] font-black uppercase tracking-widest opacity-50">{WEB_COPY.header.cartLabel}</span>
                 <span className="text-xs sm:text-sm font-black italic">₹{totalAmount.toFixed(0)}</span>
               </div>
               <ShoppingCart size={18} />
@@ -263,11 +266,9 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="p-8">
-              <h2 className="text-2xl font-black text-slate-900 mb-4 text-center">
-                Confirm Logout
-              </h2>
+              <h2 className="text-2xl font-black text-slate-900 mb-4 text-center">{WEB_COPY.header.confirmLogoutTitle}</h2>
               <p className="text-slate-600 text-center mb-8 font-semibold">
-                Are you sure you want to logout? You'll need to login again to continue shopping.
+                {WEB_COPY.header.confirmLogoutDescription}
               </p>
 
               <div className="flex gap-4">
@@ -281,7 +282,7 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
                   onClick={confirmLogout}
                   className="flex-1 h-12 bg-red-500 hover:bg-red-600 text-white font-black rounded-xl transition-colors"
                 >
-                  Yes, Logout
+                  {WEB_COPY.header.confirmLogoutAction}
                 </button>
               </div>
             </div>

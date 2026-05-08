@@ -5,22 +5,16 @@
         "buildType": "apk",
         "env": {
           "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EXPO_PUBLIC_TENANT_ID": "puma"
+          "EXPO_PUBLIC_TENANT_ID": "puma",
+          "EXPO_PUBLIC_ENV": "development"
         }
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_TENANT_ID": "puma"
+        "EXPO_PUBLIC_TENANT_ID": "puma",
+        "EXPO_PUBLIC_ENV": "production"
       }
     }
-  }
-},
-   "production": {
-  "env": {
-    "EXPO_PUBLIC_TENANT_ID": "demo-tenant",
-    "EXPO_PUBLIC_ENV": "production"
-  }
-}
   }
 }

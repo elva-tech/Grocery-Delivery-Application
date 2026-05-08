@@ -368,8 +368,8 @@ export default function CreateStorePage() {
                 onChange={set('storeName')}
               />
               <InputField
-                label="Website tagline"
-                placeholder="Short line under the store name on the customer website"
+                label="Home Page Tagline (optional)"
+                placeholder="Short line shown on customer home page"
                 value={form.tagline}
                 onChange={set('tagline')}
               />

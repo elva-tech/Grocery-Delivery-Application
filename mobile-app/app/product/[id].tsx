@@ -1,6 +1,6 @@
 /**
  * @file ProductDetailScreen.tsx
- * @description Premium product view with full-bleed image gallery and specific cart logic fixes.
+ * @description Product detail view with full-bleed image gallery and cart logic fixes.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { showToast } from '@/utils/toast';
 import { resolveProductImageGallery, resolveProductImageUri } from '@/utils/resolveProductImageUri';
+import { MOBILE_COPY } from '@/src/constants/copy';
 
 const { width } = Dimensions.get('window');
 const BRAND_BLUE = '#4b6f9e';
@@ -65,7 +66,7 @@ export default function ProductDetailScreen() {
   const handleAddToCart = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     dispatch(addToCart({ ...product, image: primaryImage ?? undefined }));
-    showToast('success', 'Added!', `${product.name} added to basket`);
+    showToast('success', MOBILE_COPY.home.addToCartToastTitle, `${product.name} ${MOBILE_COPY.home.addToCartToastSuffix}`);
   };
 
   return (
@@ -137,7 +138,7 @@ export default function ProductDetailScreen() {
         <View style={styles.infoContainer}>
           <View style={styles.rowBetween}>
             <View style={styles.categoryTag}>
-              <Text style={styles.categoryText}>Premium Choice</Text>
+              <Text style={styles.categoryText}>{MOBILE_COPY.product.featuredItem}</Text>
             </View>
             <TouchableOpacity style={styles.wishlistBtn}>
               <Ionicons name="heart-outline" size={22} color={BRAND_BLUE} />
@@ -145,7 +146,7 @@ export default function ProductDetailScreen() {
           </View>
 
           <Text style={styles.name}>{product.name}</Text>
-          <Text style={styles.unitDetail}>{product.unit} • Freshly Packaged</Text>
+          <Text style={styles.unitDetail}>{product.unit} • {MOBILE_COPY.product.packedForDelivery}</Text>
 
           <View style={styles.metaRow}>
             <View style={styles.stockBadge}>
@@ -161,7 +162,7 @@ export default function ProductDetailScreen() {
               About this product
             </Text>
             <Text style={{ fontSize: 15, color: '#475569', lineHeight: 22, fontWeight: '500' }}>
-              {product.description || `Pure and fresh ${product.name} delivered straight to your home. Premium quality guaranteed.`}
+              {product.description || `${product.name} ${MOBILE_COPY.product.descriptionFallbackPrefix}`}
             </Text>
           </View>
 
@@ -171,11 +172,11 @@ export default function ProductDetailScreen() {
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <View style={styles.iconCircle}><Ionicons name="leaf-outline" size={20} color={BRAND_BLUE} /></View>
-              <Text style={styles.featureText}>100% Organic & Natural</Text>
+              <Text style={styles.featureText}>{MOBILE_COPY.product.featureFreshQuality}</Text>
             </View>
             <View style={styles.featureItem}>
               <View style={styles.iconCircle}><Ionicons name="shield-checkmark-outline" size={20} color={BRAND_BLUE} /></View>
-              <Text style={styles.featureText}>Safety & Quality Guaranteed</Text>
+              <Text style={styles.featureText}>{MOBILE_COPY.product.featureQualityAssured}</Text>
             </View>
             <View style={styles.featureItem}>
               <View style={styles.iconCircle}><Ionicons name="snow-outline" size={20} color={BRAND_BLUE} /></View>
@@ -192,7 +193,7 @@ export default function ProductDetailScreen() {
             >
               <View style={styles.redirectInner}>
                 <Ionicons name="bag-check" size={20} color={BRAND_BLUE} />
-                <Text style={styles.basketRedirectText}>Reserved in your basket</Text>
+              <Text style={styles.basketRedirectText}>{MOBILE_COPY.product.addedToCartBanner}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={BRAND_BLUE} />
             </TouchableOpacity>
@@ -226,7 +227,7 @@ export default function ProductDetailScreen() {
         ) : (
           <TouchableOpacity style={styles.addBtn} onPress={handleAddToCart}>
             <Ionicons name="basket-outline" size={20} color="#fff" />
-            <Text style={styles.addBtnText}>Add to Basket</Text>
+            <Text style={styles.addBtnText}>{MOBILE_COPY.common.addToCart}</Text>
           </TouchableOpacity>
         )}
       </View>

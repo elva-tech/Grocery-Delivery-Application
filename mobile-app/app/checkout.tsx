@@ -5,7 +5,7 @@ import { RootState } from '@/store/store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import RazorpayCheckout from 'react-native-razorpay';
+import Constants from 'expo-constants';
 import { showToast } from '@/utils/toast';
 import { clearCart } from '@/store/slices/cartSlice';
 import {
@@ -21,6 +21,7 @@ import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
 import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
+  const isExpoGo = Constants.appOwnership === 'expo';
   const { items, totalAmount } = useSelector((state: RootState) => state.cart);
   const { user, token } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
@@ -97,7 +98,24 @@ export default function CheckoutScreen() {
       const paymentData = await createMobilePaymentOrder(order.orderId, token);
       const rawPhone = ((user as any)?.phone || '').replace(/^\+91\s?/, '').slice(-10);
 
-      const rzpResponse: any = await RazorpayCheckout.open({
+      if (isExpoGo) {
+        throw new Error('Online payment is unavailable in Expo Go. Use a dev build/APK for Razorpay.');
+      }
+
+      let razorpayModule: any = null;
+      if (Platform.OS !== 'web') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          razorpayModule = require('react-native-razorpay')?.default;
+        } catch {
+          razorpayModule = null;
+        }
+      }
+      if (!razorpayModule || typeof razorpayModule.open !== 'function') {
+        throw new Error('Online payment is unavailable in Expo Go. Use a dev build/APK for Razorpay.');
+      }
+
+      const rzpResponse: any = await razorpayModule.open({
         description: 'Grocery Order',
         currency: paymentData.currency || 'INR',
         key: RAZORPAY_KEY_ID,

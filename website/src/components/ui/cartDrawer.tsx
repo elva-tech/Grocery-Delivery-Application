@@ -6,6 +6,7 @@ import { getCartCalculation } from '../../api/ordersApi';
 import { X, ShoppingBasket, Trash2, Zap, Gift, Bike } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { resolveImageUrl } from '../../utils/resolveImageUrl';
+import { WEB_COPY } from '../../constants/copy';
 
 const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
   const { items } = useSelector((state: RootState) => state.cart);
@@ -40,9 +41,9 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
       <div className={`absolute right-0 top-0 w-full max-w-md bg-[#f8fafc] h-full shadow-2xl flex flex-col transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="bg-white p-6 flex items-center justify-between border-b border-slate-100">
           <div>
-            <h2 className="text-xl font-black text-slate-800 tracking-tight">My Basket</h2>
+            <h2 className="text-xl font-black text-slate-800 tracking-tight">{WEB_COPY.cart.myCart}</h2>
             <p className="text-[10px] font-black text-[#4b6f9e] uppercase tracking-widest">
-               {items.reduce((acc, i) => acc + i.quantity, 0)} Items
+               {items.reduce((acc, i) => acc + i.quantity, 0)} {WEB_COPY.cart.itemCountSuffix}
             </p>
           </div>
           <button onClick={onClose} className="w-10 h-10 flex items-center justify-center hover:bg-slate-50 rounded-xl transition-colors"><X size={20} /></button>
@@ -56,7 +57,9 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${bill?.isFreeDelivery ? 'bg-green-500 text-white scale-110' : 'bg-slate-100 text-slate-400'}`}>
                     {bill?.isFreeDelivery ? <Gift size={18} /> : <Bike size={18} />}
                   </div>
-                  <p className="text-sm font-black text-slate-700">{bill?.isFreeDelivery ? "Free Delivery Unlocked!" : `Add ₹${bill?.amountToFree} more for Free`}</p>
+                  <p className="text-sm font-black text-slate-700">
+                    {bill?.isFreeDelivery ? WEB_COPY.cart.freeDeliveryUnlocked : WEB_COPY.cart.addMoreForFreeDelivery(bill?.amountToFree ?? 0)}
+                  </p>
                 </div>
                 <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                   <div className={`h-full transition-all duration-1000 ease-out ${bill?.isFreeDelivery ? 'bg-green-500' : 'bg-[#4b6f9e]'}`} style={{ width: `${(bill?.progress || 0) * 100}%` }} />
@@ -90,7 +93,7 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-slate-300">
               <ShoppingBasket size={80} strokeWidth={1} />
-              <p className="font-black mt-4 uppercase tracking-widest text-xs">Your basket is empty</p>
+              <p className="font-black mt-4 uppercase tracking-widest text-xs">{WEB_COPY.cart.emptyCart}</p>
             </div>
           )}
         </div>
@@ -102,7 +105,7 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">To Pay</p>
                 <p className="text-4xl font-black text-slate-900 tracking-tighter">₹{bill?.grandTotal}</p>
               </div>
-              {bill?.isFreeDelivery && <span className="bg-green-100 text-green-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">Saved ₹40</span>}
+              {bill?.isFreeDelivery && <span className="bg-green-100 text-green-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">{WEB_COPY.cart.deliveryFeeSaved}</span>}
             </div>
             <button onClick={onProceed} className="w-full bg-[#1e293b] text-white py-5 rounded-[2.5rem] font-black text-lg flex items-center justify-center gap-3 hover:bg-[#4b6f9e] transition-all shadow-xl active:scale-95">
               Proceed <Zap size={20} fill="currentColor" />

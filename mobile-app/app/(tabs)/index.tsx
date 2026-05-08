@@ -24,6 +24,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from '@react-navigation/native';
 
 
 // Domain Imports
@@ -34,6 +35,8 @@ import { RootState } from '@/store/store';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 import { fetchBanners, type BannerRecord } from '@/api/bannerApi';
+import { getAddresses } from '@/api/addresses';
+import { MOBILE_COPY } from '@/src/constants/copy';
 
 // Constants for UI consistency
 const { width } = Dimensions.get('window');
@@ -153,11 +156,12 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
 
-  const { storeName, logoUri, tagline, heroBadge, storeAddressLine } = useTenantBranding();
+  const { storeName, logoUri, tagline, heroBadge } = useTenantBranding();
 
   const [banners, setBanners] = useState<BannerRecord[]>([]);
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerError, setBannerError] = useState<string | null>(null);
+  const [deliverToText, setDeliverToText] = useState(MOBILE_COPY.home.deliverToFallback);
 
   const loadBanners = useCallback(async () => {
     setBannerLoading(true);
@@ -182,6 +186,31 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadBanners]);
 
+  const loadDeliverToAddress = useCallback(async () => {
+    try {
+      const list = await getAddresses();
+      if (Array.isArray(list) && list.length > 0) {
+        const preferred = list.find((a: any) => a?.isDefault) || list[0];
+        const readable = String(
+          preferred?.full ||
+          preferred?.line1 ||
+          [preferred?.label, preferred?.city, preferred?.pincode].filter(Boolean).join(', ')
+        ).trim();
+        setDeliverToText(readable || MOBILE_COPY.home.deliverToFallback);
+      } else {
+        setDeliverToText(MOBILE_COPY.home.deliverToFallback);
+      }
+    } catch {
+      setDeliverToText(MOBILE_COPY.home.deliverToFallback);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDeliverToAddress();
+    }, [loadDeliverToAddress])
+  );
+
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
   const { data: allProducts = [] } = useGetProductsQuery();
@@ -205,7 +234,7 @@ export default function HomeScreen() {
       image: resolveProductImageUri(product) ?? undefined
     };
     dispatch(addToCart(productForCart));
-    showToast('success', 'Added!', `${product.name} added to basket`);
+    showToast('success', MOBILE_COPY.home.addToCartToastTitle, `${product.name} ${MOBILE_COPY.home.addToCartToastSuffix}`);
   }, [dispatch, isStoreClosed]);
 
   const renderHeader = () => (
@@ -247,13 +276,8 @@ export default function HomeScreen() {
         <View style={styles.deliverTextCol}>
           <Text style={styles.deliverEyebrow}>DELIVER TO</Text>
           <Text style={styles.deliverMain} numberOfLines={2}>
-            Add or change your home / work address for delivery
+            {deliverToText}
           </Text>
-          {storeAddressLine ? (
-            <Text style={styles.deliverStoreHint} numberOfLines={1}>
-              Store · {storeAddressLine}
-            </Text>
-          ) : null}
         </View>
         <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
       </TouchableOpacity>
@@ -264,9 +288,11 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      <View style={styles.taglineWrap}>
-        <Text style={styles.taglineText}>{tagline}</Text>
-      </View>
+      {tagline ? (
+        <View style={styles.taglineWrap}>
+          <Text style={styles.taglineText}>{tagline}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={20} color="#94a3b8" />
@@ -305,20 +331,10 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ) : null}
 
-          <View style={styles.leafBanner}>
-            <View style={styles.leafContent}>
-              <View>
-                <Text style={styles.leafTitle}>Farm Fresh Delivery</Text>
-                <Text style={styles.leafSubtitle}>Organic goodness delivered.</Text>
-              </View>
-              <Ionicons name="leaf" size={24} color={BRAND_BLUE} />
-            </View>
-          </View>
-
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Shop by Category</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/categories')}>
-              <Text style={styles.seeAll}>See All</Text>
+              <Text style={styles.seeAll}>{MOBILE_COPY.common.viewAll}</Text>
             </TouchableOpacity>
           </View>
 
@@ -347,7 +363,7 @@ export default function HomeScreen() {
       )}
 
       <Text style={styles.productsTitle}>
-        {searchQuery ? `Results for "${searchQuery}"` : 'Curated for You'}
+        {searchQuery ? `Results for "${searchQuery}"` : MOBILE_COPY.home.recommendedForYou}
       </Text>
 
       {isStoreClosed && (
@@ -567,11 +583,6 @@ const styles = StyleSheet.create({
   dotContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 10 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#e2e8f0', marginHorizontal: 3 },
   activeDot: { backgroundColor: BRAND_BLUE, width: 18 },
-
-  leafBanner: { backgroundColor: '#f0f9ff', borderRadius: 16, padding: 12, marginBottom: 20, borderLeftWidth: 4, borderLeftColor: BRAND_BLUE },
-  leafContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  leafTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
-  leafSubtitle: { fontSize: 11, color: '#64748b' },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1e293b' },

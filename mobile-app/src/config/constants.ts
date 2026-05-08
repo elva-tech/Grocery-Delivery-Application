@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { NativeModules, Platform } from 'react-native';
 
 import { getTenantId } from '../utils/getTenantId';
@@ -19,6 +20,20 @@ import { getTenantId } from '../utils/getTenantId';
 function inferPackagerHostname(): string | null {
   if (Platform.OS === 'web') return null;
   try {
+    const hostUriFromExpoConfig = (Constants.expoConfig as any)?.hostUri as string | undefined;
+    if (hostUriFromExpoConfig && typeof hostUriFromExpoConfig === 'string') {
+      const host = hostUriFromExpoConfig.split(':')[0]?.trim();
+      if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+    }
+
+    const hostUriFromManifest2 = (Constants as any)?.manifest2?.extra?.expoClient?.hostUri as
+      | string
+      | undefined;
+    if (hostUriFromManifest2 && typeof hostUriFromManifest2 === 'string') {
+      const host = hostUriFromManifest2.split(':')[0]?.trim();
+      if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+    }
+
     const scriptURL = NativeModules?.SourceCode?.scriptURL as string | undefined;
     if (!scriptURL || typeof scriptURL !== 'string') return null;
     const m = scriptURL.match(/\/\/([^/:?]+)/);
@@ -51,12 +66,18 @@ export const API_BASE_URL = {
 
 // export const ACTIVE_API_URL = API_BASE_URL.DEVELOPMENT;
 
-const ENV = process.env.EXPO_PUBLIC_ENV || 'development';
+const ENV = (process.env.EXPO_PUBLIC_ENV || 'development').toLowerCase();
+// In Expo Go / local dev, always use DEVELOPMENT backend even if env accidentally says production.
+const IS_PRODUCTION_BUILD = ENV === 'production' && !__DEV__;
 
-export const ACTIVE_API_URL =
-  ENV === 'production'
-    ? API_BASE_URL.PRODUCTION
-    : API_BASE_URL.DEVELOPMENT;
+export const ACTIVE_API_URL = IS_PRODUCTION_BUILD
+  ? API_BASE_URL.PRODUCTION
+  : API_BASE_URL.DEVELOPMENT;
+
+if (__DEV__) {
+  // Helps diagnose "no backend calls" quickly in Expo logs.
+  console.log('[config] ACTIVE_API_URL =', ACTIVE_API_URL);
+}
 
     
 

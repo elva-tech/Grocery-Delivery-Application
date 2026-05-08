@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Keyboard } from 'react-native';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState } from '@/store/store';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -137,7 +137,13 @@ const isClosed = storeStatus?.isClosed;
   }
 
   return (
-    <>
+    <View
+      style={styles.appRoot}
+      onStartShouldSetResponderCapture={() => {
+        Keyboard.dismiss();
+        return false;
+      }}
+    >
       <StatusBar style="dark" translucent />
   
       <Stack screenOptions={{ headerShown: false }}>
@@ -199,7 +205,7 @@ const isClosed = storeStatus?.isClosed;
           </View>
         </View>
       )}
-    </>
+    </View>
   );
 }
 
@@ -223,6 +229,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  appRoot: { flex: 1 },
   logoAnimation: {
     width: 300,
     height: 300,

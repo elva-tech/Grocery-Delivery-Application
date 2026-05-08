@@ -6,18 +6,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useDispatch, useSelector } from 'react-redux';
 
 import AddressMapPicker from '@/components/AddressMapPicker';
 
-import RazorpayCheckout from 'react-native-razorpay';
 
 import { clearCart } from '@/store/slices/cartSlice';
 import { RootState } from '@/store/store';
 import { showToast } from '@/utils/toast';
-import { getAddresses, addAddress, getAddressFromCoords } from '@/api/addresses';
+import { getAddresses, addAddress, getAddressFromCoordsDetailed } from '@/api/addresses';
 import {
   placeOrderBackend,
   validateCouponApi,
@@ -61,6 +61,7 @@ const EMPTY_OTHERS: OthersData = {
 };
 
 export default function AddressesScreen() {
+  const isExpoGo = Constants.appOwnership === 'expo';
   const router = useRouter();
   const dispatch = useDispatch();
   const { items, totalAmount } = useSelector((state: RootState) => state.cart);
@@ -80,6 +81,7 @@ export default function AddressesScreen() {
 
   const [orderMode, setOrderMode] = useState<OrderMode>('self');
   const [adding, setAdding] = useState(false);
+  const [addressInputMode, setAddressInputMode] = useState<'auto' | 'manual'>('auto');
   const [showOthersModal, setShowOthersModal] = useState(false);
   const [othersForm, setOthersForm] = useState<OthersData>(EMPTY_OTHERS);
   const [othersConfirmed, setOthersConfirmed] = useState(false);
@@ -311,7 +313,7 @@ export default function AddressesScreen() {
         currency: paymentData.currency || 'INR',
         key: RAZORPAY_KEY_ID,
         amount: String(paymentData.amount),
-        name: 'KMF Grocery',
+        name: 'Grocery Order',
         order_id: paymentData.razorpay_order_id,
         prefill: {
           email: (user as any)?.email || '',
@@ -321,7 +323,21 @@ export default function AddressesScreen() {
         theme: { color: '#0F2C1D' },
       };
 
-      const razorpayModule = RazorpayCheckout as any;
+      // Expo Go does not include react-native-razorpay native module.
+      // Require at call time so this screen can still load in Expo Go.
+      if (isExpoGo) {
+        throw new Error('Online payment is unavailable in Expo Go. Use a dev build/APK for Razorpay.');
+      }
+
+      let razorpayModule: any = null;
+      if (Platform.OS !== 'web') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          razorpayModule = require('react-native-razorpay')?.default;
+        } catch {
+          razorpayModule = null;
+        }
+      }
       if (!RAZORPAY_KEY_ID) {
         throw new Error('Payment configuration missing. Please contact support.');
       }
@@ -368,40 +384,55 @@ export default function AddressesScreen() {
     geocodeAbortRef.current = controller;
     setIsFetchingAddress(true);
     try {
-      const formatted = await getAddressFromCoords(lat, lng, controller.signal);
+      const detailed = await getAddressFromCoordsDetailed(lat, lng, controller.signal);
       if (!controller.signal.aborted) {
-        setLine1(formatted);
+        setLine1(detailed.line1);
+        if (detailed.city) setCity(detailed.city);
+        if (detailed.state) setStateField(detailed.state);
+        if (detailed.pincode) setPincode(detailed.pincode);
         setAddrLat(lat);
         setAddrLng(lng);
       }
     } catch (e: any) {
-      console.error(e);
+      // Expected when user moves the map quickly and we cancel the previous lookup.
+      if (e?.name !== 'AbortError') {
+        console.error(e);
+      }
     } finally {
       if (!controller.signal.aborted) setIsFetchingAddress(false);
     }
   }, []);
 
   const handleUseLocation = async () => {
+    // Match website UX: choosing current location should open the address form immediately.
+    if (!adding) setAdding(true);
+    // Always keep Address Type user-entered (never auto-detected).
+    setLabel('');
     setMapLoading(true);
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      showToast('error', 'Denied', 'Permission needed');
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('error', 'Denied', 'Permission needed');
+        setMapLoading(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      const reg = {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      };
+      setRegion(reg);
+      setAddrLat(reg.latitude);
+      setAddrLng(reg.longitude);
+      setShowMap(true);
+      fetchAddressFromBackend(reg.latitude, reg.longitude);
+    } catch (e: any) {
+      showToast('error', 'Location', e?.message || 'Could not get current location');
+    } finally {
       setMapLoading(false);
-      return;
     }
-    const loc = await Location.getCurrentPositionAsync({});
-    const reg = {
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
-      latitudeDelta: 0.005,
-      longitudeDelta: 0.005,
-    };
-    setRegion(reg);
-    setAddrLat(reg.latitude);
-    setAddrLng(reg.longitude);
-    setMapLoading(false);
-    setShowMap(true);
-    fetchAddressFromBackend(reg.latitude, reg.longitude);
   };
 
   return (
@@ -441,39 +472,138 @@ export default function AddressesScreen() {
         {adding ? (
           <View style={styles.formContainer}>
             <Text style={styles.formTitle}>New Personal Address</Text>
+            <Text style={styles.formSubtitle}>Choose how you want to add address details</Text>
 
-            {/* FIX 3: GPS button with dotted border + location icon */}
-            <TouchableOpacity style={styles.locBtn} onPress={handleUseLocation} disabled={mapLoading}>
-              {mapLoading ? (
-                <ActivityIndicator size="small" color="#4b6f9e" />
-              ) : (
-                <View style={styles.locBtnInner}>
-                  <View style={styles.locIconCircle}>
-                    <Ionicons name="locate" size={18} color="#fff" />
-                  </View>
-                  <View style={styles.locBtnTextContainer}>
-                    <Text style={styles.locBtnTitle}>Use Current Location</Text>
-                    <Text style={styles.locBtnSubtitle}>Auto-fill address via GPS</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="#4b6f9e" />
+            <View style={styles.inputModeWrap}>
+              <TouchableOpacity
+                style={[styles.inputModeBtn, addressInputMode === 'auto' && styles.inputModeBtnActive]}
+                onPress={() => setAddressInputMode('auto')}
+              >
+                <Ionicons
+                  name="locate-outline"
+                  size={16}
+                  color={addressInputMode === 'auto' ? '#fff' : '#64748b'}
+                />
+                <Text style={[styles.inputModeText, addressInputMode === 'auto' && styles.inputModeTextActive]}>
+                  Auto Detect
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.inputModeBtn, addressInputMode === 'manual' && styles.inputModeBtnActive]}
+                onPress={() => setAddressInputMode('manual')}
+              >
+                <Ionicons
+                  name="create-outline"
+                  size={16}
+                  color={addressInputMode === 'manual' ? '#fff' : '#64748b'}
+                />
+                <Text style={[styles.inputModeText, addressInputMode === 'manual' && styles.inputModeTextActive]}>
+                  Manual Entry
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {addressInputMode === 'auto' ? (
+              <>
+                <TouchableOpacity style={styles.locBtn} onPress={handleUseLocation} disabled={mapLoading}>
+                  {mapLoading ? (
+                    <ActivityIndicator size="small" color="#4b6f9e" />
+                  ) : (
+                    <View style={styles.locBtnInner}>
+                      <View style={styles.locIconCircle}>
+                        <Ionicons name="locate" size={18} color="#fff" />
+                      </View>
+                      <View style={styles.locBtnTextContainer}>
+                        <Text style={styles.locBtnTitle}>Use Current Location</Text>
+                        <Text style={styles.locBtnSubtitle}>Auto-fill address from GPS pin</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#4b6f9e" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <View style={styles.gpsStateCard}>
+                  <Ionicons
+                    name={line1 ? 'checkmark-circle' : 'information-circle-outline'}
+                    size={16}
+                    color={line1 ? '#16a34a' : '#64748b'}
+                  />
+                  <Text style={styles.gpsStateText} numberOfLines={2}>
+                    {isFetchingAddress
+                      ? 'Fetching current address...'
+                      : line1
+                      ? `Detected: ${line1}`
+                      : 'Tap "Use Current Location" to detect your address.'}
+                  </Text>
                 </View>
-              )}
-            </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.manualHintCard}>
+                <Ionicons name="create-outline" size={16} color="#64748b" />
+                <Text style={styles.manualHintText}>
+                  Enter address fields manually if GPS is not accurate.
+                </Text>
+              </View>
+            )}
 
-            <TextInput placeholder="Label (Home/Work) *" value={label} onChangeText={setLabel} style={styles.input} />
+            <Text style={styles.fieldLabel}>Address Type *</Text>
             <TextInput
-              placeholder="Address line 1 *"
+              placeholder="Home / Office / Other"
+              placeholderTextColor="#94a3b8"
+              value={label}
+              onChangeText={setLabel}
+              autoCorrect={false}
+              autoCapitalize="words"
+              autoComplete="off"
+              style={styles.input}
+            />
+            <Text style={styles.fieldLabel}>Address Line 1 *</Text>
+            <TextInput
+              placeholder="House / Building / Street"
+              placeholderTextColor="#94a3b8"
               value={line1}
               onChangeText={setLine1}
               style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+              editable={addressInputMode === 'manual' || !line1}
               multiline
             />
-            <TextInput placeholder="Address line 2 (optional)" value={line2} onChangeText={setLine2} style={styles.input} />
-            <TextInput placeholder="Landmark *" value={landmark} onChangeText={setLandmark} style={styles.input} />
-            <TextInput placeholder="City (from PIN)" value={city} editable={false} style={[styles.input, { backgroundColor: '#f1f5f9' }]} />
-            <TextInput placeholder="State (from PIN)" value={stateField} editable={false} style={[styles.input, { backgroundColor: '#f1f5f9' }]} />
+            <Text style={styles.fieldLabel}>Address Line 2</Text>
             <TextInput
-              placeholder="PIN code *"
+              placeholder="Apartment / Floor (optional)"
+              placeholderTextColor="#94a3b8"
+              value={line2}
+              onChangeText={setLine2}
+              style={styles.input}
+            />
+            <Text style={styles.fieldLabel}>Landmark *</Text>
+            <TextInput
+              placeholder="Near..."
+              placeholderTextColor="#94a3b8"
+              value={landmark}
+              onChangeText={setLandmark}
+              style={styles.input}
+            />
+            <Text style={styles.fieldLabel}>City *</Text>
+            <TextInput
+              placeholder="City"
+              placeholderTextColor="#94a3b8"
+              value={city}
+              onChangeText={setCity}
+              editable={addressInputMode === 'manual'}
+              style={[styles.input, addressInputMode !== 'manual' && { backgroundColor: '#f1f5f9' }]}
+            />
+            <Text style={styles.fieldLabel}>State *</Text>
+            <TextInput
+              placeholder="State"
+              placeholderTextColor="#94a3b8"
+              value={stateField}
+              onChangeText={setStateField}
+              editable={addressInputMode === 'manual'}
+              style={[styles.input, addressInputMode !== 'manual' && { backgroundColor: '#f1f5f9' }]}
+            />
+            <Text style={styles.fieldLabel}>PIN Code *</Text>
+            <TextInput
+              placeholder="6-digit PIN"
+              placeholderTextColor="#94a3b8"
               value={pincode}
               onChangeText={t => setPincode(t.replace(/\D/g, '').slice(0, 6))}
               onBlur={async () => {
@@ -490,7 +620,16 @@ export default function AddressesScreen() {
               style={styles.input}
               maxLength={6}
             />
-            <TextInput placeholder="Phone Number *" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={styles.input} maxLength={10} />
+            <Text style={styles.fieldLabel}>Phone Number *</Text>
+            <TextInput
+              placeholder="10-digit mobile number"
+              placeholderTextColor="#94a3b8"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              style={styles.input}
+              maxLength={10}
+            />
 
             <View style={styles.row}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setAdding(false)}>
@@ -523,7 +662,13 @@ export default function AddressesScreen() {
                     </TouchableOpacity>
                   ))
                 )}
-                <TouchableOpacity style={styles.addNewPersonalBtn} onPress={() => setAdding(true)}>
+                <TouchableOpacity
+                  style={styles.addNewPersonalBtn}
+                  onPress={() => {
+                    setAddressInputMode('auto');
+                    setAdding(true);
+                  }}
+                >
                   <Ionicons name="add" size={20} color="#4b6f9e" />
                   <Text style={styles.addNewPersonalText}>Add New Personal Address</Text>
                 </TouchableOpacity>
@@ -787,6 +932,58 @@ const styles = StyleSheet.create({
   addNewPersonalText: { color: '#4b6f9e', fontWeight: '700', marginLeft: 6 },
   formContainer: { backgroundColor: '#fff', margin: 16, padding: 16, borderRadius: 16, elevation: 5, shadowOpacity: 0.1 },
   formTitle: { fontSize: 16, fontWeight: '800', marginBottom: 16 },
+  formSubtitle: { fontSize: 12, color: '#64748b', marginBottom: 12, marginTop: -8 },
+  inputModeWrap: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  inputModeBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#dbe4ef',
+    backgroundColor: '#f8fafc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  inputModeBtnActive: { backgroundColor: '#4b6f9e', borderColor: '#4b6f9e' },
+  inputModeText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  inputModeTextActive: { color: '#fff' },
+  gpsStateCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  gpsStateText: { flex: 1, fontSize: 12, color: '#64748b', lineHeight: 17 },
+  manualHintCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  manualHintText: { flex: 1, fontSize: 12, color: '#64748b', lineHeight: 17 },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+    marginTop: 2,
+  },
 
   // FIX 3: GPS button styles
   locBtn: {

@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
+import { MOBILE_COPY } from '@/src/constants/copy';
 
 const BRAND_BLUE = '#4b6f9e';
 const SUCCESS_GREEN = '#10b981';
@@ -75,16 +76,16 @@ export default function CartScreen() {
             <View style={styles.emptyIconCircle}>
               <Ionicons name="basket" size={80} color={BRAND_BLUE} />
             </View>
-            <Text style={styles.emptyTitle}>Your basket feels light</Text>
-            <Text style={styles.emptySubtitle}>Give it some love with our farm-fresh dairy products!</Text>
+            <Text style={styles.emptyTitle}>{MOBILE_COPY.cart.emptyTitle}</Text>
+            <Text style={styles.emptySubtitle}>{MOBILE_COPY.cart.emptySubtitle}</Text>
             <TouchableOpacity style={styles.shopButtonLarge} onPress={() => router.push('/(tabs)')}>
               <Text style={styles.shopButtonText}>Browse Products</Text>
               <Ionicons name="arrow-forward" size={18} color="#fff" />
             </TouchableOpacity>
           </View>
           <View style={styles.featureGrid}>
-            <View style={styles.featureItem}><Ionicons name="flash" size={18} color="#f59e0b" /><Text style={styles.featureText}>Fast Delivery</Text></View>
-            <View style={styles.featureItem}><Ionicons name="shield-checkmark" size={18} color={SUCCESS_GREEN} /><Text style={styles.featureText}>Pure Quality</Text></View>
+            <View style={styles.featureItem}><Ionicons name="flash" size={18} color="#f59e0b" /><Text style={styles.featureText}>{MOBILE_COPY.cart.quickDelivery}</Text></View>
+            <View style={styles.featureItem}><Ionicons name="shield-checkmark" size={18} color={SUCCESS_GREEN} /><Text style={styles.featureText}>{MOBILE_COPY.cart.qualityChecked}</Text></View>
           </View>
         </View>
       </SafeAreaView>
@@ -95,7 +96,7 @@ export default function CartScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Basket ({totalItemsCount})</Text>
+          <Text style={styles.headerTitle}>{MOBILE_COPY.common.myCart} ({totalItemsCount})</Text>
           {bill?.isFreeDelivery && (
             <View style={styles.sprinkleBadge}>
               <Ionicons name="sparkles" size={14} color="#fff" />

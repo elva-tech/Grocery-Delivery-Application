@@ -6,6 +6,16 @@ const BASE = ACTIVE_API_URL;
 
 const tenantHeaders = async () => ({ 'x-tenant-id': await getActiveTenantId() });
 
+function logApiError(scope: string, error: unknown) {
+  const msg =
+    error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : typeof error === 'string'
+      ? error
+      : JSON.stringify(error);
+  console.warn(`[apiSlice] ${scope} failed @ ${BASE}: ${msg}`);
+}
+
 /* ---------------- TYPES ---------------- */
 
 export interface AppSettings {
@@ -115,7 +125,8 @@ export const apiSlice = createApi({
               allowOrderCancellation: s.allowOrderCancellation ?? true,
             },
           };
-        } catch {
+        } catch (e: unknown) {
+          logApiError('getAppSettings', e);
           return { data: { allowRefunds: true, allowReportIssue: true, allowOrderCancellation: true } };
         }
       },
@@ -131,6 +142,7 @@ export const apiSlice = createApi({
           const products: Product[] = (json.products || []).map(normalizeProduct);
           return { data: deriveCategories(products) };
         } catch (e: any) {
+          logApiError('getCategories', e);
           return { error: { status: 'FETCH_ERROR', error: e.message } };
         }
       },
@@ -145,6 +157,7 @@ export const apiSlice = createApi({
           const json = await res.json();
           return { data: (json.products || []).map(normalizeProduct) };
         } catch (e: any) {
+          logApiError('getProducts', e);
           return { error: { status: 'FETCH_ERROR', error: e.message } };
         }
       },
@@ -164,6 +177,7 @@ export const apiSlice = createApi({
           );
           return { data: filtered.length ? filtered : all };
         } catch (e: any) {
+          logApiError('getProductsByCategory', e);
           return { error: { status: 'FETCH_ERROR', error: e.message } };
         }
       },
@@ -178,6 +192,7 @@ export const apiSlice = createApi({
           const json = await res.json();
           return { data: (json.products || []).map(normalizeProduct).slice(0, 6) };
         } catch (e: any) {
+          logApiError('getFeaturedProducts', e);
           return { error: { status: 'FETCH_ERROR', error: e.message } };
         }
       },
@@ -201,7 +216,8 @@ export const apiSlice = createApi({
               nextChange: data.nextChange ?? null,
             },
           };
-        } catch {
+        } catch (e: unknown) {
+          logApiError('getStoreStatus', e);
           // Fail open – don't block the app if the API is unreachable
           return { data: { isClosed: false, reason: 'UNAVAILABLE', nextChange: null } };
         }

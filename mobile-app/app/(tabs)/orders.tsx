@@ -45,6 +45,15 @@ const REPORT_REASONS = [
   "Package tampered"
 ];
 
+const hasOrderRating = (order: any) => {
+  const rating = order?.rating;
+  if (typeof rating === 'number') return rating > 0;
+  if (typeof rating === 'string') return Number(rating) > 0;
+  if (!rating || typeof rating !== 'object') return false;
+  const rawValue = rating.value ?? rating.stars ?? rating.rating ?? rating.score;
+  return Number(rawValue) > 0;
+};
+
 export default function OrdersScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
@@ -92,7 +101,7 @@ export default function OrdersScreen() {
 
       // Auto-prompt rating for first unrated delivered order
       const unrated = normalizedData.find(
-        (o: any) => o.status === 'DELIVERED' && !o.rating?.value
+        (o: any) => o.status === 'DELIVERED' && !hasOrderRating(o)
       );
       if (unrated) {
         const skippedKey = `@rating_skipped_${unrated._id ?? unrated.id}`;
@@ -344,7 +353,7 @@ export default function OrdersScreen() {
           </TouchableOpacity>
         </View>
         {/* Rate button for unrated delivered orders */}
-        {item.status === 'DELIVERED' && !item.rating?.value && (
+        {item.status === 'DELIVERED' && !hasOrderRating(item) && (
           <TouchableOpacity
             style={styles.rateBtn}
             onPress={() => {
@@ -359,10 +368,19 @@ export default function OrdersScreen() {
           </TouchableOpacity>
         )}
         {/* Show submitted rating */}
-        {item.rating?.value && (
+        {hasOrderRating(item) && (
           <View style={styles.ratingDisplay}>
-            <Text style={styles.ratingStars}>{'★'.repeat(item.rating.value)}{'☆'.repeat(5 - item.rating.value)}</Text>
-            {item.rating.comment ? <Text style={styles.ratingCommentSmall}>{item.rating.comment}</Text> : null}
+            {(() => {
+              const raw = Number(item?.rating?.value ?? item?.rating?.stars ?? item?.rating?.rating ?? item?.rating?.score ?? item?.rating ?? 0);
+              const safeValue = Math.max(0, Math.min(5, raw));
+              return (
+                <Text style={styles.ratingStars}>
+                  {'★'.repeat(safeValue)}
+                  {'☆'.repeat(5 - safeValue)}
+                </Text>
+              );
+            })()}
+            {item?.rating?.comment ? <Text style={styles.ratingCommentSmall}>{item.rating.comment}</Text> : null}
           </View>
         )}
       </View>
@@ -376,10 +394,18 @@ export default function OrdersScreen() {
       </View>
 
       <FlatList
+        style={styles.listView}
         data={groupedList}
         renderItem={renderItem}
         keyExtractor={(item, idx) => item._sectionHeader ? `header-${idx}` : item.id}
-        contentContainerStyle={[styles.list, groupedList.length === 0 && { flexGrow: 1 }]}
+        contentContainerStyle={[
+          styles.list,
+          groupedList.length === 0 && { flexGrow: 1 },
+        ]}
+        scrollEnabled
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4b6f9e" />}
         ListEmptyComponent={
           !loading ? (
@@ -416,7 +442,13 @@ export default function OrdersScreen() {
     <Ionicons name="close-circle" size={32} color="#cbd5e1" />
   </TouchableOpacity>
 </View>
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Delivery info row */}
               {(selectedOrder?.address || selectedOrder?.deliverySlot) && (
                 <View style={styles.deliveryInfoBox}>
@@ -538,7 +570,13 @@ export default function OrdersScreen() {
                 <Ionicons name="close-circle" size={32} color="#cbd5e1" />
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={styles.label}>Reason for report</Text>
               <View style={styles.reasonGrid}>
                 {REPORT_REASONS.map((r) => (
@@ -674,7 +712,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   headerTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b' },
-  list: { padding: 16 },
+  listView: { flex: 1 },
+  list: { padding: 16, paddingBottom: 120 },
   
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -696,7 +735,8 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   modalTitle: { fontSize: 22, fontWeight: '900', color: '#1e293b' },
-  modalScroll: { marginBottom: 20 },
+  modalScroll: { marginBottom: 20, flexGrow: 0 },
+  modalScrollContent: { paddingBottom: 8 },
   
   productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   productImage: { width: 60, height: 60, borderRadius: 14, backgroundColor: '#f8fafc' },

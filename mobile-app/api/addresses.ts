@@ -7,12 +7,29 @@ const COUNTRY_CODE = "+91"; // Backend controlled
 const makeKey = (address: any) =>
   `${address.label?.trim()}|${address.line1?.trim() || address.full?.trim()}|${address.pincode?.trim() || ''}|${address.phone?.trim()}`;
 
-export const getAddressFromCoords = async (lat: number, lng: number, signal?: AbortSignal) => {
-  if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+export type ReverseAddress = {
+  line1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
+export const getAddressFromCoordsDetailed = async (
+  lat: number,
+  lng: number,
+  signal?: AbortSignal,
+): Promise<ReverseAddress> => {
+  if (signal?.aborted) {
+    return { line1: '', city: '', state: '', pincode: '' };
+  }
   try {
     const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-    if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
-    if (!result || result.length === 0) return 'Address not found';
+    if (signal?.aborted) {
+      return { line1: '', city: '', state: '', pincode: '' };
+    }
+    if (!result || result.length === 0) {
+      return { line1: 'Address not found', city: '', state: '', pincode: '' };
+    }
     
     const addr = result[0];
 
@@ -26,11 +43,23 @@ export const getAddressFromCoords = async (lat: number, lng: number, signal?: Ab
       addr.postalCode
     ].filter(part => part && part !== 'null' && part !== 'undefined' && part !== '');
 
-    return parts.length > 0 ? parts.join(', ') : 'Unknown Location';
+    return {
+      line1: parts.length > 0 ? parts.join(', ') : 'Unknown Location',
+      city: String(addr.city || addr.subregion || '').trim(),
+      state: String(addr.region || '').trim(),
+      pincode: String(addr.postalCode || '').replace(/\D/g, '').slice(0, 6),
+    };
   } catch (error: any) {
-    if (error.name === 'AbortError') throw error;
-    return 'Error fetching address';
+    if (error?.name === 'AbortError') {
+      return { line1: '', city: '', state: '', pincode: '' };
+    }
+    return { line1: 'Error fetching address', city: '', state: '', pincode: '' };
   }
+};
+
+export const getAddressFromCoords = async (lat: number, lng: number, signal?: AbortSignal) => {
+  const detailed = await getAddressFromCoordsDetailed(lat, lng, signal);
+  return detailed.line1;
 };
 
 export const getAddresses = async (): Promise<any[]> => {

@@ -17,6 +17,7 @@ import { Colors, Fonts } from "@/theme/theme";
 import { sendOtp } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
 import { useTenantBranding } from "@/contexts/TenantBrandingContext";
+import { MOBILE_COPY } from "@/src/constants/copy";
 
 export default function Login() {
     const router = useRouter();
@@ -79,7 +80,7 @@ export default function Login() {
                 </Text>
           
                 <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>
-                  Enter your phone number to continue
+                  {MOBILE_COPY.auth.loginSubtitle}
                 </Text>
           
                 <View style={styles.inputWrapper}>
@@ -125,7 +126,7 @@ export default function Login() {
                   onPress={() => router.push("/auth/register")}
                 >
                   <Text style={styles.switchText}>
-                    New here? Create account
+                    {MOBILE_COPY.auth.createAccountCta}
                   </Text>
                 </TouchableOpacity>
               </ScrollView>

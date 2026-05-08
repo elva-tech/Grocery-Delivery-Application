@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView, Image, TextInput, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout, updateUser } from '@/store/slices/authSlice';
+import { logout } from '@/store/slices/authSlice';
 import { clearCart } from '@/store/slices/cartSlice';
 import { RootState } from '@/store/store';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +11,6 @@ import { showToast } from '@/utils/toast';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Fonts } from '@/theme/theme';
-import { updateProfileApi } from '@/api/ordersApi';
 import { APP_BRAND } from '@/src/config/constants';
 import Constants from 'expo-constants';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
@@ -24,9 +23,6 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [isSavingName, setIsSavingName] = useState(false);
 
   const handleLogout = async () => {
     showToast('info', 'Logout', 'Logging you out...');
@@ -38,35 +34,6 @@ export default function ProfileScreen() {
       router.replace('/auth/landing');
       showToast('success', 'Logged Out', 'Come back soon!');
     }, 600);
-  };
-
-  const handleOpenEdit = () => {
-    setEditName(user?.name || '');
-    setShowEditModal(true);
-  };
-
-  const handleSaveName = async () => {
-    const trimmed = editName.trim();
-    if (trimmed.length < 2) {
-      showToast('error', 'Invalid Name', 'Name must be at least 2 characters');
-      return;
-    }
-    if (!token) { showToast('error', 'Session Expired', 'Please log in again'); return; }
-    setIsSavingName(true);
-    try {
-      const result = await updateProfileApi(trimmed, token);
-      dispatch(updateUser({ name: result.user.name }));
-      const stored = await AsyncStorage.getItem('user');
-      if (stored) {
-        await AsyncStorage.setItem('user', JSON.stringify({ ...JSON.parse(stored), name: result.user.name }));
-      }
-      setShowEditModal(false);
-      showToast('success', 'Updated', 'Your name has been updated');
-    } catch (err: any) {
-      showToast('error', 'Update Failed', err?.message || 'Please try again');
-    } finally {
-      setIsSavingName(false);
-    }
   };
 
   const handleProfileImage = async () => {
@@ -96,6 +63,12 @@ export default function ProfileScreen() {
     subtitle?: string;
     onPress: () => void;
   }[] = [
+    {
+      icon: 'person-circle-outline',
+      label: 'Account Details',
+      subtitle: user?.email || '+91 ' + ((user?.phone || '').replace(/^\+91\s?/, '') || 'Not available'),
+      onPress: () => router.push('/(tabs)/account')
+    },
     {
       icon: 'cart-outline',
       label: 'Cart',
@@ -184,7 +157,7 @@ export default function ProfileScreen() {
           {/* DYNAMIC USER DATA */}
           <View style={styles.nameRow}>
             <Text style={styles.userNameText}>{user?.name || 'Guest User'}</Text>
-            <TouchableOpacity onPress={handleOpenEdit} style={styles.editNameBtn}>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/account')} style={styles.editNameBtn}>
               <Ionicons name="pencil-outline" size={16} color={Colors.PRIMARY} />
             </TouchableOpacity>
           </View>
@@ -194,6 +167,12 @@ export default function ProfileScreen() {
             <Ionicons name="shield-checkmark" size={14} color={Colors.PRIMARY} />
             <Text style={styles.memberStatus}>Verified Member</Text>
           </View>
+
+          <TouchableOpacity style={styles.quickProfileBtn} onPress={() => router.push('/(tabs)/account')}>
+            <Ionicons name="person-outline" size={16} color={Colors.PRIMARY} />
+            <Text style={styles.quickProfileText}>View & edit account details</Text>
+            <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.menuSection}>
@@ -239,40 +218,12 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <View style={styles.appInfo}>
-          <Text style={styles.appName}>{storeName || APP_BRAND} – Fresh Grocery Delivery</Text>
+          <Text style={styles.appName}>{storeName || APP_BRAND}</Text>
           <Text style={styles.versionText}>Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
           <Text style={styles.copyrightText}>© {new Date().getFullYear()} {APP_BRAND}</Text>
         </View>
 
       </ScrollView>
-
-      {/* ─── Edit Name Modal ─── */}
-      <Modal visible={showEditModal} transparent animationType="fade" onRequestClose={() => setShowEditModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Display Name</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="Enter your name"
-              autoFocus
-              maxLength={40}
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowEditModal(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveName} disabled={isSavingName}>
-                {isSavingName
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.modalSaveText}>Save</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
     </SafeAreaView>
   );
 }
@@ -345,6 +296,24 @@ const styles = StyleSheet.create({
     color: Colors.PRIMARY, 
     fontFamily: Fonts.semibold, 
     fontSize: 13 
+  },
+  quickProfileBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  quickProfileText: {
+    color: '#334155',
+    fontSize: 13,
+    fontFamily: Fonts.medium,
+    flex: 1,
   },
   menuSection: { 
     backgroundColor: '#ffffff',
@@ -459,63 +428,5 @@ const styles = StyleSheet.create({
   },
   editNameBtn: {
     padding: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#2c3e50',
-    marginBottom: 16,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#2c3e50',
-    marginBottom: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    fontSize: 15,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  modalSaveBtn: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    backgroundColor: Colors.PRIMARY,
-    alignItems: 'center',
-  },
-  modalSaveText: {
-    fontSize: 15,
-    color: '#fff',
-    fontWeight: '700',
   },
 });
