@@ -157,6 +157,7 @@ const verifyOtp = async (req, res) => {
     // refresh user
     user = await User.findById(user._id);
 
+    // Customer session ~6 months (180d); clients do not implement refresh tokens yet.
     const token = jwt.sign(
       {
         userId: user._id,
@@ -164,7 +165,7 @@ const verifyOtp = async (req, res) => {
         tenantId: user.tenantId,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "180d" }
     );
 
     return res.status(200).json({

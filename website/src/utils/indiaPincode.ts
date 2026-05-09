@@ -1,3 +1,5 @@
+import { parseAddressLatLng } from './coordinates';
+
 const PIN_REGEX = /^[1-9]\d{5}$/;
 
 export function sanitizeIndianPincode(input: string): string {
@@ -13,6 +15,34 @@ export type PinLookupResult =
   | { ok: false };
 
 /** Fetches district and state for a PIN; overwrites any manually typed city/state when applied. */
+/**
+ * Approximate hub for delivery eligibility when only PIN is known (gift / manual flows).
+ * Uses Nominatim — coarse accuracy vs a map pin; good enough for radius checks.
+ */
+export async function geocodeApproxFromIndianPincode(pin: string): Promise<{ lat: number; lng: number } | null> {
+  const pincode = sanitizeIndianPincode(pin);
+  if (!PIN_REGEX.test(pincode)) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&postalcode=${encodeURIComponent(pincode)}&limit=1`;
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'Accept-Language': 'en',
+        'User-Agent': 'KMF-E-Grocery-Storefront/1.0 (delivery eligibility)',
+      },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { lat?: string; lon?: string }[];
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const lat = Number(data[0].lat);
+    const lng = Number(data[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+}
+
 export async function lookupIndianPincode(pin: string): Promise<PinLookupResult> {
   const pincode = sanitizeIndianPincode(pin);
   if (!PIN_REGEX.test(pincode)) return { ok: false };
@@ -61,8 +91,8 @@ export function buildDeliveryAddressPayload(address: {
     city: String(address?.city || '').trim(),
     state: String(address?.state || '').trim(),
     pincode,
-    lat: typeof address?.lat === 'number' ? address.lat : 0,
-    lng: typeof address?.lng === 'number' ? address.lng : 0,
+    lat: parseAddressLatLng(address)?.lat ?? 0,
+    lng: parseAddressLatLng(address)?.lng ?? 0,
   };
 }
 

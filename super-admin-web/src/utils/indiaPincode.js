@@ -11,6 +11,36 @@ export function isValidIndianPincode(pin) {
 }
 
 /** @returns {Promise<{ ok: true, pincode: string, city: string, state: string } | { ok: false }>} */
+/**
+ * Approximate hub coords from PIN via OpenStreetMap Nominatim (no map `/process` call).
+ * @returns {Promise<{ lat: number, lng: number } | null>}
+ */
+export async function geocodeApproxFromIndianPincode(pin) {
+  const pincode = sanitizeIndianPincode(pin);
+  if (!PIN_REGEX.test(pincode)) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&postalcode=${encodeURIComponent(
+      pincode,
+    )}&limit=1`;
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'Accept-Language': 'en',
+        'User-Agent': 'KMF-E-Grocery-SuperAdmin/1.0 (store hub)',
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const lat = Number(data[0].lat);
+    const lng = Number(data[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+}
+
 export async function lookupIndianPincode(pin) {
   const pincode = sanitizeIndianPincode(pin);
   if (!PIN_REGEX.test(pincode)) return { ok: false };

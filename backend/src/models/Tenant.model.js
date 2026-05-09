@@ -58,6 +58,18 @@ const tenantSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    /** Structured store postal address (super-admin onboarding / edit). Mirrors formatted `storeAddress`. */
+    storeAddressParts: {
+      line1: { type: String, trim: true, default: "" },
+      line2: { type: String, trim: true, default: "" },
+      landmark: { type: String, trim: true, default: "" },
+      city: { type: String, trim: true, default: "" },
+      state: { type: String, trim: true, default: "" },
+      pincode: { type: String, trim: true, default: "" },
+    },
+    /** Hub / storefront coordinates for delivery radius checks (MapService origin→destination). */
+    storeLat: { type: Number },
+    storeLng: { type: Number },
     contactEmail: {
       type: String,
       trim: true,

@@ -104,6 +104,8 @@ export const placeOrderBackend = async (
       pincode: string;
       lat: number;
       lng: number;
+      /** Map URL from client eligibility `/process` response (stored as order address link). */
+      addressUrl?: string;
     };
     couponCode?: string | null;
   },

@@ -86,6 +86,9 @@ export const createTenant = async ({
   tenantId,
   logo,
   storeAddress,
+  storeLat,
+  storeLng,
+  storeAddressParts,
   contactEmail,
   plan,
   password,
@@ -101,6 +104,11 @@ export const createTenant = async ({
   if (tenantId && tenantId.trim())         body.tenantId     = tenantId.trim();
   if (logo)                                body.logo         = logo;
   if (storeAddress && storeAddress.trim()) body.storeAddress = storeAddress.trim();
+  if (typeof storeLat === 'number' && typeof storeLng === 'number') {
+    body.storeLat = storeLat;
+    body.storeLng = storeLng;
+  }
+  if (storeAddressParts && typeof storeAddressParts === 'object') body.storeAddressParts = storeAddressParts;
   if (contactEmail && contactEmail.trim()) body.contactEmail = contactEmail.trim();
   if (plan)                                body.plan         = plan;
   if (typeof tagline === 'string' && tagline.trim())       body.tagline = tagline.trim();
@@ -143,6 +151,9 @@ export const updateTenantDetails = async (id, payload) => {
     ownerName,
     phoneNumber,
     storeAddress,
+    storeLat,
+    storeLng,
+    storeAddressParts,
     contactEmail,
     logo,
     newPassword,
@@ -157,6 +168,11 @@ export const updateTenantDetails = async (id, payload) => {
   if (typeof heroTitle === 'string') body.heroTitle = heroTitle;
   if (typeof heroSubtitle === 'string') body.heroSubtitle = heroSubtitle;
   if (newPassword !== undefined) body.newPassword = newPassword;
+  if (typeof storeLat === 'number' && typeof storeLng === 'number') {
+    body.storeLat = storeLat;
+    body.storeLng = storeLng;
+  }
+  if (storeAddressParts && typeof storeAddressParts === 'object') body.storeAddressParts = storeAddressParts;
 
   const res = await fetch(apiUrl(`/api/super/tenant/${id}/details`), {
     method: 'PATCH',

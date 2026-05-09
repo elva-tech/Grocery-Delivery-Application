@@ -10,8 +10,9 @@ import { buildDeliveryAddressPayload, formatAddressSummary } from '../utils/indi
 import { loadRazorpay } from '../utils/loadRazorpay';
 import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
 import { useToast } from '../context/ToastContext';
+import { WEB_COPY, customerFacingDeliveryUnavailable } from '../constants/copy';
 
-const Checkout = ({ address }: any) => {
+const Checkout = ({ address, deliveryEligibility }: any) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { showToast } = useToast();
@@ -77,14 +78,39 @@ const handleRemoveCoupon = () => {
 const couponDiscount = appliedCoupon?.discountAmount ?? 0;
 const finalTotal = bill.grandTotal - couponDiscount;
 
+const deliveryBlocksPay =
+  Boolean(deliveryEligibility?.checking) ||
+  deliveryEligibility?.eligible === false ||
+  (deliveryEligibility?.eligible === null && Boolean(deliveryEligibility?.message?.trim()));
+
 const handlePlaceOrder = async () => {
   if (items.length === 0) return;
+  if (deliveryEligibility?.checking) {
+    showToast('error', 'Checking delivery availability. Please wait.');
+    return;
+  }
+  if (deliveryEligibility?.eligible === false) {
+    showToast('error', WEB_COPY.delivery.checkoutBlockedToast);
+    return;
+  }
+  if (deliveryEligibility?.eligible === null && deliveryEligibility?.message?.trim()) {
+    showToast('error', WEB_COPY.delivery.verifyAddressToast);
+    return;
+  }
   setIsProcessing(true);
 
+  const details = deliveryEligibility?.details as { mapLink?: string; map_link?: string } | null | undefined;
+  const mapLinkFromEligibility =
+    (typeof details?.mapLink === 'string' && details.mapLink.trim()) ||
+    (typeof details?.map_link === 'string' && details.map_link.trim()) ||
+    '';
   const orderPayload = {
     items: items.map(item => ({ productId: item.id, qty: item.quantity })),
     paymentMode: paymentMethod,
-    deliveryAddress: buildDeliveryAddressPayload(address || {}),
+    deliveryAddress: {
+      ...buildDeliveryAddressPayload(address || {}),
+      addressUrl: mapLinkFromEligibility,
+    },
     couponCode: appliedCoupon?.code ?? null,
   };
 
@@ -338,7 +364,11 @@ const handlePlaceOrder = async () => {
 
               <button 
                 onClick={handlePlaceOrder} 
-                disabled={isProcessing || items.length === 0} 
+                disabled={
+                  isProcessing ||
+                  items.length === 0 ||
+                  deliveryBlocksPay
+                } 
                 className={`w-full text-white h-16 rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:cursor-not-allowed ${
                   paymentMethod === 'COD'
                     ? 'bg-emerald-600 hover:bg-emerald-700'
@@ -347,10 +377,26 @@ const handlePlaceOrder = async () => {
               >
                 {isProcessing
                   ? <Loader2 className="animate-spin" size={20} />
+                  : deliveryEligibility?.checking
+                  ? 'Checking location...'
+                  : deliveryEligibility?.eligible === false
+                  ? 'Delivery Not Available'
+                  : deliveryEligibility?.eligible === null && deliveryEligibility?.message?.trim()
+                  ? 'Verify delivery address'
                   : paymentMethod === 'COD'
                   ? 'Place Order (COD)'
                   : 'Confirm & Pay'}
               </button>
+              {!deliveryEligibility?.checking && deliveryEligibility?.eligible === false && (
+                <p className="mt-3 text-xs font-bold text-red-600 text-center">
+                  {customerFacingDeliveryUnavailable(deliveryEligibility?.message)}
+                </p>
+              )}
+              {!deliveryEligibility?.checking && deliveryEligibility?.eligible === null && deliveryEligibility?.message?.trim() && (
+                <p className="mt-3 text-xs font-bold text-amber-700 text-center leading-snug px-1">
+                  {deliveryEligibility.message}
+                </p>
+              )}
               
               <div className="mt-6 flex items-center justify-center gap-2 text-[#94a3b8]">
                 {paymentMethod === 'COD'

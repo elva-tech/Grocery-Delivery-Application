@@ -115,6 +115,8 @@ const orderSchema = new mongoose.Schema(
       pincode: { type: String, default: "" },
       lat: Number,
       lng: Number,
+      /** Map/open-in-maps URL from POST /api/map/process (`mapLink`), for admin / riders. */
+      addressUrl: { type: String, default: "" },
     },
     billingAddress: {
       line1: String,

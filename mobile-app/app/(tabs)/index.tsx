@@ -35,8 +35,17 @@ import { RootState } from '@/store/store';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 import { fetchBanners, type BannerRecord } from '@/api/bannerApi';
-import { getAddresses } from '@/api/addresses';
-import { MOBILE_COPY } from '@/src/constants/copy';
+import {
+  getAddresses,
+  pickPreferredSavedAddress,
+  getAddressFromCoordsDetailed,
+  PREFERRED_DELIVERY_ADDRESS_CHANGED,
+} from '@/api/addresses';
+import { checkDeliveryEligibility } from '@/api/deliveryEligibilityApi';
+import { parseAddressLatLng } from '@/utils/coordinates';
+import { formatDeliverToDisplay } from '@/utils/indiaPincode';
+import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
+import * as Location from 'expo-location';
 
 // Constants for UI consistency
 const { width } = Dimensions.get('window');
@@ -162,6 +171,85 @@ export default function HomeScreen() {
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [deliverToText, setDeliverToText] = useState(MOBILE_COPY.home.deliverToFallback);
+  const [deliveryEligibility, setDeliveryEligibility] = useState<{
+    checking: boolean;
+    eligible: boolean | null;
+    message: string;
+  }>({
+    checking: false,
+    eligible: null,
+    message: '',
+  });
+
+  const refreshDeliverToRow = useCallback(async () => {
+    try {
+      const list = await getAddresses();
+      const addr = await pickPreferredSavedAddress(list);
+      setDeliverToText(formatDeliverToDisplay(addr, MOBILE_COPY.home.deliverToFallback));
+    } catch {
+      setDeliverToText(MOBILE_COPY.home.deliverToFallback);
+    }
+  }, []);
+
+  const refreshDeliveryEligibility = useCallback(async () => {
+    setDeliveryEligibility(prev => ({ ...prev, checking: true, message: '' }));
+    try {
+      const list = await getAddresses();
+      const addr = await pickPreferredSavedAddress(list);
+      const coordsFromAddr = addr ? parseAddressLatLng(addr as { lat?: unknown; lng?: unknown }) : null;
+
+      let lat: number | null = coordsFromAddr?.lat ?? null;
+      let lng: number | null = coordsFromAddr?.lng ?? null;
+
+      if (lat == null || lng == null) {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setDeliveryEligibility({
+            checking: false,
+            eligible: null,
+            message: MOBILE_COPY.home.deliveryNeedLocationPermission,
+          });
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        lat = loc.coords.latitude;
+        lng = loc.coords.longitude;
+
+        if (!addr) {
+          try {
+            const rev = await getAddressFromCoordsDetailed(lat, lng);
+            const line = rev.line1?.trim();
+            setDeliverToText(
+              line ? `${MOBILE_COPY.home.nearPrefix}${line}` : MOBILE_COPY.home.currentLocationDeliverTo,
+            );
+          } catch {
+            setDeliverToText(MOBILE_COPY.home.currentLocationDeliverTo);
+          }
+        }
+      }
+
+      const result = await checkDeliveryEligibility(lat, lng);
+      const eligible =
+        typeof result.isEligible === 'boolean'
+          ? result.isEligible
+          : typeof result.eligible === 'boolean'
+            ? result.eligible
+            : false;
+
+      setDeliveryEligibility({
+        checking: false,
+        eligible,
+        message: typeof result.message === 'string' ? result.message : '',
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : MOBILE_COPY.home.deliveryCheckFailed;
+      setDeliveryEligibility({
+        checking: false,
+        eligible: null,
+        message: msg,
+      });
+    }
+  }, []);
 
   const loadBanners = useCallback(async () => {
     setBannerLoading(true);
@@ -186,30 +274,24 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadBanners]);
 
-  const loadDeliverToAddress = useCallback(async () => {
-    try {
-      const list = await getAddresses();
-      if (Array.isArray(list) && list.length > 0) {
-        const preferred = list.find((a: any) => a?.isDefault) || list[0];
-        const readable = String(
-          preferred?.full ||
-          preferred?.line1 ||
-          [preferred?.label, preferred?.city, preferred?.pincode].filter(Boolean).join(', ')
-        ).trim();
-        setDeliverToText(readable || MOBILE_COPY.home.deliverToFallback);
-      } else {
-        setDeliverToText(MOBILE_COPY.home.deliverToFallback);
-      }
-    } catch {
-      setDeliverToText(MOBILE_COPY.home.deliverToFallback);
-    }
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
-      loadDeliverToAddress();
-    }, [loadDeliverToAddress])
+      void (async () => {
+        await refreshDeliverToRow();
+        await refreshDeliveryEligibility();
+      })();
+    }, [refreshDeliverToRow, refreshDeliveryEligibility]),
   );
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(PREFERRED_DELIVERY_ADDRESS_CHANGED, () => {
+      void (async () => {
+        await refreshDeliverToRow();
+        await refreshDeliveryEligibility();
+      })();
+    });
+    return () => sub.remove();
+  }, [refreshDeliverToRow, refreshDeliveryEligibility]);
 
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
@@ -281,6 +363,31 @@ export default function HomeScreen() {
         </View>
         <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
       </TouchableOpacity>
+
+      {deliveryEligibility.checking ? (
+        <View style={[styles.deliveryBanner, styles.deliveryBannerChecking]}>
+          <ActivityIndicator size="small" color={BRAND_BLUE} />
+          <Text style={styles.deliveryBannerText}>{MOBILE_COPY.home.deliveryCheckingLabel}</Text>
+        </View>
+      ) : deliveryEligibility.eligible === false ? (
+        <View style={[styles.deliveryBanner, styles.deliveryBannerBad]}>
+          <Ionicons name="alert-circle" size={18} color="#dc2626" />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.deliveryBannerTitle}>{MOBILE_COPY.home.deliveryUnavailableTitle}</Text>
+            <Text style={styles.deliveryBannerSub}>
+              {customerFacingDeliveryUnavailable(deliveryEligibility.message)}
+            </Text>
+          </View>
+        </View>
+      ) : deliveryEligibility.eligible === true ? null : deliveryEligibility.message ? (
+        <View style={[styles.deliveryBanner, styles.deliveryBannerWarn]}>
+          <Ionicons name="information-circle-outline" size={18} color="#b45309" />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.deliveryBannerTitleWarn}>{MOBILE_COPY.home.deliveryCheckUnavailableTitle}</Text>
+            <Text style={styles.deliveryBannerSubWarn}>{deliveryEligibility.message}</Text>
+          </View>
+        </View>
+      ) : null}
 
       {heroBadge ? (
         <View style={styles.heroBadgePill}>
@@ -474,6 +581,38 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   deliverMain: { fontSize: 14, fontWeight: '600', color: '#1e293b', lineHeight: 19 },
+  deliveryBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  deliveryBannerChecking: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+  },
+  deliveryBannerBad: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  deliveryBannerOk: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  deliveryBannerWarn: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  deliveryBannerText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#64748b' },
+  deliveryBannerTextOk: { flex: 1, fontSize: 12, fontWeight: '700', color: '#166534' },
+  deliveryBannerTitle: { fontSize: 11, fontWeight: '800', color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5 },
+  deliveryBannerSub: { fontSize: 13, fontWeight: '600', color: '#991b1b', marginTop: 4, lineHeight: 18 },
+  deliveryBannerTitleWarn: { fontSize: 11, fontWeight: '800', color: '#b45309', textTransform: 'uppercase', letterSpacing: 0.5 },
+  deliveryBannerSubWarn: { fontSize: 12, fontWeight: '600', color: '#92400e', marginTop: 4, lineHeight: 17 },
   deliverStoreHint: {
     fontSize: 11,
     fontWeight: '600',

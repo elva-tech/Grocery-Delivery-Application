@@ -31,4 +31,46 @@ export const WEB_COPY = {
     deliveryFeeSaved: 'Delivery fee saved',
     emptyCart: 'Your cart is empty',
   },
+  /** Customer-facing delivery eligibility (avoid showing raw MapService / admin jargon). */
+  delivery: {
+    bannerTitle: 'We can’t deliver to this area',
+    outsideDeliveryRadius:
+      'This location looks outside our delivery area. Try picking an address a little closer to the store.',
+    notEligibleGeneric:
+      "We're unable to deliver to this address right now. Please choose another nearby location.",
+    checkoutBlockedToast:
+      'This address is outside our delivery area. Pick a closer location or update your saved address.',
+    verifyAddressToast:
+      'Fix your delivery address or PIN before paying — we could not confirm delivery to this location.',
+  },
 } as const;
+
+/** Turns technical API messages (e.g. "Not eligible: exceeds configured maximum distance") into storefront-friendly copy. */
+export function customerFacingDeliveryUnavailable(apiMessage?: string | null): string {
+  const m = (apiMessage ?? '').trim().toLowerCase();
+  if (!m) return WEB_COPY.delivery.notEligibleGeneric;
+
+  const mentionsDistance =
+    m.includes('exceed') ||
+    m.includes('maximum distance') ||
+    m.includes('max distance') ||
+    m.includes('maxdistance') ||
+    m.includes('too far') ||
+    (m.includes('outside') && m.includes('distance'));
+
+  if (mentionsDistance || (m.includes('not eligible') && m.includes('distance'))) {
+    return WEB_COPY.delivery.outsideDeliveryRadius;
+  }
+
+  if (m.includes('not eligible')) {
+    return WEB_COPY.delivery.notEligibleGeneric;
+  }
+
+  const looksTechnical =
+    /configured|threshold|maxdistance|eligibility\s+check|api\b|endpoint|payload/i.test(apiMessage ?? '');
+  if (looksTechnical) {
+    return WEB_COPY.delivery.notEligibleGeneric;
+  }
+
+  return (apiMessage ?? '').trim();
+}

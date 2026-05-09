@@ -16,6 +16,54 @@ export const getAddressFromCoords = async (lat: number, lng: number): Promise<st
   }
 };
 
+export type ReverseGeocodeDetails = {
+  line1: string;
+  pincode: string;
+  city: string;
+  state: string;
+};
+
+export const getAddressDetailsFromCoords = async (lat: number, lng: number): Promise<ReverseGeocodeDetails> => {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}`
+    );
+    const data = await response.json();
+    const address = data?.address || {};
+    const city =
+      address.city ||
+      address.town ||
+      address.village ||
+      address.county ||
+      '';
+    const state = address.state || '';
+    const pincode = String(address.postcode || '').replace(/\D/g, '').slice(0, 6);
+    const road = [address.house_number, address.road, address.neighbourhood, address.suburb]
+      .filter(Boolean)
+      .map((s: string) => String(s).trim())
+      .filter(Boolean)
+      .join(', ');
+    const line1 =
+      road ||
+      [address.amenity, address.shop].filter(Boolean).join(', ').trim() ||
+      (typeof data?.display_name === 'string' ? data.display_name.trim() : '') ||
+      'Unknown Location';
+    return {
+      line1,
+      pincode,
+      city: String(city).trim(),
+      state: String(state).trim(),
+    };
+  } catch {
+    return {
+      line1: 'Unknown Location',
+      pincode: '',
+      city: '',
+      state: '',
+    };
+  }
+};
+
 export const getAddresses = async () => {
   const token = localStorage.getItem("token");
   if (!token) return [];
@@ -81,6 +129,17 @@ export const updateAddress = async (id: string, address: any) => {
     ...(res.data?.address || {}),
     id: res.data?.address?._id || res.data?.address?.id,
   };
+};
+
+export const deleteAddress = async (id: string) => {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Unauthorized");
+  await axios.delete(`${ADDRESSES_URL}/${id}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "x-tenant-id": getTenantId(),
+    },
+  });
 };
 
 export const requestOtp = async (phone: string) => {

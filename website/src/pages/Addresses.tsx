@@ -9,6 +9,7 @@ import AddressModal from '../components/layout/AddressModal';
 import { useToast } from '../context/ToastContext';
 import {
   formatAddressSummary,
+  geocodeApproxFromIndianPincode,
   isValidIndianPincode,
   lookupIndianPincode,
   sanitizeIndianPincode,
@@ -91,23 +92,25 @@ const Addresses = ({ items, onSelect }: any) => {
       if (!selected) return;
       onSelect(selected);
     } else {
-      onSelect(savedOthersAddress || {
-        id: 'others',
-        label: `For ${othersForm.recipientName}`,
-        isMyAddress: false,
-        recipientName: othersForm.recipientName,
-        recipientPhone: othersForm.recipientPhone,
-        line1: othersForm.line1,
-        line2: othersForm.line2,
-        landmark: othersForm.landmark,
-        city: othersForm.city,
-        state: othersForm.state,
-        pincode: othersForm.pincode,
-        full: formatAddressSummary(othersForm),
-        phone: othersForm.recipientPhone,
-        lat: 0,
-        lng: 0,
-      });
+      onSelect(
+        savedOthersAddress || {
+          id: 'others',
+          label: `For ${othersForm.recipientName}`,
+          isMyAddress: false,
+          recipientName: othersForm.recipientName,
+          recipientPhone: othersForm.recipientPhone,
+          line1: othersForm.line1,
+          line2: othersForm.line2,
+          landmark: othersForm.landmark,
+          city: othersForm.city,
+          state: othersForm.state,
+          pincode: othersForm.pincode,
+          full: formatAddressSummary(othersForm),
+          phone: othersForm.recipientPhone,
+          lat: 0,
+          lng: 0,
+        },
+      );
     }
     navigate('/checkout');
   };
@@ -366,6 +369,7 @@ const Addresses = ({ items, onSelect }: any) => {
                     return;
                   }
                   setOthersForm(prev => ({ ...prev, pincode: r.pincode, city: r.city, state: r.state }));
+                  const geo = await geocodeApproxFromIndianPincode(r.pincode);
                   const persisted = await addAddress({
                     label: `For ${othersForm.recipientName}`,
                     isMyAddress: false,
@@ -386,8 +390,8 @@ const Addresses = ({ items, onSelect }: any) => {
                       state: r.state,
                       pincode: r.pincode,
                     }),
-                    lat: 0,
-                    lng: 0,
+                    lat: geo?.lat ?? 0,
+                    lng: geo?.lng ?? 0,
                   });
                   setSavedOthersAddress(persisted);
                   setOthersConfirmed(true);

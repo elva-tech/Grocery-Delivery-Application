@@ -8,6 +8,7 @@ export interface AppSettings {
   freeDeliveryAbove: number;
   discountType: "NONE" | "PERCENTAGE" | "FLAT";
   discountValue: number;
+  thresholdDistance: number;
 }
 
 let _cache: AppSettings | null = null;

@@ -1,0 +1,174 @@
+.location-picker {
+  max-width: 760px;
+  margin: 24px auto;
+  padding: 16px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.location-picker__header h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.location-picker__header p {
+  margin: 0 0 12px;
+  color: #52525b;
+  font-size: 14px;
+}
+
+.location-picker__search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.location-picker__search-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3f3f46;
+  margin-bottom: 6px;
+}
+
+.location-picker__search-field {
+  position: relative;
+}
+
+.location-picker__search-field input[type='search'] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #d4d4d8;
+  font-size: 15px;
+  background: #fafafa;
+}
+
+.location-picker__search-field input[type='search']:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.location-picker__search-field input[type='search']:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.location-picker__suggestions {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+.location-picker__suggestion-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #18181b;
+  cursor: pointer;
+}
+
+.location-picker__suggestion-btn:hover,
+.location-picker__suggestion-btn:focus-visible {
+  background: #f4f4f5;
+  outline: none;
+}
+
+.location-picker__suggestion-muted {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #71717a;
+}
+
+.location-picker__map {
+  width: 100%;
+  height: 420px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #d4d4d8;
+}
+
+.location-picker__actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.location-picker__actions button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.location-picker__actions button.primary {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.location-picker__actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.location-picker__coords {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: #18181b;
+}
+
+.location-picker__info {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #78350f;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.location-picker__error {
+  margin: 12px 0 0;
+  color: #b91c1c;
+  font-size: 14px;
+}
+
+.location-picker__result {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #bbf7d0;
+  background-color: #f0fdf4;
+}
+
+.location-picker__result h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.location-picker__result p {
+  margin: 4px 0;
+  font-size: 14px;
+}

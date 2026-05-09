@@ -33,7 +33,7 @@ const DataTable = ({ columns, data, actions }) => {
                   return (
                     <td 
                       key={`${rowKey}-cell-${colIndex}`} 
-                      className="px-6 py-4 text-sm text-gray-700"
+                      className="px-6 py-4 text-sm text-gray-700 align-top"
                     >
                       {col.render 
                         ? col.render(cellValue, row) 
@@ -43,7 +43,7 @@ const DataTable = ({ columns, data, actions }) => {
                 })}
                 
                 {actions && (
-                  <td key={`${rowKey}-actions`} className="px-6 py-4 text-sm">
+                  <td key={`${rowKey}-actions`} className="px-6 py-4 text-sm align-top">
                     {actions(row)}
                   </td>
                 )}

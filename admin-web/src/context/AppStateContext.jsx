@@ -77,6 +77,29 @@ const buildCategories = items => {
 
 const AppStateContext = createContext();
 
+function normalizeAdminOrderRow(o) {
+  const da = o.deliveryAddress;
+  return {
+    ...o,
+    id: o._id,
+    status: o.orderStatus,
+    total: o.totalAmount,
+    date: o.createdAt,
+    assignment: o.riderId?.name || o.riderName || 'Pending',
+    customer: o.customerName || o.userId?.name || 'Guest User',
+    customerName: o.customerName || o.userId?.name || 'Guest User',
+    address: {
+      full: formatDeliveryAddressSummary(da),
+      addressUrl: typeof da?.addressUrl === 'string' ? da.addressUrl.trim() : '',
+    },
+    paymentMode: o.paymentMode || 'ONLINE',
+    paymentStatus: o.paymentStatus || 'PENDING',
+    itemsText: (o.items || [])
+      .map(i => `${i.name} x${i.qty}`)
+      .join(', '),
+  };
+}
+
 export const AppStateProvider = ({ children }) => {
   const { showToast } = useToast();
 
@@ -213,24 +236,7 @@ export const AppStateProvider = ({ children }) => {
 
       const data = await apiService.getOrders();
 
-      const normalized = (data.orders || []).map(o => ({
-        ...o,
-        id: o._id,
-        status: o.orderStatus,
-        total: o.totalAmount,
-        date: o.createdAt,
-        assignment: o.riderId?.name || o.riderName || "Pending",
-        customer: o.customerName || o.userId?.name || "Guest User",
-        customerName: o.customerName || o.userId?.name || "Guest User",
-        address: {
-          full: formatDeliveryAddressSummary(o.deliveryAddress),
-        },
-        paymentMode: o.paymentMode || "ONLINE",
-        paymentStatus: o.paymentStatus || "PENDING",
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
-      }));
+      const normalized = (data.orders || []).map(normalizeAdminOrderRow);
 
       setOrders(normalized);
 
@@ -351,24 +357,7 @@ export const AppStateProvider = ({ children }) => {
       // Fetch updated orders
       const data = await apiService.getOrders();
 
-      const normalized = (data.orders || []).map(o => ({
-        ...o,
-        id: o._id,
-        status: o.orderStatus,
-        total: o.totalAmount,
-        date: o.createdAt,
-        assignment: o.riderId?.name || o.riderName || "Pending",
-        customer: o.customerName || o.userId?.name || "Guest User",
-        customerName: o.customerName || o.userId?.name || "Guest User",
-        address: {
-          full: formatDeliveryAddressSummary(o.deliveryAddress),
-        },
-        paymentMode: o.paymentMode || "ONLINE",
-        paymentStatus: o.paymentStatus || "PENDING",
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
-      }));
+      const normalized = (data.orders || []).map(normalizeAdminOrderRow);
 
       setOrders(normalized);
     } catch (error) {
@@ -387,24 +376,7 @@ export const AppStateProvider = ({ children }) => {
 
       const data = await apiService.getOrders();
 
-      const normalized = (data.orders || []).map(o => ({
-        ...o,
-        id: o._id,
-        status: o.orderStatus,
-        total: o.totalAmount,
-        date: o.createdAt,
-        assignment: o.riderName || "Pending",
-        customer: o.customerName || o.userId?.name || "Guest User",
-        customerName: o.customerName || o.userId?.name || "Guest User",
-        address: {
-          full: formatDeliveryAddressSummary(o.deliveryAddress),
-        },
-        paymentMode: o.paymentMode || "ONLINE",
-        paymentStatus: o.paymentStatus || "PENDING",
-        itemsText: (o.items || [])
-          .map(i => `${i.name} x${i.qty}`)
-          .join(", ")
-      }));
+      const normalized = (data.orders || []).map(normalizeAdminOrderRow);
 
       setOrders(normalized);
 

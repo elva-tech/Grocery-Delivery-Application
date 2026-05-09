@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
@@ -31,8 +31,62 @@ import Footer from './components/layout/Footer';
 import Orders from './pages/Orders';
 import LegalPage from './pages/LegalPage';
 import ContactUs from './pages/ContactUs';
+import { WEB_COPY, customerFacingDeliveryUnavailable } from './constants/copy';
+import { requestPrecisePosition } from './utils/geolocation';
+import {
+  checkDeliveryEligibility,
+  WEBSITE_DELIVERY_COORDS_CHANGED,
+  type DeliveryEligibilityResponse,
+} from './api/deliveryEligibilityApi';
+import { geocodeApproxFromIndianPincode, isValidIndianPincode, sanitizeIndianPincode } from './utils/indiaPincode';
+import { parseAddressLatLng } from './utils/coordinates';
 
 const TENANT_SCOPE_KEY = 'website_cart_tenant_scope';
+
+function DeliveryEligibilityAlerts(props: {
+  deliveryEligibility: {
+    checking: boolean;
+    eligible: boolean | null;
+    message: string;
+  };
+}) {
+  const { checking, eligible, message } = props.deliveryEligibility;
+
+  if (checking) {
+    return (
+      <div className="mb-5 p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center gap-3">
+        <Loader2 className="w-5 h-5 text-[#4b6f9e] animate-spin shrink-0" />
+        <p className="text-xs font-bold text-slate-600">Checking delivery availability for your location…</p>
+      </div>
+    );
+  }
+
+  if (eligible === false) {
+    return (
+      <div className="mb-5 p-4 rounded-2xl border border-red-200 bg-red-50">
+        <p className="text-xs font-black uppercase tracking-widest text-red-600">{WEB_COPY.delivery.bannerTitle}</p>
+        <p className="text-sm font-semibold text-red-700 mt-1">{customerFacingDeliveryUnavailable(message)}</p>
+      </div>
+    );
+  }
+
+  if (eligible === null && message) {
+    return (
+      <div className="mb-5 p-4 rounded-2xl border border-amber-200 bg-amber-50">
+        <p className="text-xs font-black uppercase tracking-widest text-amber-800">Delivery check unavailable</p>
+        <p className="text-sm font-semibold text-amber-900 mt-1">{message}</p>
+        <p className="text-[10px] font-bold text-amber-700/80 mt-2">
+          Tip: In dev, Map Service uses same-origin{' '}
+          <span className="font-mono">/map-service-remote</span> (Vite → Render), then{' '}
+          <span className="font-mono">/map-service</span> → localhost:3000. Production needs{' '}
+          <span className="font-mono">VITE_MAP_SERVICE_BASE_URL</span> to a backend proxy if Render still has no CORS.
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 const App = () => {
   const dispatch = useDispatch();
@@ -54,6 +108,17 @@ const App = () => {
   const [showFreeToast, setShowFreeToast] = useState(false);
   const [wasFree, setWasFree] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [deliveryEligibility, setDeliveryEligibility] = useState<{
+    checking: boolean;
+    eligible: boolean | null;
+    message: string;
+    details: DeliveryEligibilityResponse | null;
+  }>({
+    checking: false,
+    eligible: null,
+    message: '',
+    details: null,
+  });
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
@@ -182,6 +247,168 @@ const App = () => {
     }
   };
 
+  const applyDeliveryAddress = useCallback((addr: Record<string, unknown>) => {
+    setSelectedAddress(addr);
+    try {
+      const raw = localStorage.getItem('user_addresses');
+      const parsed = JSON.parse(raw || '[]');
+      const list = Array.isArray(parsed) ? parsed : [];
+      const id = addr.id != null ? String(addr.id) : '';
+      const rest = id ? list.filter((a: any) => a && String(a?.id) !== id) : [...list];
+      rest.unshift(addr);
+      localStorage.setItem('user_addresses', JSON.stringify(rest.slice(0, 30)));
+    } catch {
+      try {
+        localStorage.setItem('user_addresses', JSON.stringify([addr]));
+      } catch {
+        /* private mode */
+      }
+    }
+    const pin = parseAddressLatLng(addr as { lat?: unknown; lng?: unknown });
+    if (pin) {
+      window.dispatchEvent(
+        new CustomEvent(WEBSITE_DELIVERY_COORDS_CHANGED, {
+          detail: { lat: pin.lat, lng: pin.lng },
+        }),
+      );
+    }
+  }, []);
+
+  const runDeliveryCheck = useCallback(async (lat: number, lng: number) => {
+    setDeliveryEligibility((prev) => ({ ...prev, checking: true, message: '', details: null }));
+    try {
+      const result = await checkDeliveryEligibility(lat, lng);
+      const eligible =
+        typeof result.isEligible === 'boolean'
+          ? result.isEligible
+          : typeof (result as { eligible?: boolean }).eligible === 'boolean'
+            ? (result as { eligible: boolean }).eligible
+            : false;
+      setDeliveryEligibility({
+        checking: false,
+        eligible,
+        message: result.message || '',
+        details: result,
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unable to verify delivery availability';
+      setDeliveryEligibility({
+        checking: false,
+        eligible: null,
+        message: msg,
+        details: null,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const runCheck = (lat: number, lng: number) => {
+      if (cancelled) return;
+      void runDeliveryCheck(lat, lng);
+    };
+
+    const addrPin = parseAddressLatLng(
+      selectedAddress as { lat?: unknown; lng?: unknown } | null | undefined,
+    );
+
+    if (addrPin) {
+      void runCheck(addrPin.lat, addrPin.lng);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const pinRaw =
+      selectedAddress && typeof selectedAddress === 'object'
+        ? sanitizeIndianPincode(String((selectedAddress as { pincode?: string }).pincode || ''))
+        : '';
+
+    if (selectedAddress && isValidIndianPincode(pinRaw)) {
+      setDeliveryEligibility((prev) => ({ ...prev, checking: true, message: '', details: null }));
+      void (async () => {
+        try {
+          const coords = await geocodeApproxFromIndianPincode(pinRaw);
+          if (cancelled) return;
+          if (!coords) {
+            setDeliveryEligibility({
+              checking: false,
+              eligible: null,
+              message:
+                'Could not locate this PIN for delivery check. Try another PIN or use an address saved with a map pin.',
+              details: null,
+            });
+            return;
+          }
+          void runCheck(coords.lat, coords.lng);
+        } catch {
+          if (cancelled) return;
+          setDeliveryEligibility({
+            checking: false,
+            eligible: null,
+            message: 'Could not verify delivery for this PIN.',
+            details: null,
+          });
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!navigator.geolocation) {
+      setDeliveryEligibility({
+        checking: false,
+        eligible: null,
+        message: 'Enable location access to check delivery availability',
+        details: null,
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setDeliveryEligibility((prev) => ({ ...prev, checking: true, message: '' }));
+    void (async () => {
+      try {
+        const { lat, lng } = await requestPrecisePosition({ highAccuracyTimeoutMs: 20000 });
+        if (cancelled) return;
+        void runCheck(lat, lng);
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const geo = err as GeolocationPositionError | undefined;
+        const msg =
+          geo && geo.code === 1
+            ? 'Location permission denied — allow access to check delivery for your area.'
+            : 'Could not detect your location — allow access or choose a saved address.';
+        setDeliveryEligibility({
+          checking: false,
+          eligible: null,
+          message: msg,
+          details: null,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAddress, runDeliveryCheck]);
+
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const e = ev as CustomEvent<{ lat?: number; lng?: number }>;
+      const lat = e.detail?.lat;
+      const lng = e.detail?.lng;
+      if (typeof lat !== 'number' || typeof lng !== 'number') return;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      void runDeliveryCheck(lat, lng);
+    };
+    window.addEventListener(WEBSITE_DELIVERY_COORDS_CHANGED, handler);
+    return () => window.removeEventListener(WEBSITE_DELIVERY_COORDS_CHANGED, handler);
+  }, [runDeliveryCheck]);
+
   useEffect(() => {
     if (location.pathname === '/checkout' && !selectedAddress) {
       navigate('/addresses', { replace: true });
@@ -263,6 +490,8 @@ const App = () => {
         }}
         onCartClick={() => setIsCartOpen(true)}
         onLoginClick={() => setIsLoginOpen(true)}
+        selectedDeliveryAddress={selectedAddress}
+        onSelectDeliveryAddress={applyDeliveryAddress}
       />
 
       <div className="flex-grow flex max-w-7xl mx-auto w-full min-h-[calc(100vh-80px)]">
@@ -281,6 +510,7 @@ const App = () => {
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <PromoBanners />
                 <LeafBanner />
+                <DeliveryEligibilityAlerts deliveryEligibility={deliveryEligibility} />
                 <CategoryStrip
                   selectedId={selectedParentId}
                   selectedSubId={selectedSubId}
@@ -365,6 +595,7 @@ const App = () => {
 
             <Route path="/browse" element={
               <div className="animate-in fade-in duration-500">
+                <DeliveryEligibilityAlerts deliveryEligibility={deliveryEligibility} />
                 <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
                   <button onClick={handleBack} className="group flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-100 text-[#4b6f9e] font-black text-xs uppercase tracking-widest hover:bg-[#4b6f9e] hover:text-white transition-all shadow-sm">
                     <ChevronRight size={14} className="rotate-180 group-hover:-translate-x-1 transition-transform" /> Back
@@ -436,8 +667,14 @@ const App = () => {
             } />
 
             <Route path="/product/:productId" element={<ProductDetail />} />
-            <Route path="/addresses" element={<Addresses items={items} onSelect={(addr: any) => setSelectedAddress(addr)} />} />
-            <Route path="/checkout" element={<Checkout address={selectedAddress} />} />
+            <Route
+              path="/addresses"
+              element={<Addresses items={items} onSelect={(addr: any) => applyDeliveryAddress(addr)} />}
+            />
+            <Route
+              path="/checkout"
+              element={<Checkout address={selectedAddress} deliveryEligibility={deliveryEligibility} />}
+            />
             <Route path="/success" element={<OrderSuccess />} />
             <Route
               path="/orders"

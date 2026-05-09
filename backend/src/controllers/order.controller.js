@@ -104,6 +104,24 @@ function formatDeliveryAddressForCustomer(da) {
 
 const PAYMENT_MODES = ["COD", "ONLINE"];
 
+/** Map link from storefront `/api/map/process` — sanitized client string only (no extra paid calls on server). */
+function sanitizeMapLinkFromClient(v) {
+  const s = String(v ?? "").trim();
+  if (!s || s.length > 2048) return "";
+  if (!/^https?:\/\//i.test(s)) return "";
+  return s;
+}
+
+/** When the paid map API omits `mapLink`, still persist a usable pin link from the same delivery coords (free). */
+function googleMapsSearchUrlFromCoords(lat, lng) {
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(ln)) return "";
+  if (la === 0 && ln === 0) return "";
+  const q = encodeURIComponent(`${la},${ln}`);
+  return sanitizeMapLinkFromClient(`https://www.google.com/maps/search/?api=1&query=${q}`);
+}
+
 /**
  * PLACE ORDER
  */
@@ -152,6 +170,9 @@ exports.placeCustomerOrder = async (req, res) => {
       });
     }
 
+    const clientMapLink = sanitizeMapLinkFromClient(
+      deliveryAddress?.addressUrl ?? deliveryAddress?.mapLink,
+    );
     const normalizedDeliveryAddress = {
       isMyAddress:
         deliveryAddress?.isMyAddress !== undefined
@@ -167,6 +188,7 @@ exports.placeCustomerOrder = async (req, res) => {
       pincode: pinLookup.pincode,
       lat,
       lng,
+      addressUrl: clientMapLink || googleMapsSearchUrlFromCoords(lat, lng),
     };
 
     let orderItems = [];

@@ -17,6 +17,9 @@ export default function StoreProfilePage() {
   const [supportEmail, setSupportEmail] = useState('');
   const [supportPhone, setSupportPhone] = useState('');
   const [supportHours, setSupportHours] = useState('');
+  const [storeLat, setStoreLat] = useState('');
+  const [storeLng, setStoreLng] = useState('');
+  const [savingHub, setSavingHub] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +32,12 @@ export default function StoreProfilePage() {
         setSupportEmail((data.supportEmail || '').trim());
         setSupportPhone((data.supportPhone || '').trim());
         setSupportHours((data.supportHours || '').trim());
+        setStoreLat(
+          typeof data.storeLat === 'number' && Number.isFinite(data.storeLat) ? String(data.storeLat) : '',
+        );
+        setStoreLng(
+          typeof data.storeLng === 'number' && Number.isFinite(data.storeLng) ? String(data.storeLng) : '',
+        );
       })
       .catch((err) => {
         if (!cancelled) {
@@ -42,6 +51,34 @@ export default function StoreProfilePage() {
       cancelled = true;
     };
   }, []);
+
+  const handleSaveHub = async (e) => {
+    e.preventDefault();
+    const lat = parseFloat(storeLat, 10);
+    const lng = parseFloat(storeLng, 10);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      showToast('error', 'Latitude must be a number between -90 and 90');
+      return;
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      showToast('error', 'Longitude must be a number between -180 and 180');
+      return;
+    }
+    setSavingHub(true);
+    try {
+      await apiService.updateTenantStoreLocation({ storeLat: lat, storeLng: lng });
+      showToast('success', 'Delivery hub coordinates saved');
+      if (typeof refreshTenantProfile === 'function') {
+        await refreshTenantProfile();
+      }
+      const data = await apiService.getStoreProfile();
+      setProfile(data);
+    } catch (err) {
+      showToast('error', err?.response?.data?.message || 'Failed to save coordinates');
+    } finally {
+      setSavingHub(false);
+    }
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -137,6 +174,51 @@ export default function StoreProfilePage() {
           <ReadRow icon={MapPin} label="Store address" value={profile?.storeAddress} />
         </div>
       </div>
+
+      <form onSubmit={handleSaveHub} className="bg-white rounded-[28px] border border-slate-100 shadow-sm p-6 space-y-5">
+        <div className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-widest">
+          <MapPin size={18} className="text-[#0F2C1D]" />
+          Delivery hub (GPS)
+        </div>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Used with your MapService: customer location is the origin; these coordinates are sent as the store destination
+          in <code className="text-[10px] bg-slate-100 px-1 rounded">points[]</code>. Pin your storefront or warehouse.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="block space-y-1.5">
+            <span className="text-[10px] font-black uppercase text-slate-400">Latitude *</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={storeLat}
+              onChange={(e) => setStoreLat(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#0F2C1D]/20"
+              placeholder="e.g. 12.9716"
+              required
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-[10px] font-black uppercase text-slate-400">Longitude *</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={storeLng}
+              onChange={(e) => setStoreLng(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#0F2C1D]/20"
+              placeholder="e.g. 77.5946"
+              required
+            />
+          </label>
+        </div>
+        <button
+          type="submit"
+          disabled={savingHub}
+          className="w-full py-4 rounded-2xl bg-slate-900 text-white font-black text-sm uppercase tracking-widest hover:bg-[#0F2C1D] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {savingHub ? <Loader2 className="animate-spin" size={18} /> : null}
+          Save delivery hub coordinates
+        </button>
+      </form>
 
       <form onSubmit={handleSave} className="bg-white rounded-[28px] border border-emerald-100 shadow-sm p-6 space-y-5">
         <div className="flex items-center gap-2 text-emerald-800 font-black text-sm uppercase tracking-widest">
