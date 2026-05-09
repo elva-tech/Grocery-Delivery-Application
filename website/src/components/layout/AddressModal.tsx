@@ -119,12 +119,12 @@ const AddressModal: React.FC<AddressModalProps> = ({
       setSearchHadNoResults(false);
 
       searchPlaces(q, { signal: ctrl.signal })
-        .then(rows => {
+        .then((rows: PlaceSuggestion[]) => {
           if (ctrl.signal.aborted) return;
           setSearchSuggestions(rows);
           setSearchHadNoResults(rows.length === 0);
         })
-        .catch(err => {
+        .catch((err: unknown) => {
           if ((err as { name?: string })?.name === 'AbortError') return;
           if (!ctrl.signal.aborted) {
             setSearchSuggestions([]);

@@ -278,11 +278,12 @@ const App = () => {
     setDeliveryEligibility((prev) => ({ ...prev, checking: true, message: '', details: null }));
     try {
       const result = await checkDeliveryEligibility(lat, lng);
+      const raw = result as unknown as Record<string, unknown>;
       const eligible =
-        typeof result.isEligible === 'boolean'
-          ? result.isEligible
-          : typeof (result as { eligible?: boolean }).eligible === 'boolean'
-            ? (result as { eligible: boolean }).eligible
+        typeof raw.isEligible === 'boolean'
+          ? raw.isEligible
+          : typeof raw.eligible === 'boolean'
+            ? raw.eligible
             : false;
       setDeliveryEligibility({
         checking: false,

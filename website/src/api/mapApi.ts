@@ -1,17 +1,17 @@
 import { fetchFromMapService } from '../constants/mapService.js';
 
-/**
- * @typedef {{ id: string; name: string; lat: number; lng: number }} PlaceSuggestion
- */
+export type PlaceSuggestion = { id: string; name: string; lat: number; lng: number };
+
+type SearchOptions = { signal?: AbortSignal };
 
 /**
  * Autocomplete search via MapService (GET /api/map/search).
  * Returns [] when query trimmed length &lt; 3 (caller should debounce).
- * @param {string} query
- * @param {{ signal?: AbortSignal }} [options]
- * @returns {Promise<PlaceSuggestion[]>}
  */
-export async function searchPlaces(query, options = {}) {
+export async function searchPlaces(
+  query: string,
+  options: SearchOptions = {},
+): Promise<PlaceSuggestion[]> {
   const q = String(query ?? '').trim();
   if (q.length < 3) return [];
 
@@ -22,7 +22,7 @@ export async function searchPlaces(query, options = {}) {
   });
 
   if (res.status === 400) {
-    const err = await res.json().catch(() => ({}));
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(err.error || 'Bad request');
   }
 
@@ -30,11 +30,11 @@ export async function searchPlaces(query, options = {}) {
     throw new Error(`HTTP ${res.status}`);
   }
 
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  const data: unknown = await res.json();
+  return Array.isArray(data) ? (data as PlaceSuggestion[]) : [];
 }
 
-export async function processSelectedLocation(payload) {
+export async function processSelectedLocation(payload: unknown): Promise<unknown> {
   const response = await fetchFromMapService('/api/map/process', {
     method: 'POST',
     headers: {
@@ -46,7 +46,7 @@ export async function processSelectedLocation(payload) {
   if (!response.ok) {
     let errorMessage = 'Failed to process location';
     try {
-      const data = await response.json();
+      const data = (await response.json()) as { error?: string };
       if (data?.error) {
         errorMessage = data.error;
       }
