@@ -65,12 +65,11 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
       raw,
       storeName,
       logo: typeof raw?.logo === 'string' ? raw.logo.trim() : '',
-      tagline:
-        raw?.tagline?.trim() || 'Quality you can trust — delivered with care.',
+      tagline: raw?.tagline?.trim() || '',
       heroTitle: raw?.heroTitle?.trim() || `Welcome to ${storeName}`,
       heroSubtitle:
         raw?.heroSubtitle?.trim() ||
-        'Browse categories, add to cart, and checkout in minutes.',
+        'Browse categories, add items to your cart, and check out in minutes.',
       heroBadge: raw?.heroBadge?.trim() || 'Shop local',
     };
   }, [raw, loading, error]);

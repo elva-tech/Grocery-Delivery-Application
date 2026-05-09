@@ -4,6 +4,7 @@ import { X, User, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-r
 import { setCredentials } from '../../store/slices/authSlice';
 import { sendOtp, verifyOtp } from '../../api/authApi';
 import { getTenantId } from '../../utils/getTenantId';
+import { WEB_COPY } from '../../constants/copy';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -203,12 +204,12 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
           <div className="text-center mb-10">
             <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">
               {step === 'auth' 
-                ? (mode === 'signup' ? 'Create Account' : 'Welcome Back')
-                : 'Verification'}
+                    ? (mode === 'signup' ? 'Create Account' : 'Welcome Back')
+                    : 'OTP Verification'}
             </h2>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
               {step === 'auth'
-                ? (mode === 'signup' ? 'Join us to start shopping' : 'Login to your account')
+                ? (mode === 'signup' ? WEB_COPY.login.signupHint : WEB_COPY.login.signinHint)
                 : `Enter code sent to ${phone}`}
             </p>
           </div>
@@ -264,7 +265,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Mobile Number</label>
                   <input 
                     type="tel"
-                    placeholder="Enter 10 digit number"
+                    placeholder={WEB_COPY.login.mobilePlaceholder}
                     value={phone}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => {
                       const val = e.target.value.replace(/\D/g, '');
@@ -306,9 +307,9 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                 <Loader2 size={24} className="animate-spin" />
               ) : (
                 <>
-                  {step === 'auth' 
-                    ? (mode === 'signup' ? 'Create & Continue' : 'Send OTP')
-                    : 'Verify & Login'}
+                  {step === 'auth'
+                    ? WEB_COPY.login.sendOtp
+                    : (mode === 'signup' ? WEB_COPY.login.verifyContinue : WEB_COPY.login.verifySignIn)}
                   <ArrowRight size={20} />
                 </>
               )}
@@ -327,7 +328,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                 onClick={() => switchMode(mode === 'signup' ? 'login' : 'signup')}
                 className="text-[#4b6f9e] hover:text-[#1e293b] font-black text-sm uppercase tracking-widest transition-colors"
               >
-                {mode === 'signup' ? 'Login Here' : 'Sign Up Here'}
+                {mode === 'signup' ? WEB_COPY.login.signIn : WEB_COPY.login.signUp}
               </button>
             </div>
           )}
@@ -348,7 +349,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                   onClick={() => switchMode(mode === 'signup' ? 'login' : 'signup')}
                   className="text-[#4b6f9e] hover:text-[#1e293b] font-black text-xs uppercase tracking-widest transition-colors"
                 >
-                  {mode === 'signup' ? '← Back to Login' : '← Back to Sign Up'}
+                  {mode === 'signup' ? WEB_COPY.login.backToSignIn : WEB_COPY.login.backToSignUp}
                 </button>
               </div>
             </div>
@@ -357,7 +358,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
 
         <div className="bg-slate-50 p-6 text-center border-t border-slate-100 mt-4">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] leading-relaxed">
-            Secured by 256-bit encryption • Premium Quality Assured
+            {WEB_COPY.login.securityFooter}
           </p>
         </div>
       </div>

@@ -163,7 +163,7 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
           <div className="space-y-3">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Store Details</p>
             <InputField label="Store Name" field="storeName" placeholder="e.g. Fresh Mart" required value={form.storeName} onChange={set('storeName')} />
-            <InputField label="Website tagline" field="tagline" placeholder="Line under store name on customer site" value={form.tagline} onChange={set('tagline')} />
+            <InputField label="Home Page Tagline (optional)" field="tagline" placeholder="Short line shown on customer home page" value={form.tagline} onChange={set('tagline')} />
             <InputField label="Hero badge (optional)" field="heroBadge" placeholder="e.g. Shop local" value={form.heroBadge} onChange={set('heroBadge')} />
             <InputField label="Hero title (optional)" field="heroTitle" placeholder="Homepage headline" value={form.heroTitle} onChange={set('heroTitle')} />
             <InputField label="Hero subtitle (optional)" field="heroSubtitle" placeholder="Supporting line" value={form.heroSubtitle} onChange={set('heroSubtitle')} />

@@ -22,26 +22,56 @@ export interface VerifyOtpResponse {
   };
 }
 
+const REQUEST_TIMEOUT_MS = 12000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const fetchPromise = fetch(url, { ...init, signal: controller.signal });
+  const timeoutPromise = new Promise<Response>((_, reject) => {
+    setTimeout(() => {
+      controller.abort();
+      reject(new Error('Request timed out. Check backend/server connection.'));
+    }, REQUEST_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([fetchPromise, timeoutPromise]);
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timed out. Check backend/server connection.');
+    }
+    throw error;
+  }
+}
+
+async function parseJsonSafely<T>(response: Response): Promise<T> {
+  const raw = await response.text();
+  if (!raw || !raw.trim()) {
+    throw new Error('Empty server response');
+  }
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error('Invalid server response');
+  }
+}
+
 /**
  * Send OTP to phone number
  */
 export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => {
-  const response = await fetch(`${ACTIVE_API_URL}/api/auth/send-otp`, {
+  const response = await fetchWithTimeout(`${ACTIVE_API_URL}/api/auth/send-otp`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      Accept: 'application/json',
       'x-platform': 'mobile',
       'x-tenant-id': await getActiveTenantId(),
     },
     body: JSON.stringify({ phoneNumber }),
   });
 
-  let data: SendOtpResponse;
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error('Network error. Please check your connection.');
-  }
+  const data = await parseJsonSafely<SendOtpResponse>(response);
 
   if (!response.ok) {
     throw new Error((data as any)?.message || 'Failed to send OTP');
@@ -59,22 +89,18 @@ export const verifyOtp = async (
   name?: string,
   mode: 'signup' | 'login' = 'signup'
 ): Promise<VerifyOtpResponse> => {
-  const response = await fetch(`${ACTIVE_API_URL}/api/auth/verify-otp`, {
+  const response = await fetchWithTimeout(`${ACTIVE_API_URL}/api/auth/verify-otp`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      Accept: 'application/json',
       'x-platform': 'mobile',
       'x-tenant-id': await getActiveTenantId(),
     },
     body: JSON.stringify({ phoneNumber, otp, ...(name && { name }) }),
   });
 
-  let data: VerifyOtpResponse;
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error('Invalid server response');
-  }
+  const data = await parseJsonSafely<VerifyOtpResponse>(response);
 
   if (!response.ok) {
     throw new Error(data?.message || 'Failed to verify OTP');
@@ -109,6 +135,7 @@ export const updateProfile = async (
   }
   if (data.email != null) body.email = String(data.email).trim();
   if (data.alternatePhone != null) body.alternatePhone = String(data.alternatePhone).trim();
+  if (data.address != null) body.address = String(data.address).trim();
 
   const response = await fetch(`${ACTIVE_API_URL}/api/auth/profile`, {
     method: 'PATCH',

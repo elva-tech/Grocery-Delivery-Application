@@ -37,7 +37,7 @@ const CategoryStrip: React.FC<CategoryStripProps> = ({
           onClick={onSeeAll} 
           className="bg-blue-50 text-[#4b6f9e] px-4 py-1.5 rounded-full font-black text-[10px] uppercase tracking-wider hover:bg-[#4b6f9e] hover:text-white transition-all shadow-sm"
         >
-          See All →
+          View All →
         </button>
       </div>
 

@@ -6,9 +6,10 @@ import { setCredentials } from "@/store/slices/authSlice";
 import { Colors, Fonts } from "@/theme/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from "lottie-react-native";
-import { sendOtp, verifyOtp, updateProfile } from "@/api/authApi";
+import { sendOtp, verifyOtp } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
 import { getActiveTenantId } from "@/src/utils/tenantStorage";
+import { MOBILE_COPY } from "@/src/constants/copy";
 
 export default function OTP() {
   const router = useRouter();
@@ -17,9 +18,6 @@ export default function OTP() {
 
   const phone = params.phone as string;
   const name = (params.name as string) || "";
-  const email = (params.email as string) || "";
-  const address = (params.address as string) || "";
-  const alternatePhone = (params.alternatePhone as string) || "";
   const mode = (params.mode as "signup" | "login") || "login";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -69,10 +67,15 @@ export default function OTP() {
     setLoading(true);
 
     try {
+      const fallbackSignupName = MOBILE_COPY.common.guestUser;
+      const signupName = mode === "signup"
+        ? ((name as string)?.trim() || fallbackSignupName)
+        : undefined;
+
       const result = await verifyOtp(
         phone as string,
         otp.join(""),
-        mode === "signup" ? (name as string) : undefined,
+        signupName,
         mode as "signup" | "login"
       );
       const currentTenant = String(await getActiveTenantId()).trim().toLowerCase();
@@ -84,32 +87,13 @@ export default function OTP() {
 
       await AsyncStorage.setItem('token', result.token);
 
-      if (mode === "signup") {
-        try {
-          await updateProfile(
-            {
-              name: (name as string)?.trim() || result.user.name || '',
-              email,
-              alternatePhone,
-            },
-            result.token
-          );
-        } catch (profileErr: any) {
-          showToast(
-            'error',
-            'Profile',
-            profileErr?.message || 'Could not save email on the server. You can update your profile later.',
-          );
-        }
-      }
-
       await AsyncStorage.setItem('user', JSON.stringify({
         id: result.user.id,
         phone: result.user.phoneNumber,
         name: result.user.name,
-        email: email || result.user.email,
-        address: address || result.user.address,
-        alternatePhone: alternatePhone || result.user.alternatePhone,
+        email: result.user.email,
+        address: result.user.address,
+        alternatePhone: result.user.alternatePhone,
         tenantId: result.user.tenantId || currentTenant,
       }));
 
@@ -118,15 +102,19 @@ export default function OTP() {
           id: result.user.id,
           phone: result.user.phoneNumber,
           name: result.user.name,
-          email: email || result.user.email,
-          address: address || result.user.address,
-          alternatePhone: alternatePhone || result.user.alternatePhone,
+          email: result.user.email,
+          address: result.user.address,
+          alternatePhone: result.user.alternatePhone,
           tenantId: result.user.tenantId || currentTenant,
         },
         token: result.token,
       }));
 
-      router.replace('/(tabs)');
+      if (mode === "signup") {
+        router.replace('/auth/complete-profile');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (e: any) {
       showToast("error", "Verification Failed", e.message || "Please try again");
     } finally {
@@ -141,7 +129,7 @@ export default function OTP() {
         autoPlay loop style={styles.lottieHero}
       />
 
-      <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Verification</Text>
+      <Text style={[styles.title, { fontFamily: Fonts.bold }]}>{MOBILE_COPY.auth.otpTitle}</Text>
       <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>
   Enter the 6-digit code sent to
 </Text>
@@ -169,7 +157,7 @@ export default function OTP() {
         onPress={handleVerify}
         disabled={otp.join("").length < 6 || loading}
       >
-        {loading ? <ActivityIndicator color={Colors.WHITE} /> : <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>Verify & Login</Text>}
+        {loading ? <ActivityIndicator color={Colors.WHITE} /> : <Text style={[styles.buttonText, { fontFamily: Fonts.semibold }]}>{mode === 'signup' ? 'Verify & Continue' : 'Verify & Sign In'}</Text>}
       </TouchableOpacity>
       
       <TouchableOpacity style={styles.resendContainer} onPress={handleResend} disabled={timer > 0 || loading}>

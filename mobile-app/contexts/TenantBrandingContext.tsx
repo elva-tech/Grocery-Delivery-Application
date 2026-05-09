@@ -13,8 +13,6 @@ import { fetchTenantDetails, type TenantDetails } from '@/api/tenantApi';
 import { APP_BRAND } from '@/src/config/constants';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
-const DEFAULT_TAGLINE = 'Quality you can trust — delivered with care.';
-
 export type TenantBrandingValue = {
   loading: boolean;
   error: string | null;
@@ -86,11 +84,11 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
       raw,
       storeName,
       logoUri,
-      tagline: raw?.tagline?.trim() || DEFAULT_TAGLINE,
+      tagline: raw?.tagline?.trim() || '',
       heroTitle: raw?.heroTitle?.trim() || `Welcome to ${storeName}`,
       heroSubtitle:
         raw?.heroSubtitle?.trim() ||
-        'Browse categories, add to cart, and checkout in minutes.',
+        'Browse categories, add items to your cart, and check out in minutes.',
       heroBadge,
       storeAddressLine,
       supportEmail,
