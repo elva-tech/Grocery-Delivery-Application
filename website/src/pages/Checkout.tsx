@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2, Banknote, CreditCard } from 'lucide-react';
+import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2, Banknote, CreditCard, Gift } from 'lucide-react';
 import type { RootState } from '../store/store';
 import { logout } from '../store/slices/authSlice';
 import { useCalculateCartMutation } from '../api/apiSlice';
@@ -11,6 +11,7 @@ import { loadRazorpay } from '../utils/loadRazorpay';
 import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
 import { useToast } from '../context/ToastContext';
 import { WEB_COPY, customerFacingDeliveryUnavailable } from '../constants/copy';
+import { fetchStorefrontCoupons, type StorefrontCoupon } from '../api/storefrontCouponsApi';
 
 const Checkout = ({ address, deliveryEligibility }: any) => {
   const navigate = useNavigate();
@@ -38,6 +39,11 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number; description: string } | null>(null);
   const [couponError, setCouponError] = useState('');
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [offersOpen, setOffersOpen] = useState(false);
+  const [storeOffers, setStoreOffers] = useState<StorefrontCoupon[]>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [offersError, setOffersError] = useState('');
+  const [selectingOfferCode, setSelectingOfferCode] = useState<string | null>(null);
 
   const [getCalculation] = useCalculateCartMutation();
 
@@ -53,20 +59,54 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
     if (items.length > 0) fetchBill();
   }, [items, getCalculation]);
 
-const handleApplyCoupon = async () => {
-  if (!couponInput.trim()) return;
+const applyCouponCode = async (rawCode: string, opts?: { closeOffers?: boolean }) => {
+  const code = rawCode.trim().toUpperCase();
+  if (!code) return;
+  if (!(bill.subtotal > 0)) {
+    showToast('error', 'Your basket total is still loading.');
+    return;
+  }
   setCouponError('');
   setIsApplyingCoupon(true);
   try {
-    const result = await validateCouponApi(couponInput.trim(), bill.subtotal);
+    const result = await validateCouponApi(code, bill.subtotal);
     setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount, description: result.description });
     setCouponInput('');
+    if (opts?.closeOffers) setOffersOpen(false);
+    showToast('success', result.message || 'Coupon applied');
   } catch (err: any) {
     setCouponError(err?.response?.data?.message || 'Invalid coupon code');
     setAppliedCoupon(null);
   } finally {
     setIsApplyingCoupon(false);
+    setSelectingOfferCode(null);
   }
+};
+
+const handleApplyCoupon = () => void applyCouponCode(couponInput);
+
+const openOffersSheet = async () => {
+  setOffersOpen(true);
+  setOffersError('');
+  setOffersLoading(true);
+  try {
+    const list = await fetchStorefrontCoupons(Math.max(0, bill.subtotal));
+    setStoreOffers(list);
+  } catch (e: unknown) {
+    setOffersError(e instanceof Error ? e.message : 'Could not load offers');
+    setStoreOffers([]);
+  } finally {
+    setOffersLoading(false);
+  }
+};
+
+const handlePickOffer = async (c: StorefrontCoupon) => {
+  if (!c.applicableNow) {
+    showToast('info', c.blockedMessage || 'This offer is not available for your cart.');
+    return;
+  }
+  setSelectingOfferCode(c.code);
+  await applyCouponCode(c.code, { closeOffers: true });
 };
 
 const handleRemoveCoupon = () => {
@@ -322,6 +362,17 @@ const handlePlaceOrder = async () => {
                     {couponError && (
                       <p className="text-[10px] text-red-500 font-bold px-1">{couponError}</p>
                     )}
+                    {!appliedCoupon ? (
+                      <button
+                        type="button"
+                        onClick={() => void openOffersSheet()}
+                        className="mt-3 w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-purple-50 hover:border-purple-200 transition-colors text-left"
+                      >
+                        <Gift size={16} className="text-purple-600 shrink-0" />
+                        <span className="text-xs font-black text-slate-700 flex-1">View available offers</span>
+                        <span className="text-[10px] font-bold text-slate-400">›</span>
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -407,6 +458,99 @@ const handlePlaceOrder = async () => {
           </div>
         </div>
       </div>
+
+      {offersOpen ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-[2px] p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="offers-title"
+          onClick={() => setOffersOpen(false)}
+        >
+          <div
+            className="bg-white w-full sm:max-w-md sm:rounded-[2rem] rounded-t-[2rem] shadow-2xl max-h-[85vh] flex flex-col overflow-hidden border border-slate-100"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-100 shrink-0">
+              <h2 id="offers-title" className="text-lg font-black text-slate-900 tracking-tight">
+                Available offers
+              </h2>
+              <p className="text-[11px] text-slate-500 font-semibold mt-1">
+                Discount applies on item subtotal (before delivery). Min. order rules apply.
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {offersLoading ? (
+                <div className="flex justify-center py-16">
+                  <Loader2 className="animate-spin text-purple-600" size={28} />
+                </div>
+              ) : offersError ? (
+                <p className="text-sm font-bold text-red-600 text-center py-8">{offersError}</p>
+              ) : storeOffers.length === 0 ? (
+                <p className="text-sm font-semibold text-slate-500 text-center py-10">No active offers right now.</p>
+              ) : (
+                storeOffers.map(c => {
+                  const busy = selectingOfferCode === c.code && isApplyingCoupon;
+                  return (
+                    <div
+                      key={c.code}
+                      className={`rounded-2xl border p-4 space-y-2 ${
+                        c.applicableNow ? 'border-slate-200 bg-slate-50/80' : 'border-slate-100 bg-slate-50/40 opacity-70'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono font-black text-sm text-slate-900 tracking-wider">{c.code}</span>
+                        {c.firstTimeUserOnly ? (
+                          <span className="text-[9px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                            First order
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-xs font-black text-slate-700">{c.discountSummary}</p>
+                      {c.description ? (
+                        <p className="text-[11px] text-slate-500 leading-snug">{c.description}</p>
+                      ) : null}
+                      {!c.applicableNow && c.blockedMessage ? (
+                        <p className="text-[11px] font-bold text-amber-700 leading-snug">{c.blockedMessage}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 font-semibold">
+                          Valid till{' '}
+                          {new Date(c.validTo).toLocaleDateString(undefined, {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={!c.applicableNow || busy}
+                        onClick={() => void handlePickOffer(c)}
+                        className={`w-full mt-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-opacity ${
+                          c.applicableNow && !busy
+                            ? 'bg-slate-900 text-white hover:bg-purple-700'
+                            : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-80'
+                        }`}
+                      >
+                        {busy ? <Loader2 className="animate-spin inline" size={16} /> : c.applicableNow ? 'Apply' : 'Not applicable'}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 shrink-0">
+              <button
+                type="button"
+                className="w-full py-3 rounded-xl text-sm font-black text-slate-500 hover:bg-slate-50"
+                onClick={() => setOffersOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

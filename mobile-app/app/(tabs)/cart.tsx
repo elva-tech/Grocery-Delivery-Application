@@ -1,9 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Platform,
+  KeyboardAvoidingView,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  Pressable,
+} from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
-import { addToCart, removeFromCart } from '@/store/slices/cartSlice';
+import { addToCart, removeFromCart, setAppliedCartCoupon, clearAppliedCartCoupon } from '@/store/slices/cartSlice';
 import { getCartCalculation } from '@/api/cartApi';
+import { validateCouponApi } from '@/api/ordersApi';
+import { fetchStorefrontCoupons, type StorefrontCoupon } from '@/api/storefrontCouponsApi';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,15 +33,23 @@ const BRAND_BLUE = '#4b6f9e';
 const SUCCESS_GREEN = '#10b981';
 
 export default function CartScreen() {
-  const { items } = useSelector((state: RootState) => state.cart);
+  const { items, appliedCoupon } = useSelector((state: RootState) => state.cart);
   const token = useSelector((state: RootState) => state.auth.token);
   const dispatch = useDispatch();
   const router = useRouter();
   const confettiRef = useRef<any>(null);
+  const prevCartSig = useRef<string | null>(null);
 
   const [bill, setBill] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [deliveryNote, setDeliveryNote] = useState('');
+  const [couponInput, setCouponInput] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [offersVisible, setOffersVisible] = useState(false);
+  const [storeOffers, setStoreOffers] = useState<StorefrontCoupon[]>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [offersError, setOffersError] = useState('');
+  const [selectingCode, setSelectingCode] = useState<string | null>(null);
 
   /**
    * PROFESSIONAL NOTE: Calculated Badge Count
@@ -36,6 +59,84 @@ export default function CartScreen() {
   const totalItemsCount = useMemo(() => 
     items.reduce((acc, item) => acc + item.quantity, 0), 
   [items]);
+
+  const cartSig = useMemo(() => items.map(i => `${i.id}:${i.quantity}`).join('|'), [items]);
+
+  useEffect(() => {
+    if (prevCartSig.current !== null && prevCartSig.current !== cartSig && appliedCoupon) {
+      dispatch(clearAppliedCartCoupon());
+      showToast('info', 'Offer removed', 'Your cart changed. Re-apply your code if it still applies.');
+    }
+    prevCartSig.current = cartSig;
+  }, [cartSig, appliedCoupon, dispatch]);
+
+  const couponDiscount = appliedCoupon?.discountAmount ?? 0;
+  const payableTotal = Math.max(0, (bill?.grandTotal ?? 0) - couponDiscount);
+
+  /** Item subtotal — backend min-order checks match website checkout. */
+  const cartAmountForCoupon = bill?.itemTotal ?? 0;
+
+  const applyCouponCode = async (rawCode: string, opts?: { closeOffers?: boolean }) => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) return;
+    if (!token) {
+      showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
+      router.push('/auth/landing');
+      return;
+    }
+    if (cartAmountForCoupon <= 0) {
+      showToast('error', 'Wait', 'Bill is still updating.');
+      return;
+    }
+    setCouponError('');
+    setIsApplyingCoupon(true);
+    try {
+      const result = await validateCouponApi(code, cartAmountForCoupon, token);
+      dispatch(setAppliedCartCoupon({ code: result.code, discountAmount: result.discountAmount }));
+      setCouponInput('');
+      if (opts?.closeOffers) setOffersVisible(false);
+      showToast('success', 'Coupon applied', result.message || `You saved ₹${result.discountAmount}.`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err: any) {
+      setCouponError(err?.message || 'Invalid code');
+      dispatch(clearAppliedCartCoupon());
+    } finally {
+      setIsApplyingCoupon(false);
+      setSelectingCode(null);
+    }
+  };
+
+  const handleApplyCoupon = () => void applyCouponCode(couponInput);
+
+  const openOffersSheet = async () => {
+    setOffersVisible(true);
+    setOffersError('');
+    setOffersLoading(true);
+    try {
+      const list = await fetchStorefrontCoupons(Math.max(0, cartAmountForCoupon), token);
+      setStoreOffers(list);
+    } catch (e: unknown) {
+      setOffersError(e instanceof Error ? e.message : 'Could not load offers');
+      setStoreOffers([]);
+    } finally {
+      setOffersLoading(false);
+    }
+  };
+
+  const handleSelectOffer = async (c: StorefrontCoupon) => {
+    if (!c.applicableNow) {
+      if (c.blockedMessage) showToast('info', 'Not available', c.blockedMessage);
+      return;
+    }
+    setSelectingCode(c.code);
+    await applyCouponCode(c.code, { closeOffers: true });
+  };
+
+  const handleRemoveCoupon = () => {
+    dispatch(clearAppliedCartCoupon());
+    setCouponError('');
+    setCouponInput('');
+  };
 
   useEffect(() => {
     const updateCart = async () => {
@@ -59,11 +160,7 @@ export default function CartScreen() {
     updateCart();
   }, [items]);
 
-  /**
-   * PROFESSIONAL NOTE: Navigation Flow Correction
-   * Redirecting to the address management page as the primary action.
-   * Final checkout logic is deferred to the post-address selection stage.
-   */
+  /** Bill summary (incl. promo) on cart; address step is delivery + pay only. */
   const handleProceed = () => {
     if (loading || items.length === 0) return;
     if (!token) {
@@ -179,15 +276,71 @@ export default function CartScreen() {
               </View> */}
 
               <View style={styles.billBox}>
-                <View style={styles.billRow}><Text style={styles.billLabel}>Item Total</Text><Text style={styles.billValue}>₹{bill?.itemTotal || 0}</Text></View>
+                <Text style={styles.billBoxTitle}>Bill summary</Text>
+                <View style={styles.billRow}><Text style={styles.billLabel}>Item total</Text><Text style={styles.billValue}>₹{bill?.itemTotal || 0}</Text></View>
                 <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Delivery Fee</Text>
+                  <Text style={styles.billLabel}>Delivery fee</Text>
                   <Text style={[styles.billValue, bill?.isFreeDelivery && { color: SUCCESS_GREEN, fontWeight: '900' }]}>
                     {bill?.isFreeDelivery ? 'FREE' : `₹${bill?.deliveryFee || 0}`}
                   </Text>
                 </View>
+
+                <Text style={styles.couponSectionLabel}>Promo code</Text>
+                {appliedCoupon ? (
+                  <View style={styles.couponApplied}>
+                    <Ionicons name="pricetag" size={16} color="#16a34a" />
+                    <Text style={styles.couponAppliedText}>
+                      {appliedCoupon.code} · −₹{appliedCoupon.discountAmount}
+                    </Text>
+                    <TouchableOpacity onPress={handleRemoveCoupon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close-circle" size={20} color="#dc2626" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.couponRow}>
+                    <TextInput
+                      style={styles.couponInput}
+                      placeholder="Enter code"
+                      placeholderTextColor="#94a3b8"
+                      value={couponInput}
+                      onChangeText={t => { setCouponInput(t.toUpperCase()); setCouponError(''); }}
+                      autoCapitalize="characters"
+                      returnKeyType="done"
+                      onSubmitEditing={handleApplyCoupon}
+                      editable={!loading && Boolean(bill?.grandTotal)}
+                    />
+                    <TouchableOpacity
+                      style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon || loading) && { opacity: 0.5 }]}
+                      onPress={handleApplyCoupon}
+                      disabled={!couponInput.trim() || isApplyingCoupon || loading}
+                    >
+                      {isApplyingCoupon ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.couponApplyText}>Apply</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
+
+                {!appliedCoupon ? (
+                  <TouchableOpacity style={styles.viewOffersBtn} onPress={openOffersSheet} disabled={loading}>
+                    <Ionicons name="gift-outline" size={18} color={BRAND_BLUE} />
+                    <Text style={styles.viewOffersBtnText}>View available offers</Text>
+                    <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+                  </TouchableOpacity>
+                ) : null}
+
                 <View style={styles.divider} />
-                <View style={styles.billRow}><Text style={styles.totalLabel}>Grand Total</Text><Text style={styles.totalLabel}>₹{bill?.grandTotal || 0}</Text></View>
+                {appliedCoupon ? (
+                  <View style={styles.billRow}>
+                    <Text style={styles.billLabel}>To pay</Text>
+                    <Text style={styles.totalLabel}>₹{payableTotal}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.billRow}><Text style={styles.totalLabel}>To pay</Text><Text style={styles.totalLabel}>₹{bill?.grandTotal || 0}</Text></View>
+                )}
               </View>
             </View>
           }
@@ -196,8 +349,13 @@ export default function CartScreen() {
 
       <View style={styles.actionFixed}>
         <View>
-          <Text style={styles.actionPrice}>₹{bill?.grandTotal || '...'}</Text>
-          <Text style={styles.actionSub}>{totalItemsCount} {totalItemsCount === 1 ? 'Item' : 'Items'} • Incl. Taxes</Text>
+          <Text style={styles.actionPrice}>
+            ₹{loading ? '...' : appliedCoupon ? payableTotal : bill?.grandTotal ?? '...'}
+          </Text>
+          <Text style={styles.actionSub}>
+            {totalItemsCount} {totalItemsCount === 1 ? 'item' : 'items'}
+            {appliedCoupon ? ' · incl. offer' : ''} · Incl. taxes
+          </Text>
         </View>
         <TouchableOpacity
           style={[styles.mainBtn, (loading || items.length === 0) && { opacity: 0.7 }]}
@@ -218,6 +376,68 @@ export default function CartScreen() {
         fadeOut={true}
         colors={[BRAND_BLUE, SUCCESS_GREEN, '#f59e0b', '#ef4444']}
       />
+
+      <Modal visible={offersVisible} animationType="slide" transparent onRequestClose={() => setOffersVisible(false)}>
+        <Pressable style={styles.offerModalOverlay} onPress={() => setOffersVisible(false)}>
+          <Pressable style={styles.offerModalSheet} onPress={e => e.stopPropagation()}>
+            <View style={styles.offerModalGrab}>
+              <View style={styles.offerGrabBar} />
+            </View>
+            <Text style={styles.offerModalTitle}>Available offers</Text>
+            <Text style={styles.offerModalSub}>Discount applies on item total (before delivery).</Text>
+            {offersLoading ? (
+              <View style={styles.offerLoading}>
+                <ActivityIndicator color={BRAND_BLUE} />
+              </View>
+            ) : offersError ? (
+              <Text style={styles.offerErrText}>{offersError}</Text>
+            ) : storeOffers.length === 0 ? (
+              <Text style={styles.offerEmptyText}>No active offers right now. Check back later.</Text>
+            ) : (
+              <ScrollView style={styles.offerScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                {storeOffers.map(c => {
+                  const busy = selectingCode === c.code && isApplyingCoupon;
+                  return (
+                    <View key={c.code} style={[styles.offerCard, !c.applicableNow && styles.offerCardMuted]}>
+                      <View style={styles.offerCardTop}>
+                        <Text style={styles.offerCode}>{c.code}</Text>
+                        {c.firstTimeUserOnly ? (
+                          <View style={styles.offerPill}>
+                            <Text style={styles.offerPillText}>First order</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.offerSummary}>{c.discountSummary}</Text>
+                      {c.description ? <Text style={styles.offerDesc}>{c.description}</Text> : null}
+                      {!c.applicableNow && c.blockedMessage ? (
+                        <Text style={styles.offerBlocked}>{c.blockedMessage}</Text>
+                      ) : (
+                        <Text style={styles.offerMeta}>
+                          Valid till {new Date(c.validTo).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Text>
+                      )}
+                      <TouchableOpacity
+                        style={[styles.offerSelectBtn, (!c.applicableNow || busy) && styles.offerSelectBtnDisabled]}
+                        disabled={!c.applicableNow || busy}
+                        onPress={() => void handleSelectOffer(c)}
+                      >
+                        {busy ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.offerSelectBtnText}>{c.applicableNow ? 'Apply' : 'Not applicable'}</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.offerCloseFooter} onPress={() => setOffersVisible(false)}>
+              <Text style={styles.offerCloseFooterText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -257,11 +477,106 @@ const styles = StyleSheet.create({
   largeNoteInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#1e293b', paddingTop: 14, textAlignVertical: 'top' },
 
   billBox: { marginTop: 20, backgroundColor: '#fff', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0' },
+  billBoxTitle: { fontSize: 13, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 14 },
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   billLabel: { color: '#64748b', fontSize: 15, fontWeight: '600' },
   billValue: { fontWeight: '700', color: '#0f172a', fontSize: 15 },
   divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 15 },
   totalLabel: { fontSize: 22, fontWeight: '900', color: '#0f172a' },
+
+  couponSectionLabel: { fontSize: 12, fontWeight: '800', color: '#64748b', marginTop: 8, marginBottom: 8 },
+  couponRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  couponInput: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    letterSpacing: 1,
+  },
+  couponApplyBtn: {
+    backgroundColor: BRAND_BLUE,
+    borderRadius: 12,
+    height: 46,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 88,
+  },
+  couponApplyText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    gap: 8,
+  },
+  couponAppliedText: { flex: 1, fontSize: 14, fontWeight: '700', color: '#15803d' },
+  couponError: { fontSize: 12, color: '#dc2626', marginTop: 6 },
+  viewOffersBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  viewOffersBtnText: { flex: 1, fontSize: 14, fontWeight: '700', color: BRAND_BLUE },
+
+  offerModalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
+  offerModalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '78%',
+  },
+  offerModalGrab: { alignItems: 'center', paddingVertical: 10 },
+  offerGrabBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
+  offerModalTitle: { fontSize: 20, fontWeight: '900', color: '#0f172a' },
+  offerModalSub: { fontSize: 12, color: '#64748b', marginTop: 6, marginBottom: 12 },
+  offerLoading: { paddingVertical: 40, alignItems: 'center' },
+  offerErrText: { color: '#dc2626', fontSize: 14, paddingVertical: 20 },
+  offerEmptyText: { color: '#64748b', fontSize: 14, paddingVertical: 24 },
+  offerScroll: { maxHeight: 420 },
+  offerCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: '#fafafa',
+  },
+  offerCardMuted: { opacity: 0.72 },
+  offerCardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  offerCode: { fontSize: 16, fontWeight: '900', color: '#0f172a', letterSpacing: 1 },
+  offerPill: { backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  offerPillText: { fontSize: 10, fontWeight: '800', color: '#b45309' },
+  offerSummary: { fontSize: 14, fontWeight: '700', color: '#334155', marginTop: 6 },
+  offerDesc: { fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 17 },
+  offerBlocked: { fontSize: 12, fontWeight: '600', color: '#b45309', marginTop: 8 },
+  offerMeta: { fontSize: 11, color: '#94a3b8', marginTop: 8 },
+  offerSelectBtn: {
+    marginTop: 12,
+    backgroundColor: BRAND_BLUE,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  offerSelectBtnDisabled: { backgroundColor: '#cbd5e1' },
+  offerSelectBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  offerCloseFooter: { alignItems: 'center', paddingVertical: 14 },
+  offerCloseFooterText: { fontSize: 15, fontWeight: '700', color: '#64748b' },
 
   actionFixed: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#fff', padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   actionPrice: { fontSize: 28, fontWeight: '900', color: '#0f172a' },

@@ -120,4 +120,37 @@ const riderOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { authMiddleware, adminOnly, riderOnly };
+/**
+ * Set req.user when Bearer JWT is valid; otherwise leave req.user unset.
+ * For storefront endpoints that need tenant + optional personalization (e.g. first-order coupons).
+ */
+const optionalAuth = async (req, res, next) => {
+  req.user = undefined;
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
+    }
+    const token = authHeader.split(" ")[1];
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return next();
+    }
+    const user = await User.findById(decoded.userId).select("_id role tenantId isActive").lean();
+    if (!user || !user.isActive) {
+      return next();
+    }
+    req.user = {
+      userId: user._id,
+      role: user.role,
+      tenantId: user.tenantId,
+    };
+  } catch (error) {
+    console.error("optionalAuth error:", error);
+  }
+  next();
+};
+
+module.exports = { authMiddleware, adminOnly, riderOnly, optionalAuth };

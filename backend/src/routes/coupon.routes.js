@@ -1,18 +1,22 @@
 const express = require("express");
 const router = express.Router();
-const { adminOnly } = require("../middleware/auth.middleware");
+const { adminOnly, authMiddleware, optionalAuth } = require("../middleware/auth.middleware");
 const { resolveTenant } = require("../middleware/tenant.middleware");
 const {
   createCoupon,
   getAllCoupons,
   updateCoupon,
   validateCoupon,
+  listStorefrontCoupons,
 } = require("../controllers/coupon.controller");
 
 router.use(resolveTenant);
 
-// Customer-facing (all authenticated users)
-router.post("/validate", validateCoupon);
+// Storefront: offers for tenant (x-tenant-id). Optional JWT improves first-order eligibility.
+router.get("/public", optionalAuth, listStorefrontCoupons);
+
+// Customer-facing (authenticated)
+router.post("/validate", authMiddleware, validateCoupon);
 
 // Admin-only
 router.get("/", adminOnly, getAllCoupons);

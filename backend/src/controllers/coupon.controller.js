@@ -111,6 +111,105 @@ exports.updateCoupon = async (req, res) => {
 /* ─────────────────────────────────────────────
    VALIDATE COUPON  (Customer — authenticated)
 ───────────────────────────────────────────── */
+/**
+ * GET /api/coupons/public?cartSubtotal=…
+ * Tenant from x-tenant-id. Optional Bearer JWT for first-order-only eligibility.
+ */
+exports.listStorefrontCoupons = async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const cartSubtotalRaw = req.query.cartSubtotal;
+    const cartSubtotal =
+      cartSubtotalRaw === undefined || cartSubtotalRaw === ""
+        ? NaN
+        : Number(cartSubtotalRaw);
+
+    if (!tenantId) {
+      return res.status(400).json({ message: "Tenant context is missing" });
+    }
+
+    const now = new Date();
+    const coupons = await Coupon.find({
+      tenantId,
+      isActive: true,
+      validFrom: { $lte: now },
+      validTo: { $gte: now },
+    })
+      .sort({ minOrderValue: 1, code: 1 })
+      .lean();
+
+    const userId = req.user?.userId;
+    let hasPriorOrder = null;
+    if (userId) {
+      const prev = await Order.findOne({
+        userId,
+        orderStatus: { $nin: ["CANCELLED"] },
+      })
+        .select("_id")
+        .lean();
+      hasPriorOrder = Boolean(prev);
+    }
+
+    const out = coupons.map((c) => {
+      let applicableNow = true;
+      let blockedReason = null;
+      let blockedMessage = null;
+
+      if (c.usageLimit != null && c.usedCount >= c.usageLimit) {
+        applicableNow = false;
+        blockedReason = "USAGE_LIMIT";
+        blockedMessage = "This offer has reached its usage limit.";
+      } else if (Number.isFinite(cartSubtotal) && cartSubtotal >= 0 && cartSubtotal < (c.minOrderValue ?? 0)) {
+        applicableNow = false;
+        blockedReason = "MIN_ORDER";
+        const need = Math.max(0, Math.ceil((c.minOrderValue ?? 0) - cartSubtotal));
+        blockedMessage = `Minimum ₹${c.minOrderValue} on items. Add ₹${need} more to unlock.`;
+      } else if (c.firstTimeUserOnly) {
+        if (!userId) {
+          applicableNow = false;
+          blockedReason = "SIGN_IN_REQUIRED";
+          blockedMessage = "Sign in to check this first-order offer.";
+        } else if (hasPriorOrder) {
+          applicableNow = false;
+          blockedReason = "FIRST_ORDER_ONLY";
+          blockedMessage = "Valid on your first order only.";
+        }
+      }
+
+      const summaryParts = [];
+      if (c.discountType === "PERCENTAGE") {
+        summaryParts.push(`${c.discountValue}% off`);
+        if (c.maxDiscount != null) summaryParts.push(`up to ₹${c.maxDiscount}`);
+      } else {
+        summaryParts.push(`₹${c.discountValue} off`);
+      }
+      if ((c.minOrderValue ?? 0) > 0) {
+        summaryParts.push(`on orders ₹${c.minOrderValue}+`);
+      }
+
+      return {
+        code: c.code,
+        description: c.description || "",
+        discountSummary: summaryParts.join(" · "),
+        discountType: c.discountType,
+        discountValue: c.discountValue,
+        minOrderValue: c.minOrderValue ?? 0,
+        maxDiscount: c.maxDiscount,
+        validTo: c.validTo,
+        firstTimeUserOnly: !!c.firstTimeUserOnly,
+        applicableNow,
+        blockedReason,
+        blockedMessage,
+      };
+    });
+
+    return res.json({ coupons: out });
+  } catch (err) {
+    console.error("[coupon] listStorefrontCoupons error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.validateCoupon = async (req, res) => {
   try {
     const userId  = req.user.userId;

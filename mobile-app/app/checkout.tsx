@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +11,6 @@ import { showToast } from '@/utils/toast';
 import { clearCart } from '@/store/slices/cartSlice';
 import {
   placeOrderBackend,
-  validateCouponApi,
   createMobilePaymentOrder,
   verifyMobilePayment,
 } from '@/api/ordersApi';
@@ -25,7 +24,7 @@ import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
   const isExpoGo = Constants.appOwnership === 'expo';
-  const { items, totalAmount } = useSelector((state: RootState) => state.cart);
+  const { items, totalAmount, appliedCoupon } = useSelector((state: RootState) => state.cart);
   const { user, token } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
   const router = useRouter();
@@ -33,10 +32,6 @@ export default function CheckoutScreen() {
   const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number }>({ grandTotal: totalAmount, deliveryFee: 0 });
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
-  const [couponInput, setCouponInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
-  const [couponError, setCouponError] = useState('');
-  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isPlacing, setIsPlacing] = useState(false);
   const [deliveryEligibility, setDeliveryEligibility] = useState<{
     checking: boolean;
@@ -154,23 +149,6 @@ export default function CheckoutScreen() {
     deliveryEligibility.eligible === false ||
     (deliveryEligibility.eligible === null &&
       deliveryEligibility.message.toLowerCase().includes('map pin'));
-
-  const handleApplyCoupon = async () => {
-    if (!couponInput.trim() || !token) return;
-    setCouponError('');
-    setIsApplyingCoupon(true);
-    try {
-      const result = await validateCouponApi(couponInput.trim().toUpperCase(), bill.grandTotal, token);
-      setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount });
-      setCouponInput('');
-      showToast('success', 'Coupon Applied', result.message || `Saved ₹${result.discountAmount}!`);
-    } catch (err: any) {
-      setCouponError(err?.message || 'Invalid coupon code');
-      setAppliedCoupon(null);
-    } finally {
-      setIsApplyingCoupon(false);
-    }
-  };
 
   const handlePlaceOrder = async () => {
     if (isStoreClosed) { showToast('error', 'Store Closed', 'We are not accepting orders right now.'); return; }
@@ -361,41 +339,6 @@ export default function CheckoutScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Coupon</Text>
-          {appliedCoupon ? (
-            <View style={styles.couponApplied}>
-              <Ionicons name="pricetag" size={15} color="#16a34a" />
-              <Text style={styles.couponAppliedText}>{appliedCoupon.code} · −₹{appliedCoupon.discountAmount}</Text>
-              <TouchableOpacity onPress={() => { setAppliedCoupon(null); setCouponError(''); }}>
-                <Ionicons name="close-circle" size={18} color="#dc2626" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <View style={styles.couponRow}>
-                <TextInput
-                  style={styles.couponInput}
-                  placeholder="Enter coupon code"
-                  placeholderTextColor="#94a3b8"
-                  value={couponInput}
-                  onChangeText={t => { setCouponInput(t.toUpperCase()); setCouponError(''); }}
-                  autoCapitalize="characters"
-                  returnKeyType="done"
-                  onSubmitEditing={handleApplyCoupon}
-                />
-                <TouchableOpacity
-                  style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon) && { opacity: 0.5 }]}
-                  onPress={handleApplyCoupon}
-                  disabled={!couponInput.trim() || isApplyingCoupon}
-                >
-                  {isApplyingCoupon ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.couponApplyText}>Apply</Text>}
-                </TouchableOpacity>
-              </View>
-              {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
-            </>
-          )}
-        </View>
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Method</Text>
           <View style={styles.paymentOptions}>
             <TouchableOpacity
@@ -519,13 +462,6 @@ const styles = StyleSheet.create({
   deliveryBannerCheckoutBadText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#991b1b', lineHeight: 18 },
   deliveryBannerCheckoutWarnText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 17 },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  couponRow: { flexDirection: 'row', gap: 8 },
-  couponInput: { flex: 1, height: 44, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, fontSize: 13, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#dde6f0', letterSpacing: 1 },
-  couponApplyBtn: { backgroundColor: '#4b6f9e', borderRadius: 10, height: 44, paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center' },
-  couponApplyText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  couponApplied: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#dcfce7', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#86efac', gap: 6 },
-  couponAppliedText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#16a34a' },
-  couponError: { fontSize: 12, color: '#dc2626', marginTop: 4 },
   itemInfo: { color: '#2c3e50', fontSize: 14 },
   itemPrice: { fontWeight: '600', color: '#2c3e50' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#dbe4ef' },
