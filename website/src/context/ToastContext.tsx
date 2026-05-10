@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 
-type ToastType = 'success' | 'error';
+type ToastType = 'success' | 'error' | 'info';
 
 type ToastContextValue = {
   showToast: (type: ToastType, message: string) => void;
@@ -31,7 +31,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {toast && (
         <div
           className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] max-w-md w-[calc(100%-2rem)] px-5 py-4 rounded-2xl shadow-2xl text-white text-sm font-bold flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300 ${
-            toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'
+            toast.type === 'success'
+              ? 'bg-emerald-600'
+              : toast.type === 'info'
+                ? 'bg-slate-700'
+                : 'bg-red-600'
           }`}
           role="alert"
         >
