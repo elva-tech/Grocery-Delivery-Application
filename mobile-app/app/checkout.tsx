@@ -52,6 +52,10 @@ export default function CheckoutScreen() {
   useEffect(() => {
     if (items.length === 0) { router.replace('/(tabs)'); return; }
     getCartCalculation(items).then(setBill).catch(() => {});
+    if (!token) {
+      setSelectedAddress(null);
+      return;
+    }
     getAddresses()
       .then(async list => {
         if (list.length === 0) return;
@@ -59,12 +63,16 @@ export default function CheckoutScreen() {
         setSelectedAddress(sel || list[0]);
       })
       .catch(() => {});
-  }, [items]);
+  }, [items, token]);
 
   /** After changing address on the Addresses tab, reload preferred address when returning here. */
   useFocusEffect(
     useCallback(() => {
       if (items.length === 0) return;
+      if (!token) {
+        setSelectedAddress(null);
+        return;
+      }
       let cancelled = false;
       getAddresses()
         .then(async list => {
@@ -80,7 +88,7 @@ export default function CheckoutScreen() {
       return () => {
         cancelled = true;
       };
-    }, [items.length]),
+    }, [items.length, token]),
   );
 
   useEffect(() => {
@@ -167,7 +175,11 @@ export default function CheckoutScreen() {
   const handlePlaceOrder = async () => {
     if (isStoreClosed) { showToast('error', 'Store Closed', 'We are not accepting orders right now.'); return; }
     if (items.length === 0) { showToast('error', 'Empty Cart', 'Add items first.'); return; }
-    if (!token) { showToast('error', 'Session Expired', 'Please log in again.'); router.push('/auth/landing'); return; }
+    if (!token) {
+      showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
+      router.push('/auth/landing');
+      return;
+    }
     if (!selectedAddress) {
       showToast('error', 'Address required', 'Add a delivery address in Addresses first.');
       return;

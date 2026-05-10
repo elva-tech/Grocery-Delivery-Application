@@ -69,15 +69,17 @@ const getFitMode = (img: string | null) => {
    SUB-COMPONENTS (Memoized for 60FPS)
    ======================================================================== */
 
-const BannerSkeleton = React.memo(() => (
-  <View style={styles.bannerSkeleton} accessibilityLabel="Loading promotional banners">
-    <ActivityIndicator size="small" color={BRAND_BLUE} />
-    <Text style={styles.bannerSkeletonText}>Loading offers…</Text>
-  </View>
-));
+const BannerSkeleton = React.memo(function BannerSkeleton() {
+  return (
+    <View style={styles.bannerSkeleton} accessibilityLabel="Loading promotional banners">
+      <ActivityIndicator size="small" color={BRAND_BLUE} />
+      <Text style={styles.bannerSkeletonText}>Loading offers…</Text>
+    </View>
+  );
+});
 
 /** Mirrors website PromoBanners: GET /api/banners → `data`, image via resolveProductImageUri, title overlay. */
-const StaticBannerCarousel = React.memo(({ banners }: { banners: BannerRecord[] }) => {
+const StaticBannerCarousel = React.memo(function StaticBannerCarousel({ banners }: { banners: BannerRecord[] }) {
   const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
 
@@ -161,6 +163,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth?.user);
+  const token = useSelector((state: RootState) => state.auth.token);
 
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
@@ -183,19 +186,23 @@ export default function HomeScreen() {
 
   const refreshDeliverToRow = useCallback(async () => {
     try {
+      if (!token) {
+        setDeliverToText(MOBILE_COPY.home.deliverToFallback);
+        return;
+      }
       const list = await getAddresses();
       const addr = await pickPreferredSavedAddress(list);
       setDeliverToText(formatDeliverToDisplay(addr, MOBILE_COPY.home.deliverToFallback));
     } catch {
       setDeliverToText(MOBILE_COPY.home.deliverToFallback);
     }
-  }, []);
+  }, [token]);
 
   const refreshDeliveryEligibility = useCallback(async () => {
     setDeliveryEligibility(prev => ({ ...prev, checking: true, message: '' }));
     try {
-      const list = await getAddresses();
-      const addr = await pickPreferredSavedAddress(list);
+      const list = token ? await getAddresses() : [];
+      const addr = list.length > 0 ? await pickPreferredSavedAddress(list) : null;
       const coordsFromAddr = addr ? parseAddressLatLng(addr as { lat?: unknown; lng?: unknown }) : null;
 
       let lat: number | null = coordsFromAddr?.lat ?? null;
@@ -249,7 +256,7 @@ export default function HomeScreen() {
         message: msg,
       });
     }
-  }, []);
+  }, [token]);
 
   const loadBanners = useCallback(async () => {
     setBannerLoading(true);
@@ -347,7 +354,14 @@ export default function HomeScreen() {
 
       <TouchableOpacity
         style={styles.deliverCard}
-        onPress={() => router.push('/(tabs)/addresses')}
+        onPress={() => {
+          if (!token) {
+            showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
+            router.push('/auth/landing');
+            return;
+          }
+          router.push('/(tabs)/addresses');
+        }}
         activeOpacity={0.75}
         accessibilityRole="button"
         accessibilityLabel="Delivery address"

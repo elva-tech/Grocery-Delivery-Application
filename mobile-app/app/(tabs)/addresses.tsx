@@ -127,7 +127,15 @@ export default function AddressesScreen() {
   /** PIN-centered coords for “Someone else” — passed into orders after eligibility passes. */
   const [othersGeo, setOthersGeo] = useState<{ lat: number; lng: number } | null>(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!token) {
+      setAddresses([]);
+      setSelectedId(null);
+      setLoadingAddresses(false);
+      return;
+    }
+    void load();
+  }, [token]);
 
   /** Same probe as Home / Checkout — saved address or recipient PIN (geocoded). */
   useEffect(() => {
@@ -508,7 +516,11 @@ export default function AddressesScreen() {
 
   const handleApplyCoupon = async () => {
     if (!couponInput.trim()) return;
-    if (!token) { showToast('error', 'Session Expired', 'Please log in again'); return; }
+    if (!token) {
+      showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
+      router.push('/auth/landing');
+      return;
+    }
     setCouponError('');
     setIsApplyingCoupon(true);
     try {
@@ -567,7 +579,7 @@ export default function AddressesScreen() {
       return;
     }
     if (!token) {
-      showToast('error', 'Session Expired', 'Please log in again');
+      showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
       router.push('/auth/landing');
       return;
     }
@@ -755,6 +767,29 @@ export default function AddressesScreen() {
       setMapLoading(false);
     }
   };
+
+  if (!token) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#2c3e50" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Checkout Details</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.loginGateBody}>
+          <Ionicons name="lock-closed-outline" size={56} color="#4b6f9e" />
+          <Text style={styles.loginGateTitle}>{MOBILE_COPY.auth.loginToContinueTitle}</Text>
+          <Text style={styles.loginGateSubtitle}>{MOBILE_COPY.auth.loginToContinueMessage}</Text>
+          <TouchableOpacity style={styles.loginGateBtn} onPress={() => router.push('/auth/landing')} activeOpacity={0.85}>
+            <Text style={styles.loginGateBtnText}>Log in</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1541,5 +1576,26 @@ const styles = StyleSheet.create({
   othersSummaryLandmark: { fontSize: 12, color: '#4b6f9e', marginTop: 2, fontWeight: '600' },
   editOthersBtn: { marginTop: 12, padding: 8, backgroundColor: '#f1f5f9', alignSelf: 'flex-start', borderRadius: 8 },
   editOthersText: { fontSize: 12, color: '#4b6f9e', fontWeight: '700' },
+
+  loginGateBody: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingBottom: 48,
+  },
+  loginGateTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginTop: 20, textAlign: 'center' },
+  loginGateSubtitle: { fontSize: 15, color: '#64748b', marginTop: 12, textAlign: 'center', lineHeight: 22 },
+  loginGateBtn: {
+    marginTop: 28,
+    backgroundColor: '#4b6f9e',
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loginGateBtnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
 
 });

@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Fonts } from '@/theme/theme';
 import { APP_BRAND } from '@/src/config/constants';
+import { MOBILE_COPY } from '@/src/constants/copy';
 import Constants from 'expo-constants';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 
@@ -90,7 +91,14 @@ export default function ProfileScreen() {
     {
       icon: 'location-outline',
       label: 'Saved Addresses',
-      onPress: () => router.push('/(tabs)/addresses')
+      onPress: () => {
+        if (!token) {
+          showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
+          router.push('/auth/landing');
+          return;
+        }
+        router.push('/(tabs)/addresses');
+      },
     },
 
     // TODO: Add Notifications feature
