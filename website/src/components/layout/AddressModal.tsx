@@ -1,34 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSelector } from 'react-redux';
-import { X, MapPin, Loader2, AlertCircle, Search, Check } from 'lucide-react';
+import { X, MapPin, Loader2, AlertCircle, Check } from 'lucide-react';
 import type { RootState } from '../../store/store';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L, { type LeafletMouseEvent } from 'leaflet';
-import { getAddressFromCoords, addAddress, updateAddress } from '../../api/addresses';
+import { OlaMaps } from 'olamaps-web-sdk';
+import { getAddressDetailsFromCoords, addAddress, updateAddress } from '../../api/addresses';
+import { searchPlaces } from '../../api/mapApi';
+import { WEBSITE_DELIVERY_COORDS_CHANGED } from '../../api/deliveryEligibilityApi';
 import {
   formatAddressSummary,
   isValidIndianPincode,
   lookupIndianPincode,
   sanitizeIndianPincode,
 } from '../../utils/indiaPincode';
-
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-let DefaultIcon = L.icon({ iconUrl: icon, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
-L.Marker.prototype.options.icon = DefaultIcon;
+import { requestPrecisePosition } from '../../utils/geolocation';
+import { parseAddressLatLng } from '../../utils/coordinates';
 
 interface AddressModalProps {
   isOpen: boolean;
   onClose: () => void;
   /** When set, modal edits this saved address (must include `id`). */
   editAddress?: Record<string, unknown> | null;
-}
-
-function ChangeView({ center }: { center: [number, number] }) {
-  const map = useMap();
-  map.setView(center, map.getZoom());
-  return null;
+  /** New addresses only: open directly on the map pin step first. */
+  startWithMap?: boolean;
+  /** Called after a successful save with normalized fields (id, lat, lng, full, …). */
+  onAddressSaved?: (address: Record<string, unknown>) => void;
 }
 
 const emptyForm = (phone: string) => ({
@@ -48,7 +43,17 @@ function digits10FromStored(phone: unknown): string {
   return s.slice(-10);
 }
 
-const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddress = null }) => {
+type PlaceSuggestion = { id: string; name: string; lat: number; lng: number };
+
+const MAP_SEARCH_DEBOUNCE_MS = 320;
+
+const AddressModal: React.FC<AddressModalProps> = ({
+  isOpen,
+  onClose,
+  editAddress = null,
+  startWithMap = false,
+  onAddressSaved,
+}) => {
   const { user } = useSelector((state: RootState) => state.auth);
   const userPhone = (user?.phone || '').replace(/^\+91\s*/, '');
   const [form, setForm] = useState(() => emptyForm(userPhone));
@@ -59,13 +64,116 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
   const [showMap, setShowMap] = useState(false);
   const [coords, setCoords] = useState<[number, number]>([12.9716, 77.5946]);
   const [searchQuery, setSearchQuery] = useState('');
+  const mapContainerId = useMemo(
+    () => `address-modal-map-${Math.random().toString(36).slice(2, 10)}`,
+    [],
+  );
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  /** Latest coords for async map init (avoids stale closure after GPS updates). */
+  const coordsRef = useRef<[number, number]>([12.9716, 77.5946]);
+
+  const [searchSuggestions, setSearchSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchHadNoResults, setSearchHadNoResults] = useState(false);
+
+  useEffect(() => {
+    coordsRef.current = coords;
+  }, [coords]);
+
+  useEffect(() => {
+    return () => searchAbortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!showMap) {
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = null;
+      setSearchSuggestions([]);
+      setSearchLoading(false);
+      setSearchHadNoResults(false);
+      setSearchQuery('');
+    }
+  }, [showMap]);
+
+  useEffect(() => {
+    if (!isOpen || !showMap) return undefined;
+
+    const q = searchQuery.trim();
+    if (q.length < 3) {
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = null;
+      setSearchSuggestions([]);
+      setSearchLoading(false);
+      setSearchHadNoResults(false);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      searchAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      searchAbortRef.current = ctrl;
+      setSearchLoading(true);
+      setSearchHadNoResults(false);
+
+      searchPlaces(q, { signal: ctrl.signal })
+        .then((rows: PlaceSuggestion[]) => {
+          if (ctrl.signal.aborted) return;
+          setSearchSuggestions(rows);
+          setSearchHadNoResults(rows.length === 0);
+        })
+        .catch((err: unknown) => {
+          if ((err as { name?: string })?.name === 'AbortError') return;
+          if (!ctrl.signal.aborted) {
+            setSearchSuggestions([]);
+            setSearchHadNoResults(false);
+          }
+        })
+        .finally(() => {
+          if (!ctrl.signal.aborted) setSearchLoading(false);
+        });
+    }, MAP_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, showMap, isOpen]);
+
+  const getMapsApiKey = () =>
+    (import.meta.env.REACT_APP_OLA_MAPS_API_KEY as string | undefined) ||
+    (import.meta.env.VITE_OLA_MAPS_API_KEY as string | undefined) ||
+    '';
+
+  const upsertMarker = useCallback((lat: number, lng: number) => {
+    if (!mapRef.current) return;
+
+    if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+
+    const marker = new OlaMaps.Marker({ draggable: true })
+      .setLngLat([lng, lat])
+      .addTo(mapRef.current);
+
+    marker.on('dragend', () => {
+      const dragged = marker.getLngLat();
+      const draggedLat = Number(dragged.lat);
+      const draggedLng = Number(dragged.lng);
+      setCoords([draggedLat, draggedLng]);
+      fetchAddressFromMap(draggedLat, draggedLng);
+    });
+
+    markerRef.current = marker;
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
-    setShowMap(false);
+    const ed = editAddress as Record<string, any> | null | undefined;
+    const mapFirst = Boolean(startWithMap && !ed?.id);
+    setShowMap(mapFirst);
     setSearchQuery('');
     setErrorMsg(null);
-    const ed = editAddress as Record<string, any> | null | undefined;
     if (ed?.id) {
       setForm({
         label: String(ed.label || ''),
@@ -78,14 +186,90 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
         phone: digits10FromStored(ed.phone) || userPhone,
         altPhone: ed.altPhone ? digits10FromStored(ed.altPhone) : '',
       });
-      const lat = typeof ed.lat === 'number' ? ed.lat : 12.9716;
-      const lng = typeof ed.lng === 'number' ? ed.lng : 77.5946;
+      const pin = parseAddressLatLng(ed as { lat?: unknown; lng?: unknown });
+      const lat = pin?.lat ?? 12.9716;
+      const lng = pin?.lng ?? 77.5946;
       setCoords([lat, lng]);
     } else {
       setForm(emptyForm(userPhone));
       setCoords([12.9716, 77.5946]);
     }
-  }, [isOpen, editAddress, userPhone]);
+  }, [isOpen, editAddress, userPhone, startWithMap]);
+
+  useEffect(() => {
+    if (!isOpen || !showMap) return;
+
+    let disposed = false;
+
+    const initMap = async () => {
+      if (mapRef.current) return;
+
+      const apiKey = getMapsApiKey();
+      if (!apiKey) {
+        showError('Missing REACT_APP_OLA_MAPS_API_KEY.');
+        return;
+      }
+
+      try {
+        const [lat0, lng0] = coordsRef.current;
+        const olaMaps = new OlaMaps({ apiKey });
+        const map = await olaMaps.init({
+          style: 'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json',
+          container: mapContainerId,
+          center: [lng0, lat0],
+          zoom: 15,
+        });
+
+        if (disposed) {
+          map.remove();
+          return;
+        }
+
+        mapRef.current = map;
+        const [lat, lng] = coordsRef.current;
+        if (typeof map.jumpTo === 'function') {
+          map.jumpTo({ center: [lng, lat], zoom: 15, essential: true });
+        } else {
+          map.setCenter?.([lng, lat]);
+        }
+        upsertMarker(lat, lng);
+
+        map.on('click', (event: any) => {
+          const clickedLat = Number(event.lngLat.lat);
+          const clickedLng = Number(event.lngLat.lng);
+          setCoords([clickedLat, clickedLng]);
+          upsertMarker(clickedLat, clickedLng);
+          fetchAddressFromMap(clickedLat, clickedLng);
+        });
+      } catch {
+        showError('Unable to initialize map.');
+      }
+    };
+
+    initMap();
+
+    return () => {
+      disposed = true;
+      if (markerRef.current) {
+        markerRef.current.remove();
+        markerRef.current = null;
+      }
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [isOpen, showMap, mapContainerId, upsertMarker]);
+
+  useEffect(() => {
+    if (!showMap || !mapRef.current) return;
+    mapRef.current.flyTo({
+      center: [coords[1], coords[0]],
+      zoom: 15,
+      essential: true,
+    });
+    upsertMarker(coords[0], coords[1]);
+  }, [coords, showMap, upsertMarker]);
 
   if (!isOpen) return null;
 
@@ -111,41 +295,29 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
     setForm(prev => ({ ...prev, pincode: r.pincode, city: r.city, state: r.state }));
   };
 
-  const handleSearchLocation = async () => {
-    if (!searchQuery) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
-      if (data && data.length > 0) {
-        const newCoords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-        setCoords(newCoords);
-        setForm(prev => ({ ...prev, line1: data[0].display_name }));
-      } else {
-        showError('Location not found.');
-      }
-    } catch {
-      showError('Search failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const MapEvents = () => {
-    useMapEvents({
-      click(e: LeafletMouseEvent) {
-        setCoords([e.latlng.lat, e.latlng.lng]);
-        fetchAddressFromMap(e.latlng.lat, e.latlng.lng);
-      },
-    });
-    return <Marker position={coords} />;
-  };
-
   const fetchAddressFromMap = async (lat: number, lng: number) => {
     setLoading(true);
     try {
-      const formatted = await getAddressFromCoords(lat, lng);
-      setForm(prev => ({ ...prev, line1: formatted }));
+      const details = await getAddressDetailsFromCoords(lat, lng);
+      setForm(prev => ({
+        ...prev,
+        line1: details.line1 || prev.line1,
+        pincode: details.pincode || prev.pincode,
+        city: details.city || prev.city,
+        state: details.state || prev.state,
+      }));
+
+      if (details.pincode && isValidIndianPincode(details.pincode)) {
+        const lookup = await lookupIndianPincode(details.pincode);
+        if (lookup.ok) {
+          setForm(prev => ({
+            ...prev,
+            pincode: lookup.pincode,
+            city: lookup.city,
+            state: lookup.state,
+          }));
+        }
+      }
     } catch {
       showError('Could not fetch address.');
     } finally {
@@ -153,17 +325,52 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
     }
   };
 
-  const handleLiveLocation = async () => {
+  const handlePickSearchSuggestion = (place: PlaceSuggestion) => {
+    setSearchQuery('');
+    setSearchSuggestions([]);
+    setSearchHadNoResults(false);
+    setSearchFocused(false);
+    const next: [number, number] = [place.lat, place.lng];
+    coordsRef.current = next;
+    setCoords(next);
+    void fetchAddressFromMap(place.lat, place.lng);
+  };
+
+  const handleSearchEnter = () => {
+    if (searchSuggestions.length > 0) {
+      handlePickSearchSuggestion(searchSuggestions[0]);
+    }
+  };
+
+  const handleLiveLocation = async (openMap = false) => {
+    if (!navigator.geolocation) {
+      showError('Geolocation is not supported on this device.');
+      return;
+    }
+
     setLoading(true);
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const newCoords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-      setCoords(newCoords);
-      setShowMap(true);
-      fetchAddressFromMap(newCoords[0], newCoords[1]);
-    }, () => {
+    setErrorMsg(null);
+
+    try {
+      const { lat, lng, accuracyMeters } = await requestPrecisePosition();
+      const next: [number, number] = [lat, lng];
+      coordsRef.current = next;
+      setCoords(next);
+      if (openMap) setShowMap(true);
+      await fetchAddressFromMap(lat, lng);
+      if (accuracyMeters > 3500) {
+        showError('GPS accuracy is low — drag the pin on the map to your exact spot.');
+      }
+    } catch (err: unknown) {
+      const geo = err as GeolocationPositionError | undefined;
+      if (geo && geo.code === 1) {
+        showError('Location permission denied. Enable location for this site in your browser.');
+      } else {
+        showError('Could not detect location. Try again outdoors or tap the map to choose.');
+      }
+    } finally {
       setLoading(false);
-      showError('Location permission denied.');
-    });
+    }
   };
 
   const handleSave = async () => {
@@ -200,11 +407,23 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
     try {
       const payload = { ...merged, lat: coords[0], lng: coords[1], isMyAddress: true };
       const ed = editAddress as { id?: string } | null | undefined;
-      if (ed?.id) {
-        await updateAddress(ed.id, payload);
-      } else {
-        await addAddress(payload);
-      }
+      const apiResult = ed?.id
+        ? await updateAddress(ed.id, payload)
+        : await addAddress(payload);
+      const normalized: Record<string, unknown> = {
+        ...merged,
+        lat: coords[0],
+        lng: coords[1],
+        isMyAddress: true,
+        ...(typeof apiResult === 'object' && apiResult ? apiResult : {}),
+      };
+      if (!normalized.id && ed?.id) normalized.id = ed.id;
+      onAddressSaved?.(normalized);
+      window.dispatchEvent(
+        new CustomEvent(WEBSITE_DELIVERY_COORDS_CHANGED, {
+          detail: { lat: coords[0], lng: coords[1] },
+        }),
+      );
       setForm(emptyForm(userPhone));
       setShowMap(false);
       onClose();
@@ -238,24 +457,86 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
         {showMap ? (
           <div className="space-y-4">
             <div className="relative flex gap-2">
-              <input
-                className="flex-1 p-4 bg-slate-50 rounded-2xl border border-slate-100 outline-none focus:border-[#4b6f9e] font-bold text-sm"
-                placeholder="Search building or area..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchLocation()}
-              />
-              <button type="button" onClick={handleSearchLocation} className="bg-[#4b6f9e] text-white p-4 rounded-2xl hover:bg-[#1e293b] transition-colors">
-                <Search size={20} />
+              <div className="relative flex-1">
+                <input
+                  type="search"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 outline-none focus:border-[#4b6f9e] font-bold text-sm"
+                  placeholder="Search area (min 3 letters)..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => window.setTimeout(() => setSearchFocused(false), 180)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearchEnter()}
+                  aria-expanded={
+                    !!(
+                      searchFocused &&
+                      searchQuery.trim().length >= 3 &&
+                      (searchSuggestions.length > 0 ||
+                        searchLoading ||
+                        searchHadNoResults)
+                    )
+                  }
+                  aria-controls={`${mapContainerId}-search-list`}
+                  aria-autocomplete="list"
+                />
+                {searchFocused &&
+                  searchQuery.trim().length >= 3 &&
+                  (searchSuggestions.length > 0 ||
+                    searchLoading ||
+                    searchHadNoResults) && (
+                    <ul
+                      id={`${mapContainerId}-search-list`}
+                      role="listbox"
+                      className="absolute left-0 right-0 top-full z-[60] mt-1 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl"
+                    >
+                      {searchLoading && searchSuggestions.length === 0 && (
+                        <li
+                          className="px-4 py-3 text-xs font-bold text-slate-400"
+                          role="presentation"
+                        >
+                          Searching…
+                        </li>
+                      )}
+                      {!searchLoading &&
+                        searchHadNoResults &&
+                        searchSuggestions.length === 0 && (
+                          <li
+                            className="px-4 py-3 text-xs font-bold text-slate-400"
+                            role="presentation"
+                          >
+                            No suggestions — try another phrase or tap the map.
+                          </li>
+                        )}
+                      {searchSuggestions.map(place => (
+                        <li key={place.id} role="presentation">
+                          <button
+                            type="button"
+                            role="option"
+                            className="w-full px-4 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => handlePickSearchSuggestion(place)}
+                          >
+                            {place.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleLiveLocation(false)}
+                disabled={loading}
+                className="bg-[#4b6f9e] text-white px-4 rounded-2xl hover:bg-[#1e293b] transition-colors disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Use Current'}
               </button>
             </div>
 
             <div className="h-72 w-full rounded-[2rem] overflow-hidden border-4 border-slate-50 relative z-10">
-              <MapContainer center={coords} zoom={15} style={{ height: '100%', width: '100%' }}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <ChangeView center={coords} />
-                <MapEvents />
-              </MapContainer>
+              <div id={mapContainerId} style={{ height: '100%', width: '100%' }} />
             </div>
 
             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
@@ -275,7 +556,7 @@ const AddressModal: React.FC<AddressModalProps> = ({ isOpen, onClose, editAddres
           <div className="space-y-4">
             <button
               type="button"
-              onClick={handleLiveLocation}
+                onClick={() => handleLiveLocation(true)}
               className="w-full py-4 mb-2 rounded-2xl border-2 border-dashed border-[#4b6f9e] flex items-center justify-center gap-3 text-[#4b6f9e] font-bold bg-blue-50 hover:bg-blue-100 transition-all group"
             >
               {loading ? <Loader2 className="animate-spin" size={20}/> : <><MapPin size={18} className="group-hover:scale-110 transition-transform"/> Use Map to Locate</>}

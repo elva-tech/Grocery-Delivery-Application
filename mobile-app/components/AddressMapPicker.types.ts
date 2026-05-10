@@ -11,5 +11,7 @@ export type AddressMapPickerProps = {
   line1: string;
   isFetchingAddress: boolean;
   onRegionChangeComplete: (r: AddressMapRegion) => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
+  /** Back / close without confirming — avoids trapping the user on the map. */
+  onClose: () => void;
 };

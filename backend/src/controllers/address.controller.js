@@ -96,4 +96,28 @@ const updateAddress = async (req, res) => {
   }
 };
 
-module.exports = { listMyAddresses, createAddress, updateAddress };
+const deleteAddress = async (req, res) => {
+  try {
+    const address = await Address.findOneAndUpdate(
+      {
+        _id: req.params.addressId,
+        tenantId: req.user.tenantId,
+        userId: req.user.userId,
+        isActive: true,
+      },
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!address) {
+      return res.status(404).json({ success: false, message: "Address not found" });
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("deleteAddress error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+module.exports = { listMyAddresses, createAddress, updateAddress, deleteAddress };

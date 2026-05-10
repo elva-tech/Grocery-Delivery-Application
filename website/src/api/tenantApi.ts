@@ -1,11 +1,24 @@
 import { API_BASE_URL, getTenantId } from '../config';
 
+export interface TenantStoreAddressParts {
+  line1?: string;
+  line2?: string;
+  landmark?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+}
+
 export interface TenantDetails {
   success?: boolean;
   tenantId: string;
   storeName: string;
   logo?: string;
   storeAddress?: string;
+  storeAddressParts?: TenantStoreAddressParts;
+  /** Store hub coordinates — sent as MapService `points[]` for delivery distance. */
+  storeLat?: number | null;
+  storeLng?: number | null;
   contactEmail?: string;
   phoneNumber?: string;
   ownerName?: string;

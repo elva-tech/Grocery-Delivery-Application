@@ -1,3 +1,5 @@
+import { parseAddressLatLng } from './coordinates';
+
 const PIN_REGEX = /^[1-9]\d{5}$/;
 
 export function sanitizeIndianPincode(input: string): string {
@@ -34,6 +36,10 @@ export async function lookupIndianPincode(pin: string): Promise<PinLookupResult>
 }
 
 export function buildDeliveryAddressPayload(address: {
+  isMyAddress?: boolean;
+  recipientName?: string;
+  recipientPhone?: string;
+  phone?: string;
   line1?: string;
   line2?: string;
   landmark?: string;
@@ -45,15 +51,21 @@ export function buildDeliveryAddressPayload(address: {
   lng?: number;
 }) {
   const pincode = sanitizeIndianPincode(address?.pincode || '');
+  const recipientDigits = String(address?.recipientPhone || address?.phone || '')
+    .replace(/\D/g, '')
+    .slice(-10);
   return {
+    isMyAddress: address?.isMyAddress !== undefined ? Boolean(address.isMyAddress) : true,
+    recipientName: String(address?.recipientName || '').trim(),
+    recipientPhone: recipientDigits,
     line1: String(address?.line1 || address?.full || '').trim(),
     line2: String(address?.line2 || '').trim(),
     landmark: String(address?.landmark || '').trim(),
     city: String(address?.city || '').trim(),
     state: String(address?.state || '').trim(),
     pincode,
-    lat: typeof address?.lat === 'number' ? address.lat : 0,
-    lng: typeof address?.lng === 'number' ? address.lng : 0,
+    lat: parseAddressLatLng(address)?.lat ?? 0,
+    lng: parseAddressLatLng(address)?.lng ?? 0,
   };
 }
 
@@ -73,4 +85,22 @@ export function formatAddressSummary(a: {
     if (parts.length) return parts.join(' · ');
   }
   return (a.full || a.line1 || '').trim();
+}
+
+/** Home header “DELIVER TO” line — shows saved label + summary like the website header. */
+export function formatDeliverToDisplay(
+  addr:
+    | ({
+        label?: string;
+      } & Parameters<typeof formatAddressSummary>[0])
+    | null
+    | undefined,
+  fallback: string,
+): string {
+  if (!addr) return fallback;
+  const summary = formatAddressSummary(addr).trim() || String(addr.full || addr.line1 || '').trim();
+  const label = String(addr.label || '').trim();
+  if (label && summary) return `${label} · ${summary}`;
+  if (summary) return summary;
+  return fallback;
 }

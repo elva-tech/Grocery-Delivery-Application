@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   ActivityIndicator, Modal, KeyboardAvoidingView, Platform, ScrollView,
+  Keyboard, DeviceEventEmitter, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,11 +14,19 @@ import { useDispatch, useSelector } from 'react-redux';
 
 import AddressMapPicker from '@/components/AddressMapPicker';
 
-
 import { clearCart } from '@/store/slices/cartSlice';
 import { RootState } from '@/store/store';
 import { showToast } from '@/utils/toast';
-import { getAddresses, addAddress, getAddressFromCoordsDetailed } from '@/api/addresses';
+import {
+  getAddresses,
+  addAddress,
+  updateAddress,
+  deleteAddress,
+  getAddressFromCoordsDetailed,
+  setPreferredDeliveryAddressId,
+  getPreferredDeliveryAddressId,
+  PREFERRED_DELIVERY_ADDRESS_CHANGED,
+} from '@/api/addresses';
 import {
   placeOrderBackend,
   validateCouponApi,
@@ -33,6 +42,8 @@ import {
   lookupIndianPincode,
   sanitizeIndianPincode,
 } from '@/utils/indiaPincode';
+import { checkDeliveryEligibility } from '@/api/deliveryEligibilityApi';
+import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
 
 type OrderMode = 'self' | 'others';
 
@@ -81,6 +92,7 @@ export default function AddressesScreen() {
 
   const [orderMode, setOrderMode] = useState<OrderMode>('self');
   const [adding, setAdding] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressInputMode, setAddressInputMode] = useState<'auto' | 'manual'>('auto');
   const [showOthersModal, setShowOthersModal] = useState(false);
   const [othersForm, setOthersForm] = useState<OthersData>(EMPTY_OTHERS);
@@ -106,7 +118,137 @@ export default function AddressesScreen() {
   const [isFetchingAddress, setIsFetchingAddress] = useState(false);
   const geocodeAbortRef = useRef<AbortController | null>(null);
 
+  const [deliveryEligibility, setDeliveryEligibility] = useState<{
+    checking: boolean;
+    eligible: boolean | null;
+    message: string;
+    mapLink: string;
+  }>({ checking: false, eligible: null, message: '', mapLink: '' });
+  /** PIN-centered coords for “Someone else” — passed into orders after eligibility passes. */
+  const [othersGeo, setOthersGeo] = useState<{ lat: number; lng: number } | null>(null);
+
   useEffect(() => { load(); }, []);
+
+  /** Same probe as Home / Checkout — saved address or recipient PIN (geocoded). */
+  useEffect(() => {
+    let cancelled = false;
+
+    const applyProbeResult = (result: any) => {
+      const eligible =
+        typeof result?.isEligible === 'boolean'
+          ? result.isEligible
+          : typeof result?.eligible === 'boolean'
+            ? result.eligible
+            : false;
+      const mapLink =
+        (typeof result?.mapLink === 'string' && result.mapLink.trim()) ||
+        (typeof result?.map_link === 'string' && result.map_link.trim()) ||
+        '';
+      setDeliveryEligibility({
+        checking: false,
+        eligible,
+        message: typeof result?.message === 'string' ? result.message : '',
+        mapLink,
+      });
+    };
+
+    const run = async () => {
+      if (orderMode === 'others') {
+        if (!othersConfirmed) {
+          setOthersGeo(null);
+          setDeliveryEligibility({ checking: false, eligible: null, message: '', mapLink: '' });
+          return;
+        }
+        const p = sanitizeIndianPincode(othersForm.pincode);
+        if (!isValidIndianPincode(p)) {
+          setOthersGeo(null);
+          setDeliveryEligibility({ checking: false, eligible: null, message: '', mapLink: '' });
+          return;
+        }
+        setDeliveryEligibility(prev => ({ ...prev, checking: true, message: '', mapLink: '' }));
+        try {
+          const geos = await Location.geocodeAsync(`${p}, India`);
+          if (cancelled) return;
+          if (!geos || geos.length === 0) {
+            setOthersGeo(null);
+            setDeliveryEligibility({
+              checking: false,
+              eligible: null,
+              message: 'Could not locate this PIN for delivery check.',
+              mapLink: '',
+            });
+            return;
+          }
+          const { latitude: plat, longitude: plng } = geos[0];
+          if (!Number.isFinite(plat) || !Number.isFinite(plng)) {
+            setOthersGeo(null);
+            setDeliveryEligibility({
+              checking: false,
+              eligible: null,
+              message: 'Could not locate this PIN for delivery check.',
+              mapLink: '',
+            });
+            return;
+          }
+          setOthersGeo({ lat: plat, lng: plng });
+          const result = await checkDeliveryEligibility(plat, plng);
+          if (cancelled) return;
+          applyProbeResult(result);
+        } catch (e: unknown) {
+          if (cancelled) return;
+          setOthersGeo(null);
+          setDeliveryEligibility({
+            checking: false,
+            eligible: null,
+            message: e instanceof Error ? e.message : 'Could not verify delivery.',
+            mapLink: '',
+          });
+        }
+        return;
+      }
+
+      setOthersGeo(null);
+
+      if (!selectedId) {
+        setDeliveryEligibility({ checking: false, eligible: null, message: '', mapLink: '' });
+        return;
+      }
+      const sel = addresses.find((a: any) => String(a?.id) === String(selectedId));
+      if (!sel) {
+        setDeliveryEligibility({ checking: false, eligible: null, message: '', mapLink: '' });
+        return;
+      }
+      const lat = Number(sel.lat);
+      const lng = Number(sel.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+        setDeliveryEligibility({
+          checking: false,
+          eligible: null,
+          message:
+            'Add a map pin for this address (Use Current Location when editing) to verify delivery.',
+          mapLink: '',
+        });
+        return;
+      }
+      setDeliveryEligibility(prev => ({ ...prev, checking: true, message: '', mapLink: '' }));
+      try {
+        const result = await checkDeliveryEligibility(lat, lng);
+        if (cancelled) return;
+        applyProbeResult(result);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        setDeliveryEligibility({
+          checking: false,
+          eligible: null,
+          message: e instanceof Error ? e.message : 'Could not verify delivery.',
+        });
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [orderMode, selectedId, addresses, othersConfirmed, othersForm.pincode]);
 
   useEffect(() => {
     if (items && items.length > 0) {
@@ -121,11 +263,92 @@ export default function AddressesScreen() {
       setLoadingAddresses(true);
       const data = await getAddresses();
       setAddresses(data);
+      const pref = await getPreferredDeliveryAddressId();
+      if (data.length === 0) {
+        await setPreferredDeliveryAddressId(null);
+        setSelectedId(null);
+      } else if (pref && data.some((a: any) => a?.id === pref)) {
+        setSelectedId(pref);
+      } else {
+        const fallback = (data.find((a: any) => a?.isDefault) || data[0]) as { id: string };
+        setSelectedId(fallback.id);
+        await setPreferredDeliveryAddressId(fallback.id);
+      }
     } catch {
       showToast('error', 'Error', 'Could not load addresses');
     } finally {
       setLoadingAddresses(false);
     }
+  };
+
+  const clearPersonalAddressEditor = () => {
+    setEditingAddressId(null);
+    setAdding(false);
+    setLabel('');
+    setLine1('');
+    setLine2('');
+    setLandmark('');
+    setCity('');
+    setStateField('');
+    setPincode('');
+    setPhone((user?.phone || '').replace(/^\+91\s*/, ''));
+    setAddrLat(0);
+    setAddrLng(0);
+    setRegion(null);
+    setAddressInputMode('auto');
+  };
+
+  const startEditAddress = (addr: any) => {
+    const lat = Number(addr.lat);
+    const lng = Number(addr.lng);
+    const hasPin = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+    setEditingAddressId(String(addr.id));
+    setAddressInputMode(hasPin ? 'auto' : 'manual');
+    setLabel(String(addr.label || ''));
+    setLine1(String(addr.line1 || ''));
+    setLine2(String(addr.line2 || ''));
+    setLandmark(String(addr.landmark || ''));
+    setCity(String(addr.city || ''));
+    setStateField(String(addr.state || ''));
+    setPincode(String(addr.pincode || '').replace(/\D/g, '').slice(0, 6));
+    setPhone(String(addr.phone || '').replace(/^\+91\s*/, '').replace(/\D/g, '').slice(-10));
+    setAddrLat(hasPin ? lat : 0);
+    setAddrLng(hasPin ? lng : 0);
+    if (hasPin) {
+      setRegion({
+        latitude: lat,
+        longitude: lng,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      });
+    } else {
+      setRegion(null);
+    }
+    setAdding(true);
+  };
+
+  const confirmDeleteAddress = (addr: any) => {
+    Alert.alert(
+      'Delete address',
+      `Remove "${addr.label || 'this address'}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAddress(String(addr.id));
+              await load();
+              DeviceEventEmitter.emit(PREFERRED_DELIVERY_ADDRESS_CHANGED);
+              showToast('success', 'Removed', 'Address deleted');
+            } catch (e: any) {
+              showToast('error', 'Error', e?.message || 'Could not delete');
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleAddPersonal = async () => {
@@ -146,8 +369,51 @@ export default function AddressesScreen() {
         setIsSaving(false);
         return;
       }
-      const lat = region?.latitude ?? addrLat;
-      const lng = region?.longitude ?? addrLng;
+      // Same as website AddressModal save: lat/lng come from the MAP PIN / GPS session, not from landmark text or PIN-only guesswork.
+      let lat = Number(addrLat);
+      let lng = Number(addrLng);
+      const hasMapPin =
+        Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+
+      if (!hasMapPin) {
+        const rl = region?.latitude;
+        const rlng = region?.longitude;
+        if (Number.isFinite(rl) && Number.isFinite(rlng) && ((rl as number) !== 0 || (rlng as number) !== 0)) {
+          lat = rl as number;
+          lng = rlng as number;
+        }
+      }
+
+      const stillNeedCoords =
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng) ||
+        (lat === 0 && lng === 0);
+
+      // Manual-only fallback: user never opened the map — approximate from PIN (less accurate than a pin).
+      if (stillNeedCoords && addressInputMode === 'manual') {
+        try {
+          const geos = await Location.geocodeAsync(`${lookup.pincode}, India`);
+          if (Array.isArray(geos) && geos.length > 0) {
+            const g = geos[0];
+            if (Number.isFinite(g.latitude) && Number.isFinite(g.longitude)) {
+              lat = g.latitude;
+              lng = g.longitude;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+        showToast(
+          'error',
+          'Pin on map',
+          'Use Current Location and adjust the map pin to your spot — delivery uses that latitude/longitude (same as the website).',
+        );
+        setIsSaving(false);
+        return;
+      }
       const full = formatAddressSummary({
         line1,
         line2,
@@ -156,7 +422,7 @@ export default function AddressesScreen() {
         state: lookup.state,
         pincode: lookup.pincode,
       });
-      const newAddr = await addAddress({
+      const patch = {
         label,
         line1,
         line2,
@@ -168,20 +434,23 @@ export default function AddressesScreen() {
         phone,
         lat,
         lng,
-      });
-      setAddresses(prev => [...prev, newAddr]);
-      setSelectedId(newAddr.id);
-      setAdding(false);
-      setLabel('');
-      setLine1('');
-      setLine2('');
-      setLandmark('');
-      setCity('');
-      setStateField('');
-      setPincode('');
-      setPhone((user?.phone || '').replace(/^\+91\s*/, ''));
-      setAddrLat(0);
-      setAddrLng(0);
+      };
+
+      if (editingAddressId) {
+        const updated = await updateAddress(editingAddressId, patch);
+        setAddresses(prev => prev.map(a => (String(a.id) === editingAddressId ? updated : a)));
+        setSelectedId(editingAddressId);
+        await setPreferredDeliveryAddressId(editingAddressId);
+        DeviceEventEmitter.emit(PREFERRED_DELIVERY_ADDRESS_CHANGED);
+      } else {
+        const newAddr = await addAddress(patch);
+        setAddresses(prev => [...prev, newAddr]);
+        setSelectedId(newAddr.id);
+        await setPreferredDeliveryAddressId(newAddr.id);
+        DeviceEventEmitter.emit(PREFERRED_DELIVERY_ADDRESS_CHANGED);
+      }
+
+      clearPersonalAddressEditor();
     } catch (e: any) {
       showToast('error', 'Save Failed', e?.message || 'Error');
     } finally {
@@ -228,6 +497,15 @@ export default function AddressesScreen() {
   const couponDiscount = appliedCoupon?.discountAmount ?? 0;
   const finalAmount = Math.max(0, bill.grandTotal - couponDiscount);
 
+  const deliveryGateActive =
+    (orderMode === 'self' && Boolean(selectedId)) || (orderMode === 'others' && othersConfirmed);
+
+  const deliveryPayBlocked =
+    deliveryGateActive &&
+    (deliveryEligibility.checking ||
+      deliveryEligibility.eligible === false ||
+      (deliveryEligibility.eligible === null && Boolean(deliveryEligibility.message.trim())));
+
   const handleApplyCoupon = async () => {
     if (!couponInput.trim()) return;
     if (!token) { showToast('error', 'Session Expired', 'Please log in again'); return; }
@@ -261,6 +539,29 @@ export default function AddressesScreen() {
       showToast('error', 'Required', 'Select a delivery address');
       return;
     }
+    if (deliveryGateActive) {
+      if (deliveryEligibility.checking) {
+        showToast('info', 'Please wait', 'Checking delivery for this address…');
+        return;
+      }
+      if (deliveryEligibility.eligible === false) {
+        showToast(
+          'error',
+          MOBILE_COPY.delivery.unavailableToastTitle,
+          customerFacingDeliveryUnavailable(deliveryEligibility.message) ||
+            MOBILE_COPY.delivery.checkoutBlockedHint,
+        );
+        return;
+      }
+      if (deliveryEligibility.eligible === null && deliveryEligibility.message.trim()) {
+        showToast(
+          'error',
+          MOBILE_COPY.home.deliveryCheckUnavailableTitle,
+          deliveryEligibility.message,
+        );
+        return;
+      }
+    }
     if (orderMode === 'others' && !othersConfirmed) {
       showToast('error', 'Required', 'Enter recipient details');
       return;
@@ -284,8 +585,12 @@ export default function AddressesScreen() {
               city: othersForm.city,
               state: othersForm.state,
               pincode: othersForm.pincode,
-              lat: 0,
-              lng: 0,
+              recipientName: othersForm.recipientName,
+              recipientPhone: othersForm.recipientPhone,
+              phone: othersForm.recipientPhone,
+              isMyAddress: false,
+              lat: othersGeo?.lat ?? 0,
+              lng: othersGeo?.lng ?? 0,
             };
 
       if (!deliverySource) {
@@ -294,11 +599,15 @@ export default function AddressesScreen() {
         return;
       }
 
+      const addrPayload = buildDeliveryAddressPayload(deliverySource);
       const order = await placeOrderBackend(
         {
           items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
           paymentMode: 'ONLINE',
-          deliveryAddress: buildDeliveryAddressPayload(deliverySource),
+          deliveryAddress: {
+            ...addrPayload,
+            addressUrl: deliveryEligibility.mapLink || '',
+          },
           couponCode: appliedCoupon?.code ?? null,
         },
         token,
@@ -378,6 +687,18 @@ export default function AddressesScreen() {
     }
   };
 
+  /** Only captures pin + reverse-geocoded fields. Delivery eligibility runs on Home / Checkout (like storefront). */
+  const handleMapConfirm = () => {
+    const lat = addrLat;
+    const lng = addrLng;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+      showToast('error', 'Location', 'Pick a spot on the map first.');
+      return;
+    }
+    Keyboard.dismiss();
+    setShowMap(false);
+  };
+
   const fetchAddressFromBackend = useCallback(async (lat: number, lng: number) => {
     geocodeAbortRef.current?.abort();
     const controller = new AbortController();
@@ -406,8 +727,8 @@ export default function AddressesScreen() {
   const handleUseLocation = async () => {
     // Match website UX: choosing current location should open the address form immediately.
     if (!adding) setAdding(true);
-    // Always keep Address Type user-entered (never auto-detected).
-    setLabel('');
+    // Fresh flow clears label; editing keeps the user's saved label.
+    if (!editingAddressId) setLabel('');
     setMapLoading(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -471,7 +792,7 @@ export default function AddressesScreen() {
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         {adding ? (
           <View style={styles.formContainer}>
-            <Text style={styles.formTitle}>New Personal Address</Text>
+            <Text style={styles.formTitle}>{editingAddressId ? 'Edit Personal Address' : 'New Personal Address'}</Text>
             <Text style={styles.formSubtitle}>Choose how you want to add address details</Text>
 
             <View style={styles.inputModeWrap}>
@@ -632,11 +953,15 @@ export default function AddressesScreen() {
             />
 
             <View style={styles.row}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setAdding(false)}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={clearPersonalAddressEditor}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleAddPersonal} disabled={isSaving}>
-                {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save & Select</Text>}
+                {isSaving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.saveBtnText}>{editingAddressId ? 'Update & Select' : 'Save & Select'}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -649,22 +974,80 @@ export default function AddressesScreen() {
                   <ActivityIndicator style={{ marginTop: 20 }} />
                 ) : (
                   addresses.map(addr => (
-                    <TouchableOpacity
+                    <View
                       key={addr.id}
                       style={[styles.addrCard, selectedId === addr.id && styles.addrSelected]}
-                      onPress={() => setSelectedId(addr.id)}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.addrLabel}>{addr.label}</Text>
-                        <Text style={styles.addrFull}>{formatAddressSummary(addr)}</Text>
+                      <TouchableOpacity
+                        style={styles.addrCardMain}
+                        onPress={() => {
+                          setSelectedId(addr.id);
+                          void setPreferredDeliveryAddressId(addr.id);
+                          DeviceEventEmitter.emit(PREFERRED_DELIVERY_ADDRESS_CHANGED);
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.addrLabel}>{addr.label}</Text>
+                          <Text style={styles.addrFull}>{formatAddressSummary(addr)}</Text>
+                        </View>
+                        {selectedId === addr.id ? (
+                          <Ionicons name="checkmark-circle" size={24} color="#4b6f9e" />
+                        ) : null}
+                      </TouchableOpacity>
+                      <View style={styles.addrCardToolbar}>
+                        <TouchableOpacity
+                          style={styles.addrToolbarBtn}
+                          onPress={() => startEditAddress(addr)}
+                          accessibilityLabel="Edit address"
+                        >
+                          <Ionicons name="pencil-outline" size={18} color="#4b6f9e" />
+                          <Text style={styles.addrToolbarBtnText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.addrToolbarBtn}
+                          onPress={() => confirmDeleteAddress(addr)}
+                          accessibilityLabel="Delete address"
+                        >
+                          <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                          <Text style={[styles.addrToolbarBtnText, styles.addrToolbarBtnDanger]}>Delete</Text>
+                        </TouchableOpacity>
                       </View>
-                      {selectedId === addr.id && <Ionicons name="checkmark-circle" size={24} color="#4b6f9e" />}
-                    </TouchableOpacity>
+                    </View>
                   ))
                 )}
+                {orderMode === 'self' && selectedId && !loadingAddresses ? (
+                  <>
+                    {deliveryEligibility.checking ? (
+                      <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrNeutral]}>
+                        <ActivityIndicator size="small" color="#4b6f9e" />
+                        <Text style={styles.deliveryBannerAddrText}>Checking delivery for this address…</Text>
+                      </View>
+                    ) : deliveryEligibility.eligible === false ? (
+                      <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrBad]}>
+                        <Ionicons name="alert-circle" size={18} color="#dc2626" />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.deliveryBannerAddrTitle}>
+                            {MOBILE_COPY.home.deliveryUnavailableTitle}
+                          </Text>
+                          <Text style={styles.deliveryBannerAddrSub}>
+                            {customerFacingDeliveryUnavailable(deliveryEligibility.message)}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : deliveryEligibility.eligible === null && deliveryEligibility.message ? (
+                      <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrWarn]}>
+                        <Ionicons name="information-circle-outline" size={18} color="#b45309" />
+                        <Text style={styles.deliveryBannerAddrWarnText}>{deliveryEligibility.message}</Text>
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
                 <TouchableOpacity
                   style={styles.addNewPersonalBtn}
                   onPress={() => {
+                    setEditingAddressId(null);
+                    clearPersonalAddressEditor();
                     setAddressInputMode('auto');
                     setAdding(true);
                   }}
@@ -675,18 +1058,41 @@ export default function AddressesScreen() {
               </View>
             ) : (
               othersConfirmed && (
-                <View style={styles.othersSummaryCard}>
-                  <View style={styles.othersSummaryHeader}>
-                    <Ionicons name="gift-outline" size={20} color="#4b6f9e" />
-                    <Text style={styles.othersSummaryTitle}>RECIPIENT DETAILS</Text>
+                <>
+                  <View style={styles.othersSummaryCard}>
+                    <View style={styles.othersSummaryHeader}>
+                      <Ionicons name="gift-outline" size={20} color="#4b6f9e" />
+                      <Text style={styles.othersSummaryTitle}>RECIPIENT DETAILS</Text>
+                    </View>
+                    <Text style={styles.othersSummaryName}>{othersForm.recipientName} • {othersForm.recipientPhone}</Text>
+                    <Text style={styles.othersSummaryAddr}>{formatAddressSummary(othersForm)}</Text>
+                    {othersForm.landmark ? <Text style={styles.othersSummaryLandmark}>Near: {othersForm.landmark}</Text> : null}
+                    <TouchableOpacity style={styles.editOthersBtn} onPress={() => setShowOthersModal(true)}>
+                      <Text style={styles.editOthersText}>Edit Details</Text>
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.othersSummaryName}>{othersForm.recipientName} • {othersForm.recipientPhone}</Text>
-                  <Text style={styles.othersSummaryAddr}>{formatAddressSummary(othersForm)}</Text>
-                  {othersForm.landmark ? <Text style={styles.othersSummaryLandmark}>Near: {othersForm.landmark}</Text> : null}
-                  <TouchableOpacity style={styles.editOthersBtn} onPress={() => setShowOthersModal(true)}>
-                    <Text style={styles.editOthersText}>Edit Details</Text>
-                  </TouchableOpacity>
-                </View>
+                  {deliveryEligibility.checking ? (
+                    <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrNeutral]}>
+                      <ActivityIndicator size="small" color="#4b6f9e" />
+                      <Text style={styles.deliveryBannerAddrText}>Checking delivery to recipient PIN…</Text>
+                    </View>
+                  ) : deliveryEligibility.eligible === false ? (
+                    <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrBad]}>
+                      <Ionicons name="alert-circle" size={18} color="#dc2626" />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.deliveryBannerAddrTitle}>{MOBILE_COPY.home.deliveryUnavailableTitle}</Text>
+                        <Text style={styles.deliveryBannerAddrSub}>
+                          {customerFacingDeliveryUnavailable(deliveryEligibility.message)}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : deliveryEligibility.eligible === null && deliveryEligibility.message ? (
+                    <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrWarn]}>
+                      <Ionicons name="information-circle-outline" size={18} color="#b45309" />
+                      <Text style={styles.deliveryBannerAddrWarnText}>{deliveryEligibility.message}</Text>
+                    </View>
+                  ) : null}
+                </>
               )
             )}
           </View>
@@ -752,10 +1158,14 @@ export default function AddressesScreen() {
 
     {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
 
-    <TouchableOpacity 
-      style={[styles.confirmBtn, isPlacingOrder && { opacity: 0.8 }]} 
-      onPress={handleFinalConfirm} 
-      disabled={isPlacingOrder}
+    <TouchableOpacity
+      style={[
+        styles.confirmBtn,
+        isPlacingOrder && { opacity: 0.85 },
+        deliveryPayBlocked && styles.confirmBtnDisabled,
+      ]}
+      onPress={handleFinalConfirm}
+      disabled={isPlacingOrder || deliveryPayBlocked}
       activeOpacity={0.85}
     >
       <View style={styles.confirmBtnInner}>
@@ -765,11 +1175,27 @@ export default function AddressesScreen() {
           <>
             <View style={styles.confirmBtnLeft}>
               <Text style={styles.confirmBtnItemCount}>{items.length} item{items.length > 1 ? 's' : ''}</Text>
-              <Text style={styles.confirmBtnText}>Pay & Place Order</Text>
+              <Text style={[styles.confirmBtnText, deliveryPayBlocked && styles.confirmBtnTextMuted]}>
+                {deliveryGateActive && deliveryEligibility.checking
+                  ? 'Checking delivery…'
+                  : deliveryGateActive && deliveryEligibility.eligible === false
+                    ? 'Outside delivery area'
+                    : deliveryGateActive &&
+                        deliveryEligibility.eligible === null &&
+                        deliveryEligibility.message.trim()
+                      ? 'Verify recipient PIN'
+                      : 'Pay & Place Order'}
+              </Text>
             </View>
             <View style={styles.confirmBtnRight}>
-              <Text style={styles.confirmBtnAmount}>₹{finalAmount}</Text>
-              <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.8)" />
+              <Text style={[styles.confirmBtnAmount, deliveryPayBlocked && styles.confirmBtnTextMuted]}>
+                ₹{finalAmount}
+              </Text>
+              <Ionicons
+                name="arrow-forward-circle"
+                size={22}
+                color={deliveryPayBlocked ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.8)'}
+              />
             </View>
           </>
         )}
@@ -908,7 +1334,11 @@ export default function AddressesScreen() {
           setAddrLng(r.longitude);
           fetchAddressFromBackend(r.latitude, r.longitude);
         }}
-        onConfirm={() => setShowMap(false)}
+        onConfirm={handleMapConfirm}
+        onClose={() => {
+          Keyboard.dismiss();
+          setShowMap(false);
+        }}
       />
     </SafeAreaView>
   );
@@ -924,7 +1354,30 @@ const styles = StyleSheet.create({
   modeBtnText: { color: '#64748b', fontWeight: '600' },
   modeBtnTextActive: { color: '#fff' },
   sectionLabel: { marginHorizontal: 16, fontSize: 12, fontWeight: '800', color: '#94a3b8', marginBottom: 12, textTransform: 'uppercase' },
-  addrCard: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 10, padding: 16, borderRadius: 12, borderWidth: 1.5, borderColor: '#f1f5f9' },
+  addrCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#f1f5f9',
+    overflow: 'hidden',
+  },
+  addrCardMain: { flexDirection: 'row', alignItems: 'flex-start', padding: 16, gap: 10 },
+  addrCardToolbar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#fafbfc',
+  },
+  addrToolbarBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addrToolbarBtnText: { fontSize: 13, fontWeight: '700', color: '#4b6f9e' },
+  addrToolbarBtnDanger: { color: '#dc2626' },
   addrSelected: { borderColor: '#4b6f9e', backgroundColor: '#f0f7ff' },
   addrLabel: { fontWeight: '700', fontSize: 15, color: '#1e293b' },
   addrFull: { fontSize: 13, color: '#64748b', marginTop: 4 },
@@ -1025,7 +1478,36 @@ const styles = StyleSheet.create({
   emptyCartSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
   emptyCartBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#dde6f0' },
   emptyCartBtnText: { fontSize: 13, fontWeight: '700', color: '#4b6f9e' },
+  deliveryBannerAddr: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  deliveryBannerAddrNeutral: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+  },
+  deliveryBannerAddrBad: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  deliveryBannerAddrWarn: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  deliveryBannerAddrText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#64748b' },
+  deliveryBannerAddrTitle: { fontSize: 13, fontWeight: '800', color: '#991b1b' },
+  deliveryBannerAddrSub: { fontSize: 12, fontWeight: '600', color: '#991b1b', marginTop: 4, lineHeight: 17 },
+  deliveryBannerAddrWarnText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 17 },
+
   confirmBtn: { backgroundColor: '#4b6f9e', borderRadius: 16, shadowColor: '#4b6f9e', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
+  confirmBtnDisabled: { backgroundColor: '#94a3b8', shadowOpacity: 0.08, elevation: 2 },
+  confirmBtnTextMuted: { opacity: 0.85 },
   confirmBtnInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 20 },
   confirmBtnLeft: { flexDirection: 'column' },
   confirmBtnItemCount: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },

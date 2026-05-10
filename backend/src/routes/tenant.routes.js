@@ -1,7 +1,7 @@
 const express      = require("express");
 const router       = express.Router();
 const { authMiddleware, adminOnly } = require("../middleware/auth.middleware");
-const { createTenant, getTenantDetails, getAccountStatus, updateTenantSupportContact, getTenantByCode } = require("../controllers/tenant.controller");
+const { createTenant, getTenantDetails, getAccountStatus, updateTenantSupportContact, updateTenantStoreLocation, getTenantByCode } = require("../controllers/tenant.controller");
 
 // Public — no auth required (this IS how an admin account first gets created)
 router.post("/create", createTenant);
@@ -17,5 +17,8 @@ router.get("/account-status", authMiddleware, getAccountStatus);
 
 // Admin only — customer-facing support email / phone / hours
 router.patch("/support-contact", authMiddleware, adminOnly, updateTenantSupportContact);
+
+// Admin only — storefront hub lat/lng for delivery eligibility (MapService destinations)
+router.patch("/store-location", authMiddleware, adminOnly, updateTenantStoreLocation);
 
 module.exports = router;

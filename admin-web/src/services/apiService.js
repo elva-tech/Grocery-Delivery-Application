@@ -380,5 +380,13 @@ deleteBanner: async (id) => {
     return res.data;
   },
 
+  updateTenantStoreLocation: async ({ storeLat, storeLng }) => {
+    const res = await api.patch("/api/tenant/store-location", {
+      storeLat,
+      storeLng,
+    });
+    return res.data;
+  },
+
 };
 

@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { createTenant, uploadLogo } from '../api/superApi';
+import StoreHubMapPicker from '../components/StoreHubMapPicker';
 import {
   sanitizeIndianPincode,
   isValidIndianPincode,
   lookupIndianPincode,
   formatStoreAddressFromParts,
+  geocodeApproxFromIndianPincode,
 } from '../utils/indiaPincode';
 
 const PLANS = ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'];
@@ -16,6 +18,29 @@ const STEPS = [
   { n: 3, label: 'Support' },
   { n: 4, label: 'Configuration' },
 ];
+
+function hasValidHubCoords(la, ln) {
+  return (
+    typeof la === 'number' &&
+    typeof ln === 'number' &&
+    Number.isFinite(la) &&
+    Number.isFinite(ln) &&
+    (la !== 0 || ln !== 0)
+  );
+}
+
+/** Prefer map picker; if missing, approximate from PIN via Nominatim (no paid `/process`). */
+async function resolveHubCoords(form, setForm) {
+  let la = form.storeLat;
+  let ln = form.storeLng;
+  if (hasValidHubCoords(la, ln)) return { lat: la, lng: ln };
+  const g = await geocodeApproxFromIndianPincode(form.pincode);
+  if (g) {
+    setForm((f) => ({ ...f, storeLat: g.lat, storeLng: g.lng }));
+    return g;
+  }
+  return null;
+}
 
 const initialForm = () => ({
   tenantId: '',
@@ -30,6 +55,9 @@ const initialForm = () => ({
   city: '',
   state: '',
   pincode: '',
+  /** Delivery hub — set via map or PIN fallback */
+  storeLat: null,
+  storeLng: null,
   supportEmail: '',
   supportPhone: '',
   supportHours: '',
@@ -185,7 +213,7 @@ export default function CreateStorePage() {
     return null;
   };
 
-  const goNext = () => {
+  const goNext = async () => {
     setError('');
     if (step === 1) {
       const e = validateStep1();
@@ -198,6 +226,13 @@ export default function CreateStorePage() {
       const e = validateStep2();
       if (e) {
         setError(e);
+        return;
+      }
+      const hub = await resolveHubCoords(form, setForm);
+      if (!hub) {
+        setError(
+          'Set the store hub on the map or tap “Centre map from PIN”. This PIN could not be located automatically — place the pin manually.',
+        );
         return;
       }
       setStep(3);
@@ -240,6 +275,14 @@ export default function CreateStorePage() {
 
     setLoading(true);
     try {
+      const hub = await resolveHubCoords(form, setForm);
+      if (!hub) {
+        setError(
+          'Store hub coordinates are missing — go back to Owner & address, set the map pin or fix the PIN.',
+        );
+        setLoading(false);
+        return;
+      }
       const storeAddress = formatStoreAddressFromParts({
         line1: form.addressLine1,
         line2: form.addressLine2,
@@ -248,12 +291,23 @@ export default function CreateStorePage() {
         state: form.state,
         pincode: form.pincode,
       });
+      const storeAddressParts = {
+        line1: form.addressLine1,
+        line2: form.addressLine2,
+        landmark: form.landmark,
+        city: form.city,
+        state: form.state,
+        pincode: sanitizeIndianPincode(form.pincode),
+      };
       const data = await createTenant({
         storeName: form.storeName,
         ownerName: form.ownerName,
         phoneNumber: form.phoneNumber.replace(/\D/g, '').slice(-10),
         tenantId: form.tenantId,
         storeAddress,
+        storeLat: hub.lat,
+        storeLng: hub.lng,
+        storeAddressParts,
         contactEmail: form.contactEmail,
         plan: form.plan,
         logo: logoUrl,
@@ -460,6 +514,21 @@ export default function CreateStorePage() {
               )}
               <InputField label="City" required placeholder="Auto-filled from PIN when possible" value={form.city} onChange={set('city')} />
               <InputField label="State" required placeholder="Auto-filled from PIN when possible" value={form.state} onChange={set('state')} />
+
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wide">Store delivery hub</h3>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Exact location used for customer delivery radius (tenant <span className="font-mono">storeLat</span> /{' '}
+                  <span className="font-mono">storeLng</span>). Uses OpenStreetMap only — no paid routing API.
+                </p>
+                <StoreHubMapPicker
+                  lat={typeof form.storeLat === 'number' ? form.storeLat : undefined}
+                  lng={typeof form.storeLng === 'number' ? form.storeLng : undefined}
+                  pincode={form.pincode}
+                  onChange={({ lat, lng }) => setForm((f) => ({ ...f, storeLat: lat, storeLng: lng }))}
+                />
+              </div>
+
               <div className="flex justify-between pt-2 gap-3">
                 <button type="button" onClick={goBack} className="px-6 py-2.5 text-sm border border-gray-300 rounded-xl text-gray-600 hover:bg-gray-50">
                   Back

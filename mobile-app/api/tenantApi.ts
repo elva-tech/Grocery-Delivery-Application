@@ -1,5 +1,14 @@
-import { API_BASE_URL } from '@/src/config/constants';
+import { ACTIVE_API_URL } from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
+
+export interface TenantStoreAddressParts {
+  line1?: string;
+  line2?: string;
+  landmark?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+}
 
 export interface TenantDetails {
   success?: boolean;
@@ -7,6 +16,7 @@ export interface TenantDetails {
   storeName: string;
   logo?: string;
   storeAddress?: string;
+  storeAddressParts?: TenantStoreAddressParts;
   contactEmail?: string;
   phoneNumber?: string;
   ownerName?: string;
@@ -21,6 +31,9 @@ export interface TenantDetails {
   supportEmail?: string;
   supportPhone?: string;
   supportHours?: string;
+  /** Store hub for map distance / delivery eligibility */
+  storeLat?: number | null;
+  storeLng?: number | null;
 }
 
 /** Public GET /api/tenant/details — same contract as customer website. */
@@ -30,7 +43,7 @@ export async function fetchTenantDetails(): Promise<TenantDetails> {
     throw new Error('Tenant not configured');
   }
 
-  const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/tenant/details`, {
+  const res = await fetch(`${ACTIVE_API_URL}/api/tenant/details`, {
     headers: { 'x-tenant-id': tenantId },
   });
 

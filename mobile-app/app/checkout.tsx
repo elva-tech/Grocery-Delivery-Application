@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,9 +16,11 @@ import {
   verifyMobilePayment,
 } from '@/api/ordersApi';
 import { getCartCalculation } from '@/api/cartApi';
-import { getAddresses } from '@/api/addresses';
+import { getAddresses, pickPreferredSavedAddress } from '@/api/addresses';
+import { checkDeliveryEligibility } from '@/api/deliveryEligibilityApi';
 import { buildDeliveryAddressPayload, formatAddressSummary } from '@/utils/indiaPincode';
 import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
+import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
 import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
@@ -35,6 +38,13 @@ export default function CheckoutScreen() {
   const [couponError, setCouponError] = useState('');
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isPlacing, setIsPlacing] = useState(false);
+  const [deliveryEligibility, setDeliveryEligibility] = useState<{
+    checking: boolean;
+    eligible: boolean | null;
+    message: string;
+    /** From same `/process` response used for eligibility (sent as `addressUrl` on place order). */
+    mapLink: string;
+  }>({ checking: false, eligible: null, message: '', mapLink: '' });
 
   const { data: storeStatus } = useGetStoreStatusQuery();
   const isStoreClosed = storeStatus?.isClosed ?? false;
@@ -42,11 +52,100 @@ export default function CheckoutScreen() {
   useEffect(() => {
     if (items.length === 0) { router.replace('/(tabs)'); return; }
     getCartCalculation(items).then(setBill).catch(() => {});
-    getAddresses().then(list => { if (list.length > 0) setSelectedAddress(list[0]); }).catch(() => {});
+    getAddresses()
+      .then(async list => {
+        if (list.length === 0) return;
+        const sel = await pickPreferredSavedAddress(list);
+        setSelectedAddress(sel || list[0]);
+      })
+      .catch(() => {});
   }, [items]);
+
+  /** After changing address on the Addresses tab, reload preferred address when returning here. */
+  useFocusEffect(
+    useCallback(() => {
+      if (items.length === 0) return;
+      let cancelled = false;
+      getAddresses()
+        .then(async list => {
+          if (cancelled) return;
+          if (list.length === 0) {
+            setSelectedAddress(null);
+            return;
+          }
+          const sel = await pickPreferredSavedAddress(list);
+          if (!cancelled) setSelectedAddress(sel || list[0]);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [items.length]),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!selectedAddress) {
+        setDeliveryEligibility({ checking: false, eligible: null, message: '', mapLink: '' });
+        return;
+      }
+      const lat = Number(selectedAddress.lat);
+      const lng = Number(selectedAddress.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+        setDeliveryEligibility({
+          checking: false,
+          eligible: null,
+          message: 'Add a map pin for this address (Use Current Location on Addresses) to verify delivery.',
+          mapLink: '',
+        });
+        return;
+      }
+      setDeliveryEligibility(prev => ({ ...prev, checking: true, message: '', mapLink: '' }));
+      try {
+        const result = await checkDeliveryEligibility(lat, lng);
+        if (cancelled) return;
+        const eligible =
+          typeof result.isEligible === 'boolean'
+            ? result.isEligible
+            : typeof result.eligible === 'boolean'
+              ? result.eligible
+              : false;
+        const mapLink =
+          (typeof result.mapLink === 'string' && result.mapLink.trim()) ||
+          (typeof (result as { map_link?: string }).map_link === 'string' &&
+            (result as { map_link: string }).map_link.trim()) ||
+          '';
+        setDeliveryEligibility({
+          checking: false,
+          eligible,
+          message: typeof result.message === 'string' ? result.message : '',
+          mapLink,
+        });
+      } catch (e: unknown) {
+        if (cancelled) return;
+        setDeliveryEligibility({
+          checking: false,
+          eligible: null,
+          message: e instanceof Error ? e.message : 'Could not verify delivery.',
+          mapLink: '',
+        });
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAddress]);
 
   const couponDiscount = appliedCoupon?.discountAmount ?? 0;
   const finalAmount = Math.max(0, bill.grandTotal - couponDiscount);
+
+  const deliveryBlocksPay =
+    deliveryEligibility.checking ||
+    deliveryEligibility.eligible === false ||
+    (deliveryEligibility.eligible === null &&
+      deliveryEligibility.message.toLowerCase().includes('map pin'));
 
   const handleApplyCoupon = async () => {
     if (!couponInput.trim() || !token) return;
@@ -73,14 +172,38 @@ export default function CheckoutScreen() {
       showToast('error', 'Address required', 'Add a delivery address in Addresses first.');
       return;
     }
+    if (deliveryEligibility.checking) {
+      showToast('info', 'Please wait', 'Checking delivery for this address…');
+      return;
+    }
+    if (deliveryEligibility.eligible === false) {
+      showToast(
+        'error',
+        MOBILE_COPY.delivery.unavailableToastTitle,
+        customerFacingDeliveryUnavailable(deliveryEligibility.message) ||
+          MOBILE_COPY.delivery.checkoutBlockedHint,
+      );
+      return;
+    }
+    if (
+      deliveryEligibility.eligible === null &&
+      deliveryEligibility.message.toLowerCase().includes('map pin')
+    ) {
+      showToast('error', 'Pin required', deliveryEligibility.message);
+      return;
+    }
 
     try {
       setIsPlacing(true);
 
+      const addrPayload = buildDeliveryAddressPayload(selectedAddress);
       const orderPayload = {
         items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
         paymentMode: paymentMethod,
-        deliveryAddress: buildDeliveryAddressPayload(selectedAddress),
+        deliveryAddress: {
+          ...addrPayload,
+          addressUrl: deliveryEligibility.mapLink || '',
+        },
         couponCode: appliedCoupon?.code ?? null,
       };
 
@@ -175,6 +298,24 @@ export default function CheckoutScreen() {
               <Text style={{ color: '#4b6f9e', fontSize: 13, marginTop: 6, marginLeft: 4 }}>+ Add delivery address</Text>
             </TouchableOpacity>
           )}
+          {selectedAddress && deliveryEligibility.checking ? (
+            <View style={[styles.deliveryBannerCheckout, styles.deliveryBannerCheckoutNeutral]}>
+              <ActivityIndicator size="small" color="#4b6f9e" />
+              <Text style={styles.deliveryBannerCheckoutText}>Checking delivery for this address…</Text>
+            </View>
+          ) : selectedAddress && deliveryEligibility.eligible === false ? (
+            <View style={[styles.deliveryBannerCheckout, styles.deliveryBannerCheckoutBad]}>
+              <Ionicons name="alert-circle" size={18} color="#dc2626" />
+              <Text style={styles.deliveryBannerCheckoutBadText}>
+                {customerFacingDeliveryUnavailable(deliveryEligibility.message)}
+              </Text>
+            </View>
+          ) : selectedAddress && deliveryEligibility.eligible === null && deliveryEligibility.message ? (
+            <View style={[styles.deliveryBannerCheckout, styles.deliveryBannerCheckoutWarn]}>
+              <Ionicons name="information-circle-outline" size={18} color="#b45309" />
+              <Text style={styles.deliveryBannerCheckoutWarnText}>{deliveryEligibility.message}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.section}>
@@ -302,11 +443,11 @@ export default function CheckoutScreen() {
         style={[
           styles.placeOrderBtn,
           paymentMethod === 'COD' && styles.placeOrderBtnCOD,
-          (items.length === 0 || isPlacing || isStoreClosed) && styles.btnDisabled,
+          (items.length === 0 || isPlacing || isStoreClosed || deliveryBlocksPay) && styles.btnDisabled,
         ]}
         onPress={handlePlaceOrder}
         activeOpacity={0.85}
-        disabled={items.length === 0 || isPlacing || isStoreClosed}
+        disabled={items.length === 0 || isPlacing || isStoreClosed || deliveryBlocksPay}
       >
         {isPlacing ? (
           <ActivityIndicator color="#fff" />
@@ -316,6 +457,13 @@ export default function CheckoutScreen() {
               ? '🔴 Store Closed'
               : items.length === 0
               ? 'Your Basket is Empty'
+              : deliveryEligibility.checking
+              ? 'Checking delivery…'
+              : deliveryEligibility.eligible === false
+              ? 'Outside delivery area'
+              : deliveryEligibility.eligible === null &&
+                  deliveryEligibility.message.toLowerCase().includes('map pin')
+                ? 'Pin address on map'
               : paymentMethod === 'COD'
               ? `Place Order (COD)  ₹${finalAmount}`
               : `Confirm & Pay  ₹${finalAmount}`}
@@ -334,6 +482,30 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12, color: '#2c3e50' },
   addressCard: { flexDirection: 'row', backgroundColor: '#ffffff', padding: 16, borderRadius: 14, gap: 10, borderWidth: 1, borderColor: '#dbe4ef', alignItems: 'center' },
   addressText: { color: '#7b8a9a', flex: 1, fontSize: 14, lineHeight: 20 },
+  deliveryBannerCheckout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  deliveryBannerCheckoutNeutral: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+  },
+  deliveryBannerCheckoutBad: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  deliveryBannerCheckoutWarn: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  deliveryBannerCheckoutText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#64748b' },
+  deliveryBannerCheckoutBadText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#991b1b', lineHeight: 18 },
+  deliveryBannerCheckoutWarnText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 17 },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   couponRow: { flexDirection: 'row', gap: 8 },
   couponInput: { flex: 1, height: 44, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, fontSize: 13, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#dde6f0', letterSpacing: 1 },

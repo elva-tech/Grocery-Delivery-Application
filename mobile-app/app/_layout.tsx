@@ -59,10 +59,23 @@ const isClosed = storeStatus?.isClosed;
           AsyncStorage.getItem(CART_STORAGE_KEY),
         ]);
         if (token && userStr) {
-          const parsedUser = JSON.parse(userStr);
-          const savedTenant = String(parsedUser?.tenantId || '').trim().toLowerCase();
+          let parsedUser = JSON.parse(userStr) as Record<string, unknown>;
           const activeTenant = String(await getActiveTenantId()).trim().toLowerCase();
-          if (!savedTenant || (activeTenant && savedTenant !== activeTenant)) {
+          let savedTenant = String(parsedUser?.tenantId || '').trim().toLowerCase();
+
+          // Older APKs / partial payloads may omit tenantId — do not wipe a valid JWT for that.
+          if (!savedTenant && activeTenant) {
+            parsedUser = { ...parsedUser, tenantId: activeTenant };
+            savedTenant = activeTenant;
+            try {
+              await AsyncStorage.setItem('user', JSON.stringify(parsedUser));
+            } catch {
+              /* ignore */
+            }
+          }
+
+          // Only clear session when we know both tenants and they disagree (real store switch).
+          if (savedTenant && activeTenant && savedTenant !== activeTenant) {
             await AsyncStorage.multiRemove(['token', 'user', 'jwtToken']);
           } else {
             dispatch(setCredentials({ user: parsedUser, token }));

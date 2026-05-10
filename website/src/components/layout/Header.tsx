@@ -1,15 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Search, MapPin, ChevronDown, User, Package, Smartphone, X, LogOut } from 'lucide-react';
+import {
+  ShoppingCart,
+  Search,
+  MapPin,
+  ChevronDown,
+  User,
+  Package,
+  Smartphone,
+  X,
+  LogOut,
+  Plus,
+  Loader2,
+  Headset,
+} from 'lucide-react';
 import { logout } from '../../store/slices/authSlice';
-import { getAddressFromCoords } from '../../api/addresses';
+import { getAddressFromCoords, getAddresses } from '../../api/addresses';
+import { requestPrecisePosition } from '../../utils/geolocation';
 import type { RootState } from '../../store/store';
 import AddressModal from './AddressModal';
 import { useTenantBranding } from '../../context/TenantBrandingContext';
 import { WEB_COPY } from '../../constants/copy';
-
-import { Headset } from 'lucide-react';
 
 function splitBrandWords(storeName: string) {
   const words = storeName.trim().split(/\s+/).filter(Boolean);
@@ -30,9 +42,33 @@ interface HeaderProps {
   onSearchChange: (val: string) => void;
   onCartClick: () => void;
   onLoginClick: () => void;
+  /** Currently chosen delivery address (drives subtitle when set). */
+  selectedDeliveryAddress?: Record<string, unknown> | null;
+  /** Persist selection + refresh delivery check (from App). */
+  onSelectDeliveryAddress?: (addr: Record<string, unknown>) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClick, onLoginClick }) => {
+function deliverSubtitle(addr: Record<string, unknown> | null | undefined): string | null {
+  if (!addr) return null;
+  const full = String(addr.full ?? '').trim();
+  const line1 = String(addr.line1 ?? '').trim();
+  const landmark = String(addr.landmark ?? '').trim();
+  const city = String(addr.city ?? '').trim();
+  const label = String(addr.label ?? '').trim();
+  const parts = [line1, landmark, city].filter(Boolean).join(', ');
+  const raw = full || parts || label;
+  if (!raw) return null;
+  return raw.length > 48 ? `${raw.slice(0, 45)}…` : raw;
+}
+
+const Header: React.FC<HeaderProps> = ({
+  searchValue,
+  onSearchChange,
+  onCartClick,
+  onLoginClick,
+  selectedDeliveryAddress = null,
+  onSelectDeliveryAddress,
+}) => {
   const { storeName, tagline, logo } = useTenantBranding();
   const { head: brandHead, tail: brandTail } = splitBrandWords(storeName);
   const navigate = useNavigate();
@@ -42,26 +78,67 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
 
   const [location, setLocation] = useState("Detecting...");
   const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
+  const [addressModalStartWithMap, setAddressModalStartWithMap] = useState(false);
+  const [deliverPickerOpen, setDeliverPickerOpen] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState<Record<string, unknown>[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
   const [showAppModal, setShowAppModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(async (pos) => {
+    let cancelled = false;
+    void (async () => {
       try {
-        const addr = await getAddressFromCoords(pos.coords.latitude, pos.coords.longitude);
+        const { lat, lng } = await requestPrecisePosition({ highAccuracyTimeoutMs: 18000 });
+        if (cancelled) return;
+        const addr = await getAddressFromCoords(lat, lng);
         const parts = addr.split(',');
         setLocation(`${parts[0]}, ${parts[1] || ''}`);
-      } catch (e) { setLocation("Set Location"); }
-    }, () => setLocation("Enable Location"));
+      } catch {
+        if (!cancelled) setLocation('Enable Location');
+      }
+    })();
 
     const hasSeenModal = sessionStorage.getItem('hasSeenAppModal');
+    let modalTimer: ReturnType<typeof setTimeout> | undefined;
     if (!hasSeenModal) {
-      const timer = setTimeout(() => setShowAppModal(true), 2000);
-      return () => clearTimeout(timer);
+      modalTimer = setTimeout(() => setShowAppModal(true), 2000);
     }
+    return () => {
+      cancelled = true;
+      if (modalTimer) clearTimeout(modalTimer);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!deliverPickerOpen || !isAuthenticated) return;
+    let cancelled = false;
+    setAddressesLoading(true);
+    void getAddresses()
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setSavedAddresses(list);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedAddresses([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAddressesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deliverPickerOpen, isAuthenticated]);
+
+  const selfSavedAddresses = useMemo(
+    () => savedAddresses.filter((a) => a.isMyAddress !== false),
+    [savedAddresses],
+  );
+
+  const deliverLine = deliverSubtitle(selectedDeliveryAddress) || location;
 
   const closeAppModal = () => {
     sessionStorage.setItem('hasSeenAppModal', 'true');
@@ -77,6 +154,30 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
     localStorage.removeItem('token');
     dispatch(logout());
     setShowLogoutConfirm(false);
+  };
+
+  const handleOpenDeliverPicker = () => {
+    if (!isAuthenticated) {
+      onLoginClick();
+      return;
+    }
+    setDeliverPickerOpen(true);
+  };
+
+  const handleCloseAddressModal = () => {
+    setIsAddrModalOpen(false);
+    setAddressModalStartWithMap(false);
+  };
+
+  const handleSelectSavedAddress = (addr: Record<string, unknown>) => {
+    setDeliverPickerOpen(false);
+    onSelectDeliveryAddress?.(addr);
+  };
+
+  const handleAddNewAddressFromPicker = () => {
+    setDeliverPickerOpen(false);
+    setAddressModalStartWithMap(true);
+    setIsAddrModalOpen(true);
   };
 
   return (
@@ -174,15 +275,26 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
           </div>
 
           {/* LOCATION (Hidden on very small screens to save space) */}
-          <div onClick={() => setIsAddrModalOpen(true)} className="hidden md:flex items-center gap-3 py-2 px-3 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer border border-transparent hover:border-slate-100 shrink-0">
-            <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-[#4b6f9e]">
+          <button
+            type="button"
+            onClick={handleOpenDeliverPicker}
+            className="flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer border border-transparent hover:border-slate-100 shrink-0 text-left min-w-0"
+          >
+            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-slate-100 rounded-xl flex items-center justify-center text-[#4b6f9e] shrink-0">
               <MapPin size={16} strokeWidth={3} />
             </div>
-            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-slate-800 uppercase tracking-tighter flex items-center gap-1">Deliver to <ChevronDown size={10} /></span>
-              <span className="text-[11px] font-bold text-slate-400 truncate w-24">{location}</span>
+            <div className="hidden sm:flex flex-col min-w-0">
+              <span className="text-[9px] font-black text-slate-800 uppercase tracking-tighter flex items-center gap-1">
+                Deliver to <ChevronDown size={10} />
+              </span>
+              <span
+                className="text-[11px] font-bold text-slate-400 truncate max-w-[5.5rem] sm:max-w-[9rem] lg:max-w-[11rem]"
+                title={deliverLine}
+              >
+                {deliverLine}
+              </span>
             </div>
-          </div>
+          </button>
 
           {/* SEARCH */}
           <div className="flex-1 max-w-md min-w-[120px]">
@@ -259,7 +371,89 @@ const Header: React.FC<HeaderProps> = ({ searchValue, onSearchChange, onCartClic
           </div>
         </div>
       </header>
-      <AddressModal isOpen={isAddrModalOpen} onClose={() => setIsAddrModalOpen(false)} />
+      {deliverPickerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="deliver-picker-title"
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          onClick={() => setDeliverPickerOpen(false)}
+        >
+          <div
+            className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h2 id="deliver-picker-title" className="text-xl font-black text-[#1e293b] uppercase italic tracking-tight">
+                Deliver to
+              </h2>
+              <button
+                type="button"
+                onClick={() => setDeliverPickerOpen(false)}
+                className="p-2 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="px-6 text-[11px] font-bold text-slate-400 uppercase tracking-widest pb-4">
+              Choose a saved address or add a new one
+            </p>
+
+            <div className="max-h-[min(50vh,360px)] overflow-y-auto px-6 pb-2">
+              {addressesLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="animate-spin text-[#4b6f9e]" size={28} />
+                </div>
+              ) : selfSavedAddresses.length === 0 ? (
+                <p className="text-center py-8 text-sm font-semibold text-slate-400 border-2 border-dashed border-slate-100 rounded-2xl">
+                  No saved addresses yet.
+                </p>
+              ) : (
+                <ul className="space-y-2 pb-2">
+                  {selfSavedAddresses.map((addr) => {
+                    const id = String(addr.id ?? '');
+                    const label = String(addr.label ?? 'Address');
+                    const summary =
+                      String(addr.full ?? '').trim() ||
+                      [addr.line1, addr.city].filter(Boolean).join(', ');
+                    return (
+                      <li key={id || summary}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSavedAddress(addr)}
+                          className="w-full text-left p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:border-[#4b6f9e]/40 hover:bg-blue-50/50 transition-all"
+                        >
+                          <p className="text-xs font-black text-[#1e293b] uppercase tracking-wide">{label}</p>
+                          <p className="text-[11px] font-semibold text-slate-500 mt-1 line-clamp-2">{summary || 'Tap to use'}</p>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="p-6 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleAddNewAddressFromPicker}
+                className="w-full py-4 rounded-2xl bg-[#1e293b] text-white font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[#4b6f9e] transition-colors"
+              >
+                <Plus size={18} strokeWidth={2.5} />
+                Add new address
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AddressModal
+        isOpen={isAddrModalOpen}
+        onClose={handleCloseAddressModal}
+        startWithMap={addressModalStartWithMap}
+        onAddressSaved={(addr) => onSelectDeliveryAddress?.(addr)}
+      />
 
       {/* LOGOUT CONFIRMATION MODAL */}
       {showLogoutConfirm && (

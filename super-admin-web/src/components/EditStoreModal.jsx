@@ -1,7 +1,51 @@
 import { useState, useRef } from 'react';
 import { updateTenantDetails, uploadLogo } from '../api/superApi';
+import StoreHubMapPicker from './StoreHubMapPicker';
 
 const PLANS = ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'];
+
+/** Fill structured parts from multiline storeAddress + hub PIN when DB parts were empty. */
+function deriveStoreAddressParts(storeAddressText, hubPinDigits, seedParts) {
+  const lines = String(storeAddressText || '')
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const pinFromHub = String(hubPinDigits || '').replace(/\D/g, '').slice(0, 6);
+
+  let line1 = String(seedParts?.line1 || '').trim();
+  let line2 = String(seedParts?.line2 || '').trim();
+  let landmark = String(seedParts?.landmark || '').trim();
+  let city = String(seedParts?.city || '').trim();
+  let state = String(seedParts?.state || '').trim();
+
+  if (!line1 && lines[0]) line1 = lines[0];
+
+  const tailLine = lines[1] || '';
+  if (tailLine) {
+    const segs = tailLine.split(',').map((s) => s.trim()).filter(Boolean);
+    if (segs.length > 0) {
+      const last = segs[segs.length - 1];
+      const pinInTail = /^[1-9]\d{5}$/.test(last) ? last : '';
+      const regionSegs = pinInTail ? segs.slice(0, -1) : segs;
+      if (!city && regionSegs[0]) city = regionSegs[0];
+      if (!state && regionSegs[1]) state = regionSegs[1];
+      const pincode = pinFromHub.length === 6 ? pinFromHub : pinInTail;
+      return {
+        line1,
+        line2,
+        landmark,
+        city,
+        state,
+        pincode: pincode || pinFromHub,
+      };
+    }
+  }
+
+  const pinFromAnywhere = (String(storeAddressText || '').match(/\b([1-9]\d{5})\b/) || [])[1] || '';
+  const pincode = pinFromHub.length === 6 ? pinFromHub : pinFromAnywhere;
+
+  return { line1, line2, landmark, city, state, pincode };
+}
 
 function InputField({ label, field, type = 'text', placeholder, required, hint, value, onChange }) {
   return (
@@ -41,6 +85,16 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const fileRef                       = useRef(null);
+  const [storeLat, setStoreLat]       = useState(
+    typeof tenant.storeLat === 'number' && Number.isFinite(tenant.storeLat) ? tenant.storeLat : null,
+  );
+  const [storeLng, setStoreLng]       = useState(
+    typeof tenant.storeLng === 'number' && Number.isFinite(tenant.storeLng) ? tenant.storeLng : null,
+  );
+  const parts                         = tenant.storeAddressParts || {};
+  const [hubPincode, setHubPincode]   = useState(() =>
+    String(parts.pincode || '').replace(/\D/g, '').slice(0, 6),
+  );
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -83,7 +137,7 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
 
     setLoading(true);
     try {
-      const updated = await updateTenantDetails(tenant._id, {
+      const payload = {
         storeName:    form.storeName,
         ownerName:    form.ownerName,
         phoneNumber:  form.phoneNumber,
@@ -95,7 +149,15 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
         heroBadge:    form.heroBadge,
         heroTitle:    form.heroTitle,
         heroSubtitle: form.heroSubtitle,
-      });
+      };
+      if (typeof storeLat === 'number' && typeof storeLng === 'number') {
+        payload.storeLat = storeLat;
+        payload.storeLng = storeLng;
+      }
+      const hubPin = hubPincode.replace(/\D/g, '').slice(0, 6);
+      payload.storeAddressParts = deriveStoreAddressParts(form.storeAddress, hubPin, parts);
+
+      const updated = await updateTenantDetails(tenant._id, payload);
       onUpdated(updated);
       onClose();
     } catch (err) {
@@ -168,6 +230,29 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
             <InputField label="Hero title (optional)" field="heroTitle" placeholder="Homepage headline" value={form.heroTitle} onChange={set('heroTitle')} />
             <InputField label="Hero subtitle (optional)" field="heroSubtitle" placeholder="Supporting line" value={form.heroSubtitle} onChange={set('heroSubtitle')} />
             <InputField label="Store Address" field="storeAddress" placeholder="123 Main St, City, State" value={form.storeAddress} onChange={set('storeAddress')} />
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Delivery hub (map)</p>
+              <p className="text-[11px] text-gray-500">
+                Drag the pin or use PIN lookup — OpenStreetMap only; coordinates sync to tenant hub for customer radius.
+              </p>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">PIN for “Centre from PIN” (optional)</label>
+              <input
+                type="tel"
+                value={hubPincode}
+                onChange={(e) => setHubPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="6-digit PIN"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[140px]"
+              />
+              <StoreHubMapPicker
+                lat={typeof storeLat === 'number' ? storeLat : undefined}
+                lng={typeof storeLng === 'number' ? storeLng : undefined}
+                pincode={hubPincode}
+                onChange={({ lat, lng }) => {
+                  setStoreLat(lat);
+                  setStoreLng(lng);
+                }}
+              />
+            </div>
           </div>
 
           {/* ── Owner / Contact ── */}

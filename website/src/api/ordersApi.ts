@@ -206,6 +206,7 @@ export const placeOrderApi = async (payload: {
     pincode: string;
     lat: number;
     lng: number;
+    addressUrl?: string;
   };
   couponCode?: string | null;
 }) => {

@@ -139,7 +139,7 @@ exports.getTenantDetails = async (req, res) => {
 
   const tenant = await Tenant.findOne({ tenantId })
     .select(
-      "tenantId name logo storeAddress contactEmail phoneNumber plan customerDomain adminDomain ownerName tagline heroBadge heroTitle heroSubtitle supportEmail supportPhone supportHours"
+      "tenantId name logo storeAddress storeAddressParts storeLat storeLng contactEmail phoneNumber plan customerDomain adminDomain ownerName tagline heroBadge heroTitle heroSubtitle supportEmail supportPhone supportHours"
     )
     .lean();
 
@@ -161,6 +161,9 @@ exports.getTenantDetails = async (req, res) => {
     ownerName:     tenant.ownerName || "",
     logo:          tenant.logo || "",
     storeAddress:  tenant.storeAddress || "",
+    storeAddressParts: tenant.storeAddressParts || {},
+    storeLat:      typeof tenant.storeLat === "number" ? tenant.storeLat : null,
+    storeLng:      typeof tenant.storeLng === "number" ? tenant.storeLng : null,
     contactEmail:  tenant.contactEmail || "",
     phoneNumber:   tenant.phoneNumber || "",
     customerDomain: tenant.customerDomain || "",
@@ -247,6 +250,53 @@ exports.updateTenantSupportContact = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to save support details" });
   }
 };
+
+/* ─────────────────────────────────────────────
+   PATCH /api/tenant/store-location
+   Admin only — hub coordinates for delivery distance (sent as MapService points[])
+───────────────────────────────────────────── */
+exports.updateTenantStoreLocation = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: "tenantId missing from session" });
+    }
+
+    const { storeLat, storeLng } = req.body;
+    const lat = Number(storeLat);
+    const lng = Number(storeLng);
+
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      return res.status(400).json({ success: false, message: "storeLat must be a number between -90 and 90" });
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({ success: false, message: "storeLng must be a number between -180 and 180" });
+    }
+
+    const updated = await Tenant.findOneAndUpdate(
+      { tenantId },
+      { $set: { storeLat: lat, storeLng: lng } },
+      { new: true }
+    )
+      .select("tenantId storeLat storeLng")
+      .lean();
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Tenant not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Store location saved",
+      storeLat: updated.storeLat,
+      storeLng: updated.storeLng,
+    });
+  } catch (err) {
+    console.error("[updateTenantStoreLocation]", err);
+    return res.status(500).json({ success: false, message: "Failed to save store location" });
+  }
+};
+
 /*____________________________________________
    GET /api/tenant/by-code/:storeCode
    Public — resolves a 4-char storeCode to tenantId + basic store info
@@ -320,6 +370,9 @@ exports.createTenant = async (req, res) => {
       tenantId: rawTenantId, // optional
       logo,
       storeAddress,
+      storeLat: rawStoreLat,
+      storeLng: rawStoreLng,
+      storeAddressParts: rawStoreAddressParts,
       contactEmail,
       plan: requestedPlan,
       password,
@@ -393,6 +446,42 @@ exports.createTenant = async (req, res) => {
     const VALID_PLANS = ["FREE", "BASIC", "PREMIUM", "ENTERPRISE"];
     const plan = VALID_PLANS.includes(requestedPlan) ? requestedPlan : "FREE";
 
+    const hubLat = Number(rawStoreLat);
+    const hubLng = Number(rawStoreLng);
+    if (
+      !Number.isFinite(hubLat) ||
+      !Number.isFinite(hubLng) ||
+      hubLat < -90 ||
+      hubLat > 90 ||
+      hubLng < -180 ||
+      hubLng > 180
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "storeLat and storeLng are required — pick the store hub on the map during onboarding (or use PIN-based centre).",
+      });
+    }
+    if (hubLat === 0 && hubLng === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Store hub cannot be 0,0 — set a location on the map.",
+      });
+    }
+
+    const parts =
+      rawStoreAddressParts && typeof rawStoreAddressParts === "object" ? rawStoreAddressParts : {};
+    const storeAddressPartsDoc = {
+      line1: trimStr(parts.line1, 240),
+      line2: trimStr(parts.line2, 240),
+      landmark: trimStr(parts.landmark, 240),
+      city: trimStr(parts.city, 120),
+      state: trimStr(parts.state, 120),
+      pincode: String(parts.pincode || "")
+        .replace(/\D/g, "")
+        .slice(0, 6),
+    };
+
     // ── Hash password ───────────────────────────────────────────────────
     const hashedPassword = await bcrypt.hash(password, 12);
 
@@ -441,6 +530,9 @@ exports.createTenant = async (req, res) => {
       adminDomain,
       logo:           logo ? logo.trim() : "",
       storeAddress:   storeAddress ? storeAddress.trim() : "",
+      storeAddressParts: storeAddressPartsDoc,
+      storeLat:       hubLat,
+      storeLng:       hubLng,
       contactEmail:   contactEmail ? contactEmail.trim().toLowerCase() : "",
       adminPassword:  hashedPassword,
       tagline:        trimStr(tagline),

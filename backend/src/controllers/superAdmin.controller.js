@@ -50,7 +50,9 @@ exports.getTenants = async (req, res) => {
   try {
     const tenants = await Tenant.find({})
       .sort({ createdAt: -1 })
-      .select("tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain storeCode deepLink qrCode tagline heroBadge heroTitle heroSubtitle")
+      .select(
+        "tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress storeAddressParts storeLat storeLng contactEmail customerDomain adminDomain storeCode deepLink qrCode tagline heroBadge heroTitle heroSubtitle"
+      )
       .lean();
 
     return res.json({ success: true, tenants });
@@ -177,6 +179,9 @@ exports.updateTenantDetails = async (req, res) => {
       ownerName,
       phoneNumber,
       storeAddress,
+      storeAddressParts: rawStoreAddressParts,
+      storeLat,
+      storeLng,
       contactEmail,
       logo,
       newPassword,
@@ -204,6 +209,24 @@ exports.updateTenantDetails = async (req, res) => {
     if (contactEmail && contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
       return res.status(400).json({ success: false, message: "contactEmail format is invalid" });
     }
+
+    let hubLat;
+    let hubLng;
+    if (storeLat !== undefined && storeLat !== null && storeLat !== "") {
+      hubLat = Number(storeLat);
+      if (!Number.isFinite(hubLat) || hubLat < -90 || hubLat > 90) {
+        return res.status(400).json({ success: false, message: "storeLat must be between -90 and 90" });
+      }
+    }
+    if (storeLng !== undefined && storeLng !== null && storeLng !== "") {
+      hubLng = Number(storeLng);
+      if (!Number.isFinite(hubLng) || hubLng < -180 || hubLng > 180) {
+        return res.status(400).json({ success: false, message: "storeLng must be between -180 and 180" });
+      }
+    }
+    if ((hubLat !== undefined) !== (hubLng !== undefined)) {
+      return res.status(400).json({ success: false, message: "Provide both storeLat and storeLng or neither" });
+    }
     if (newPassword !== undefined && newPassword !== '' && newPassword.length < 8) {
       return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
     }
@@ -220,6 +243,24 @@ exports.updateTenantDetails = async (req, res) => {
     if (typeof heroBadge === "string") tenantUpdates.heroBadge = trimStr(heroBadge);
     if (typeof heroTitle === "string") tenantUpdates.heroTitle = trimStr(heroTitle);
     if (typeof heroSubtitle === "string") tenantUpdates.heroSubtitle = trimStr(heroSubtitle);
+    if (hubLat !== undefined && hubLng !== undefined) {
+      tenantUpdates.storeLat = hubLat;
+      tenantUpdates.storeLng = hubLng;
+    }
+
+    if (rawStoreAddressParts && typeof rawStoreAddressParts === "object") {
+      const p = rawStoreAddressParts;
+      tenantUpdates.storeAddressParts = {
+        line1: trimStr(p.line1, 240),
+        line2: trimStr(p.line2, 240),
+        landmark: trimStr(p.landmark, 240),
+        city: trimStr(p.city, 120),
+        state: trimStr(p.state, 120),
+        pincode: String(p.pincode || "")
+          .replace(/\D/g, "")
+          .slice(0, 6),
+      };
+    }
 
     // Hash and update password only if a new one was supplied
     if (newPassword && newPassword.trim()) {
@@ -238,7 +279,7 @@ exports.updateTenantDetails = async (req, res) => {
 
     const updated = await Tenant.findByIdAndUpdate(id, tenantUpdates, { new: true })
       .select(
-        "tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress contactEmail customerDomain adminDomain tagline heroBadge heroTitle heroSubtitle"
+        "tenantId name ownerName phoneNumber plan status isActive createdAt logo storeAddress storeAddressParts storeLat storeLng contactEmail customerDomain adminDomain tagline heroBadge heroTitle heroSubtitle"
       );
     if (!updated) return res.status(404).json({ success: false, message: "Tenant not found" });
 
