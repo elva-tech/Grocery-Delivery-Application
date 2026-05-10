@@ -11,6 +11,9 @@ export const MOBILE_COPY = {
     registerSubtitle: 'Sign up quickly with mobile OTP',
     signInCta: 'Already have an account? Sign in',
     otpTitle: 'OTP Verification',
+    loginToContinueTitle: 'Please log in to continue',
+    loginToContinueMessage:
+      'Sign in to choose a delivery address and complete your order. Your cart will stay here.',
   },
   home: {
     deliverToFallback: 'Add a delivery address (Home / Work)',

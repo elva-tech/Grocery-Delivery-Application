@@ -514,7 +514,7 @@ export default function OrdersScreen() {
                     <Ionicons name="chatbubble-ellipses" size={16} color="#4b6f9e" />
                     <Text style={styles.adminResponseTitle}>ADMIN RESPONSE</Text>
                   </View>
-                  <Text style={styles.adminResponseText}>"{selectedOrder.adminComment}"</Text>
+                  <Text style={styles.adminResponseText}>{`"${selectedOrder.adminComment}"`}</Text>
                   {selectedOrder.resolvedAt && (
                     <Text style={styles.adminResponseDate}>
                       Resolved on: {new Date(selectedOrder.resolvedAt).toLocaleDateString()}

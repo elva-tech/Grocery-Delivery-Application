@@ -12,12 +12,14 @@ import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 import { MOBILE_COPY } from '@/src/constants/copy';
+import { showToast } from '@/utils/toast';
 
 const BRAND_BLUE = '#4b6f9e';
 const SUCCESS_GREEN = '#10b981';
 
 export default function CartScreen() {
   const { items } = useSelector((state: RootState) => state.cart);
+  const token = useSelector((state: RootState) => state.auth.token);
   const dispatch = useDispatch();
   const router = useRouter();
   const confettiRef = useRef<any>(null);
@@ -63,9 +65,13 @@ export default function CartScreen() {
    * Final checkout logic is deferred to the post-address selection stage.
    */
   const handleProceed = () => {
-    if (!loading && items.length > 0) {
-      router.push('/addresses');
+    if (loading || items.length === 0) return;
+    if (!token) {
+      showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
+      router.push('/auth/landing');
+      return;
     }
+    router.push('/addresses');
   };
 
   if (items.length === 0) {
