@@ -1,4 +1,11 @@
-require("dotenv").config();
+const path = require("path");
+const dotenv = require("dotenv");
+
+const backendRoot = path.join(__dirname, "..");
+// Committed defaults for the team (`.env.development`). Machine-specific secrets in gitignored `.env` override.
+dotenv.config({ path: path.join(backendRoot, ".env.development") });
+dotenv.config({ path: path.join(backendRoot, ".env"), override: true });
+
 const app = require("./app");
 const connectDB = require("./config/db");
 

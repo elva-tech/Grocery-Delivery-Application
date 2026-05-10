@@ -1,23 +1,27 @@
 # Environment Keys — All Services
 
-> **SECURITY WARNING:** This file contains secret keys. **Never commit this file to Git.**
-> Add `ENV_KEYS.md` to your `.gitignore` immediately.
+> **SECURITY WARNING:** This file lists real credentials for the private team branch. Do **not** make the repository public; rotate MongoDB, Cloudinary, Razorpay, and super-admin passwords if this repo is ever exposed.
 
 ---
 
-## 1. Backend — `backend/.env`
+## 1. Backend — `backend/.env.development` (committed) / `backend/.env` (optional overrides)
 
-Create this file at `backend/.env` (next to `package.json`):
+Defaults load from **`backend/.env.development`**. Create **`backend/.env`** only to override values locally (gitignored).
 
 ```env
 # ── Server ──────────────────────────────────────────────────
 PORT=5000
 
 # ── Database ────────────────────────────────────────────────
-MONGO_URI=mongodb://localhost:27017/grocery-delivery
+# Atlas (team branch default — see backend/.env.development):
+MONGO_URI=mongodb://grocery_admin:Welcome%40123@ac-rleisge-shard-00-00.mlztztf.mongodb.net:27017,ac-rleisge-shard-00-01.mlztztf.mongodb.net:27017,ac-rleisge-shard-00-02.mlztztf.mongodb.net:27017/?ssl=true&replicaSet=atlas-dbgshc-shard-0&authSource=admin&appName=KMF-Grocery-App
+# Local alternative:
+# MONGO_URI=mongodb://localhost:27017/grocery-delivery
 
-# ── Auth ────────────────────────────────────────────────────
+# ── Auth / Super Admin ───────────────────────────────────────
 JWT_SECRET=your-secret-key-change-in-production
+SUPER_ADMIN_EMAIL=superadmin@enandi.com
+SUPER_ADMIN_PASSWORD=Enandi@Super2026
 
 # ── Razorpay ────────────────────────────────────────────────
 RAZORPAY_KEY_ID=rzp_test_SaHmJpDs42QvIp
@@ -27,6 +31,12 @@ RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 # ── Razorpay Route — Vendor linked account ───────────────────
 VENDOR_RAZORPAY_ACCOUNT_ID=acc_XXXXXXXXXXXXXXXX
 
+# ── Cloudinary (image uploads) ───────────────────────────────
+CLOUDINARY_CLOUD_NAME=doqqsevgb
+CLOUDINARY_API_KEY=331852212193344
+CLOUDINARY_API_SECRET=XL3E5-lZZxiF1uS0PdGF2THBO0U
+CLOUDINARY_ASSETS_ROOT=grocery_app
+
 # ── Platform Settings ───────────────────────────────────────
 PLATFORM_COMMISSION_PERCENT=10
 ```
@@ -34,12 +44,15 @@ PLATFORM_COMMISSION_PERCENT=10
 | Variable | Current Value | Notes |
 |---|---|---|
 | `PORT` | `5000` | Express server port |
-| `MONGO_URI` | `mongodb://localhost:27017/grocery-delivery` | Change to Atlas URI for production |
-| `JWT_SECRET` | `your-secret-key-change-in-production` | Change to a strong random string in production |
+| `MONGO_URI` | Atlas URI (see env block above) | Password URL-encoded (`%40` for `@`) |
+| `JWT_SECRET` | `your-secret-key-change-in-production` | Prefer a long random string for production |
+| `SUPER_ADMIN_EMAIL` | `superadmin@enandi.com` | `POST /api/super/login` |
+| `SUPER_ADMIN_PASSWORD` | (see env block above) | Rotate if shared widely |
 | `RAZORPAY_KEY_ID` | `rzp_test_SaHmJpDs42QvIp` | Test mode key |
-| `RAZORPAY_KEY_SECRET` | `YHBaSBN6vHpzLl3SN8zHXNdC` | **Never expose this in frontend** |
-| `RAZORPAY_WEBHOOK_SECRET` | `your_razorpay_webhook_secret` | Set this when creating the webhook in Razorpay dashboard |
-| `VENDOR_RAZORPAY_ACCOUNT_ID` | `acc_XXXXXXXXXXXXXXXX` | Linked vendor account ID from Razorpay Route |
+| `RAZORPAY_KEY_SECRET` | `YHBaSBN6vHpzLl3SN8zHXNdC` | Backend only |
+| `RAZORPAY_WEBHOOK_SECRET` | `your_razorpay_webhook_secret` | Set when Razorpay webhook is configured |
+| `CLOUDINARY_*` | See env block above | Required for uploads |
+| `VENDOR_RAZORPAY_ACCOUNT_ID` | `acc_XXXXXXXXXXXXXXXX` | Placeholder unless using Route |
 | `PLATFORM_COMMISSION_PERCENT` | `10` | Route split % to platform account |
 
 ---
@@ -150,4 +163,4 @@ Add to `mobile-app/eas.json` under the relevant profile:
 - [ ] Set a strong random `JWT_SECRET` (use `openssl rand -hex 64`)
 - [ ] Set `RAZORPAY_WEBHOOK_SECRET` in Razorpay dashboard and copy here
 - [ ] Update `API_BASE_URL.PRODUCTION` in `mobile-app/src/config/constants.ts`
-- [ ] Add `ENV_KEYS.md` to `.gitignore` — never commit this file
+- [ ] Confirm repo stays **private** while keys live in Git / docs
