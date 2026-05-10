@@ -41,3 +41,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+#keystore file
+*.@vittesh_Enandi.jks
