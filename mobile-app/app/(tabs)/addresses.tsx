@@ -29,7 +29,6 @@ import {
 } from '@/api/addresses';
 import {
   placeOrderBackend,
-  validateCouponApi,
   createMobilePaymentOrder,
   verifyMobilePayment,
 } from '@/api/ordersApi';
@@ -75,17 +74,12 @@ export default function AddressesScreen() {
   const isExpoGo = Constants.appOwnership === 'expo';
   const router = useRouter();
   const dispatch = useDispatch();
-  const { items, totalAmount } = useSelector((state: RootState) => state.cart);
+  const { items, totalAmount, appliedCoupon } = useSelector((state: RootState) => state.cart);
   const { user, token } = useSelector((state: RootState) => state.auth);
 
   const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number; isFreeDelivery: boolean }>(
     { grandTotal: totalAmount, deliveryFee: 0, isFreeDelivery: false },
   );
-  const [couponInput, setCouponInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
-  const [couponError, setCouponError] = useState('');
-  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
-
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState(true);
@@ -249,6 +243,7 @@ export default function AddressesScreen() {
           checking: false,
           eligible: null,
           message: e instanceof Error ? e.message : 'Could not verify delivery.',
+          mapLink: '',
         });
       }
     };
@@ -514,34 +509,6 @@ export default function AddressesScreen() {
       deliveryEligibility.eligible === false ||
       (deliveryEligibility.eligible === null && Boolean(deliveryEligibility.message.trim())));
 
-  const handleApplyCoupon = async () => {
-    if (!couponInput.trim()) return;
-    if (!token) {
-      showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
-      router.push('/auth/landing');
-      return;
-    }
-    setCouponError('');
-    setIsApplyingCoupon(true);
-    try {
-      const result = await validateCouponApi(couponInput.trim().toUpperCase(), bill.grandTotal, token);
-      setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount });
-      setCouponInput('');
-      showToast('success', 'Coupon Applied', result.message || `Saved ₹${result.discountAmount}!`);
-    } catch (err: any) {
-      setCouponError(err?.message || 'Invalid coupon code');
-      setAppliedCoupon(null);
-    } finally {
-      setIsApplyingCoupon(false);
-    }
-  };
-
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
-    setCouponError('');
-    setCouponInput('');
-  };
-
   const handleFinalConfirm = async () => {
     if (!items || items.length === 0) {
       showToast('error', 'Empty Cart', 'Add items before placing an order.');
@@ -682,7 +649,6 @@ export default function AddressesScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setOthersForm(EMPTY_OTHERS);
         setOthersConfirmed(false);
-        setAppliedCoupon(null);
         dispatch(clearCart());
         router.replace('/(tabs)/order-success');
       } else {
@@ -1153,45 +1119,14 @@ export default function AddressesScreen() {
             
       ) : (
   <View>
-    <View style={styles.couponRow}>
-      {appliedCoupon ? (
-        <View style={styles.couponApplied}>
-          <Ionicons name="pricetag" size={15} color="#16a34a" />
-          <Text style={styles.couponAppliedText}>
-            {appliedCoupon.code} · –₹{appliedCoupon.discountAmount}
-          </Text>
-          <TouchableOpacity onPress={handleRemoveCoupon} style={{ marginLeft: 6 }}>
-            <Ionicons name="close-circle" size={17} color="#dc2626" />
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <TextInput
-            style={styles.couponInput}
-            placeholder="Coupon code"
-            placeholderTextColor="#94a3b8"
-            value={couponInput}
-            onChangeText={t => { setCouponInput(t.toUpperCase()); setCouponError(''); }}
-            autoCapitalize="characters"
-            returnKeyType="done"
-            onSubmitEditing={handleApplyCoupon}
-          />
-          <TouchableOpacity
-            style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon) && { opacity: 0.5 }]}
-            onPress={handleApplyCoupon}
-            disabled={!couponInput.trim() || isApplyingCoupon}
-          >
-            {isApplyingCoupon ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.couponApplyText}>Apply</Text>
-            )}
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
-
-    {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
+    {appliedCoupon ? (
+      <View style={styles.appliedCouponHint}>
+        <Ionicons name="pricetag" size={14} color="#15803d" />
+        <Text style={styles.appliedCouponHintText}>
+          Promo · {appliedCoupon.code} · −₹{appliedCoupon.discountAmount}
+        </Text>
+      </View>
+    ) : null}
 
     <TouchableOpacity
       style={[
@@ -1550,14 +1485,20 @@ const styles = StyleSheet.create({
   confirmBtnRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   confirmBtnAmount: { fontSize: 20, fontWeight: '800', color: '#fff' },
 
-  // Coupon
-  couponRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 },
-  couponInput: { flex: 1, height: 42, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, fontSize: 13, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#dde6f0', letterSpacing: 1 },
-  couponApplyBtn: { backgroundColor: '#4b6f9e', borderRadius: 10, height: 42, paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center' },
-  couponApplyText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  couponApplied: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#dcfce7', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#86efac', gap: 6 },
-  couponAppliedText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#16a34a' },
-  couponError: { fontSize: 12, color: '#dc2626', marginBottom: 6, marginLeft: 2 },
+  appliedCouponHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0fdf4',
+    marginHorizontal: 4,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  appliedCouponHintText: { flex: 1, fontSize: 12, fontWeight: '700', color: '#166534' },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
