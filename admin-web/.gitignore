@@ -22,8 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-# Private env (use .env.development / .env.production for shared defaults)
+# Env files — only `.env.example` is committed (all real values go through hosting / `.env.local`).
 .env
-.env.local
-.env.development.local
-.env.production.local
+.env.*
+!.env.example
