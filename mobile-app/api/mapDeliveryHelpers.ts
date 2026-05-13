@@ -63,6 +63,10 @@ export function pointsFromExpoEnv(): DeliveryPoint[] {
 let tenantHubCache: { tenantId: string; points: DeliveryPoint[]; expires: number } | null = null;
 const TTL_MS = 60_000;
 
+export function invalidateTenantHubCache(): void {
+  tenantHubCache = null;
+}
+
 export async function resolveDeliveryDestinationPoints(): Promise<DeliveryPoint[]> {
   const tid = (await getActiveTenantId()).trim().toLowerCase();
   const now = Date.now();

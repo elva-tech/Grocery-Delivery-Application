@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   ActivityIndicator, Modal, KeyboardAvoidingView, Platform, ScrollView,
-  Keyboard, DeviceEventEmitter, Alert,
+  Keyboard, DeviceEventEmitter,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +23,7 @@ import {
   updateAddress,
   deleteAddress,
   getAddressFromCoordsDetailed,
+  forwardGeocodeViaOla,
   setPreferredDeliveryAddressId,
   getPreferredDeliveryAddressId,
   PREFERRED_DELIVERY_ADDRESS_CHANGED,
@@ -89,6 +90,9 @@ export default function AddressesScreen() {
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressInputMode, setAddressInputMode] = useState<'auto' | 'manual'>('auto');
   const [showOthersModal, setShowOthersModal] = useState(false);
+  /** Address pending delete; null when the confirm popup is hidden. */
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [isDeletingAddress, setIsDeletingAddress] = useState(false);
   const [othersForm, setOthersForm] = useState<OthersData>(EMPTY_OTHERS);
   const [othersConfirmed, setOthersConfirmed] = useState(false);
 
@@ -331,27 +335,23 @@ export default function AddressesScreen() {
   };
 
   const confirmDeleteAddress = (addr: any) => {
-    Alert.alert(
-      'Delete address',
-      `Remove "${addr.label || 'this address'}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteAddress(String(addr.id));
-              await load();
-              DeviceEventEmitter.emit(PREFERRED_DELIVERY_ADDRESS_CHANGED);
-              showToast('success', 'Removed', 'Address deleted');
-            } catch (e: any) {
-              showToast('error', 'Error', e?.message || 'Could not delete');
-            }
-          },
-        },
-      ],
-    );
+    setDeleteTarget(addr);
+  };
+
+  const performDeleteAddress = async () => {
+    if (!deleteTarget) return;
+    setIsDeletingAddress(true);
+    try {
+      await deleteAddress(String(deleteTarget.id));
+      await load();
+      DeviceEventEmitter.emit(PREFERRED_DELIVERY_ADDRESS_CHANGED);
+      showToast('success', 'Removed', 'Address deleted');
+      setDeleteTarget(null);
+    } catch (e: any) {
+      showToast('error', 'Error', e?.message || 'Could not delete');
+    } finally {
+      setIsDeletingAddress(false);
+    }
   };
 
   const handleAddPersonal = async () => {
@@ -392,19 +392,66 @@ export default function AddressesScreen() {
         !Number.isFinite(lng) ||
         (lat === 0 && lng === 0);
 
-      // Manual-only fallback: user never opened the map — approximate from PIN (less accurate than a pin).
-      if (stillNeedCoords && addressInputMode === 'manual') {
-        try {
-          const geos = await Location.geocodeAsync(`${lookup.pincode}, India`);
-          if (Array.isArray(geos) && geos.length > 0) {
-            const g = geos[0];
-            if (Number.isFinite(g.latitude) && Number.isFinite(g.longitude)) {
-              lat = g.latitude;
-              lng = g.longitude;
-            }
+      // Fallback (both auto + manual modes): user never set a map pin.
+      // Order: Ola forward-geocode on the full typed address (much closer to the real spot than
+      // a bare PIN centroid), then Expo `geocodeAsync` as last resort.
+      if (stillNeedCoords) {
+        const olaQueries = [
+          [line1, landmark, lookup.city, lookup.state, lookup.pincode]
+            .map((s) => String(s || '').trim())
+            .filter(Boolean)
+            .join(', ') + ', India',
+          [landmark, lookup.city, lookup.state, lookup.pincode]
+            .map((s) => String(s || '').trim())
+            .filter(Boolean)
+            .join(', ') + ', India',
+          [line1, lookup.city, lookup.state, lookup.pincode]
+            .map((s) => String(s || '').trim())
+            .filter(Boolean)
+            .join(', ') + ', India',
+          [lookup.city, lookup.state, lookup.pincode]
+            .map((s) => String(s || '').trim())
+            .filter(Boolean)
+            .join(', ') + ', India',
+        ].filter((q) => q.replace(/[, India]/g, '').trim().length > 0);
+
+        for (const query of olaQueries) {
+          const ola = await forwardGeocodeViaOla(query).catch(() => null);
+          if (ola && Number.isFinite(ola.lat) && Number.isFinite(ola.lng)) {
+            lat = ola.lat;
+            lng = ola.lng;
+            break;
           }
-        } catch {
-          /* ignore */
+        }
+      }
+
+      const stillNeedCoordsAfterOla =
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng) ||
+        (lat === 0 && lng === 0);
+
+      if (stillNeedCoordsAfterOla) {
+        const expoFallbackQueries = [
+          lookup.city && lookup.state
+            ? `${lookup.city}, ${lookup.state} ${lookup.pincode}, India`
+            : '',
+          lookup.city ? `${lookup.city}, ${lookup.pincode}, India` : '',
+          `${lookup.pincode}, India`,
+        ].filter(Boolean) as string[];
+        for (const query of expoFallbackQueries) {
+          try {
+            const geos = await Location.geocodeAsync(query);
+            if (Array.isArray(geos) && geos.length > 0) {
+              const g = geos[0];
+              if (Number.isFinite(g.latitude) && Number.isFinite(g.longitude)) {
+                lat = g.latitude;
+                lng = g.longitude;
+                break;
+              }
+            }
+          } catch {
+            /* try next query */
+          }
         }
       }
 
@@ -715,7 +762,9 @@ export default function AddressesScreen() {
         setMapLoading(false);
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({});
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+      });
       const reg = {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
@@ -885,7 +934,6 @@ export default function AddressesScreen() {
               value={line1}
               onChangeText={setLine1}
               style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-              editable={addressInputMode === 'manual' || !line1}
               multiline
             />
             <Text style={styles.fieldLabel}>Address Line 2</Text>
@@ -1294,6 +1342,48 @@ export default function AddressesScreen() {
         </View>
       </Modal>
 
+      {/* Delete-address confirmation popup (replaces native Alert.alert). */}
+      <Modal
+        visible={!!deleteTarget}
+        animationType="fade"
+        transparent
+        onRequestClose={() => !isDeletingAddress && setDeleteTarget(null)}
+      >
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteCard}>
+            <View style={styles.deleteIconWrap}>
+              <Ionicons name="trash-outline" size={28} color="#b91c1c" />
+            </View>
+            <Text style={styles.deleteTitle}>Delete address?</Text>
+            <Text style={styles.deleteBody} numberOfLines={3}>
+              {`Remove "${deleteTarget?.label || 'this address'}" from your saved addresses. This cannot be undone.`}
+            </Text>
+            <View style={styles.deleteActionsRow}>
+              <TouchableOpacity
+                style={[styles.deleteBtn, styles.deleteBtnSecondary]}
+                onPress={() => setDeleteTarget(null)}
+                disabled={isDeletingAddress}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.deleteBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteBtn, styles.deleteBtnPrimary, isDeletingAddress && { opacity: 0.7 }]}
+                onPress={performDeleteAddress}
+                disabled={isDeletingAddress}
+                activeOpacity={0.85}
+              >
+                {isDeletingAddress ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.deleteBtnPrimaryText}>Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <AddressMapPicker
         visible={showMap}
         region={region}
@@ -1507,6 +1597,82 @@ const styles = StyleSheet.create({
   modalCloseBtn: { backgroundColor: '#f1f5f9', padding: 8, borderRadius: 20 },
   modalTitle: { fontSize: 18, fontWeight: '800' },
   inputLabel: { fontSize: 11, fontWeight: '900', color: '#4b6f9e', marginBottom: 8, marginTop: 10, textTransform: 'uppercase', letterSpacing: 1 },
+
+  // Delete-address confirm popup
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  deleteCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
+  },
+  deleteIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  deleteTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  deleteBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 22,
+  },
+  deleteActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignSelf: 'stretch',
+  },
+  deleteBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteBtnSecondary: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  deleteBtnSecondaryText: {
+    color: '#334155',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  deleteBtnPrimary: {
+    backgroundColor: '#b91c1c',
+  },
+  deleteBtnPrimaryText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
 
   // Others summary
   othersSummaryCard: { backgroundColor: '#fff', margin: 16, padding: 16, borderRadius: 16, borderLeftWidth: 5, borderLeftColor: '#4b6f9e' },

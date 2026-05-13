@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
-import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,6 +19,97 @@ import { searchPlaces, type PlaceSuggestion } from '@/api/mapService';
 import type { AddressMapPickerProps } from './AddressMapPicker.types';
 
 const SEARCH_DEBOUNCE_MS = 320;
+
+const OLA_MAPS_API_KEY = (process.env.EXPO_PUBLIC_OLA_MAPS_API_KEY || '').trim();
+const OLA_STYLE_URL =
+  'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json';
+
+/**
+ * Renders Ola map tiles inside a WebView using MapLibre GL JS (the same renderer the Ola Web SDK uses).
+ * Tile + style requests are signed with the project's Ola key via `transformRequest`.
+ */
+function buildMapHtml(apiKey: string, lat: number, lng: number): string {
+  const safeKey = apiKey.replace(/"/g, '\\"');
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<style>
+  html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; }
+  body { background: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+  .err {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 24px; text-align: center; font: 500 14px -apple-system, system-ui, sans-serif; color: #475569;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="err" class="err" style="display:none"></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+(function () {
+  var post = function (msg) {
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+    }
+  };
+  var showErr = function (text) {
+    var el = document.getElementById('err');
+    el.style.display = 'flex';
+    el.textContent = text;
+    post({ type: 'error', message: text });
+  };
+  var API_KEY = "${safeKey}";
+  if (!API_KEY) { showErr('Missing Ola Maps API key (EXPO_PUBLIC_OLA_MAPS_API_KEY).'); return; }
+
+  try {
+    var map = new maplibregl.Map({
+      container: 'map',
+      style: '${OLA_STYLE_URL}',
+      center: [${lng}, ${lat}],
+      zoom: 16,
+      attributionControl: false,
+      transformRequest: function (url) {
+        if (url.indexOf('api.olamaps.io') === -1) return { url: url };
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        return { url: url + sep + 'api_key=' + encodeURIComponent(API_KEY) };
+      }
+    });
+
+    map.on('load', function () {
+      post({ type: 'ready' });
+      var c = map.getCenter();
+      post({ type: 'region', lat: c.lat, lng: c.lng });
+    });
+
+    var debounce = null;
+    map.on('moveend', function () {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(function () {
+        var c = map.getCenter();
+        post({ type: 'region', lat: c.lat, lng: c.lng });
+      }, 80);
+    });
+
+    // Swallow non-fatal style/source warnings (Ola style references a 3d_model layer that is
+    // not in the basic tileset). The map still renders, so we do not surface these as errors.
+    map.on('error', function () { });
+
+    window.__flyTo = function (lng, lat) {
+      try { map.flyTo({ center: [lng, lat], zoom: 16, essential: true }); } catch (e) {}
+    };
+  } catch (e) {
+    showErr((e && e.message) || 'Failed to initialize map.');
+  }
+})();
+true;
+</script>
+</body>
+</html>`;
+}
 
 export default function AddressMapPicker({
   visible,
@@ -30,18 +121,25 @@ export default function AddressMapPicker({
   onClose,
 }: AddressMapPickerProps) {
   const insets = useSafeAreaInsets();
-  const mapRef = useRef<MapView>(null);
+  const webRef = useRef<WebView>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deltaRef = useRef({ latitudeDelta: 0.005, longitudeDelta: 0.005 });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchError, setSearchError] = useState('');
-  /** True after a debounced request finished with zero results (not shown until then). */
   const [searchCompletedEmpty, setSearchCompletedEmpty] = useState(false);
-  const deltaRef = useRef({ latitudeDelta: 0.005, longitudeDelta: 0.005 });
+  const [mapError, setMapError] = useState('');
+
+  const initialLat = region?.latitude ?? 12.9716;
+  const initialLng = region?.longitude ?? 77.5946;
+  const html = useMemo(
+    () => buildMapHtml(OLA_MAPS_API_KEY, initialLat, initialLng),
+    [initialLat, initialLng],
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -50,6 +148,7 @@ export default function AddressMapPicker({
       setSearchError('');
       setSearchCompletedEmpty(false);
       setSearchFocused(false);
+      setMapError('');
       searchAbortRef.current?.abort();
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     }
@@ -95,13 +194,32 @@ export default function AddressMapPicker({
     };
   }, [searchQuery]);
 
-  const handleRegionComplete = useCallback(
-    (r: Parameters<AddressMapPickerProps['onRegionChangeComplete']>[0]) => {
-      deltaRef.current = {
-        latitudeDelta: r.latitudeDelta,
-        longitudeDelta: r.longitudeDelta,
-      };
-      onRegionChangeComplete(r);
+  const flyMapTo = useCallback((lat: number, lng: number) => {
+    webRef.current?.injectJavaScript(
+      `(function(){try{window.__flyTo && window.__flyTo(${lng}, ${lat});}catch(e){}})();true;`,
+    );
+  }, []);
+
+  const handleMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data) as
+          | { type: 'region'; lat: number; lng: number }
+          | { type: 'ready' }
+          | { type: 'error'; message?: string };
+        if (data.type === 'region') {
+          onRegionChangeComplete({
+            latitude: data.lat,
+            longitude: data.lng,
+            latitudeDelta: deltaRef.current.latitudeDelta,
+            longitudeDelta: deltaRef.current.longitudeDelta,
+          });
+        } else if (data.type === 'error') {
+          setMapError(data.message || 'Map error');
+        }
+      } catch {
+        /* ignore malformed message */
+      }
     },
     [onRegionChangeComplete],
   );
@@ -112,15 +230,7 @@ export default function AddressMapPicker({
     setSearchQuery('');
     setSuggestions([]);
     setSearchError('');
-    const next = {
-      latitude: place.lat,
-      longitude: place.lng,
-      latitudeDelta: deltaRef.current.latitudeDelta,
-      longitudeDelta: deltaRef.current.longitudeDelta,
-    };
-    mapRef.current?.animateToRegion(next, 450);
-    // animateToRegion does not always fire onRegionChangeComplete on every platform build
-    handleRegionComplete(next);
+    flyMapTo(place.lat, place.lng);
   };
 
   const showSuggestionPanel =
@@ -131,12 +241,15 @@ export default function AddressMapPicker({
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1 }}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
+        <WebView
+          ref={webRef}
+          originWhitelist={['*']}
+          source={{ html, baseUrl: 'https://localhost' }}
+          onMessage={handleMessage}
+          javaScriptEnabled
+          domStorageEnabled
+          allowsInlineMediaPlayback
           style={{ flex: 1 }}
-          initialRegion={region ?? undefined}
-          onRegionChangeComplete={handleRegionComplete}
         />
 
         <View style={[styles.mapHeader, { paddingTop: Math.max(insets.top, 8) }]} pointerEvents="box-none">
@@ -167,7 +280,7 @@ export default function AddressMapPicker({
               placeholder="Search area or landmark…"
               placeholderTextColor="#94a3b8"
               value={searchQuery}
-              onChangeText={t => {
+              onChangeText={(t) => {
                 setSearchQuery(t);
                 setSearchError('');
                 setSearchCompletedEmpty(false);
@@ -199,7 +312,7 @@ export default function AddressMapPicker({
               ) : (
                 <FlatList
                   data={suggestions}
-                  keyExtractor={item => item.id}
+                  keyExtractor={(item) => item.id}
                   keyboardShouldPersistTaps="handled"
                   style={{ maxHeight: 220 }}
                   renderItem={({ item }) => (
@@ -219,7 +332,9 @@ export default function AddressMapPicker({
         <View style={styles.markerFixed} pointerEvents="none">
           <Ionicons name="location" size={40} color="#ef4444" />
         </View>
+
         <View style={styles.mapFooter}>
+          {mapError ? <Text style={styles.mapError}>{mapError}</Text> : null}
           <Text style={styles.mapAddr}>{isFetchingAddress ? 'Fetching address...' : line1}</Text>
           <TouchableOpacity style={styles.mapConfirmBtn} onPress={() => void onConfirm()}>
             <Text style={styles.mapConfirmBtnText}>Confirm Location</Text>
@@ -318,6 +433,12 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+  },
+  mapError: {
+    marginBottom: 8,
+    color: '#b91c1c',
+    fontSize: 13,
+    fontWeight: '600',
   },
   mapAddr: { marginBottom: 15, color: '#1e293b', fontWeight: '500' },
   mapConfirmBtn: {

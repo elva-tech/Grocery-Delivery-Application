@@ -10,6 +10,8 @@ import { useRouter } from 'expo-router';
 import { showToast } from '@/utils/toast';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiSlice } from '@/api/apiSlice';
+import { clearCustomerLocalCaches } from '@/src/utils/customerLocalStorage';
 import { Colors, Fonts } from '@/theme/theme';
 import { APP_BRAND } from '@/src/config/constants';
 import { MOBILE_COPY } from '@/src/constants/copy';
@@ -27,11 +29,13 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     showToast('info', 'Logout', 'Logging you out...');
+    await clearCustomerLocalCaches();
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('user');
     setTimeout(() => {
       dispatch(logout());
       dispatch(clearCart());
+      dispatch(apiSlice.util.resetApiState());
       router.replace('/auth/landing');
       showToast('success', 'Logged Out', 'Come back soon!');
     }, 600);

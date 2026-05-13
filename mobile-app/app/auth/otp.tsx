@@ -7,8 +7,11 @@ import { Colors, Fonts } from "@/theme/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from "lottie-react-native";
 import { sendOtp, verifyOtp } from "@/api/authApi";
+import { apiSlice } from "@/api/apiSlice";
 import { showToast } from "@/utils/toast";
 import { getActiveTenantId } from "@/src/utils/tenantStorage";
+import { clearCustomerLocalCaches } from "@/src/utils/customerLocalStorage";
+import { hydrateCart } from "@/store/slices/cartSlice";
 import { MOBILE_COPY } from "@/src/constants/copy";
 
 export default function OTP() {
@@ -78,36 +81,62 @@ export default function OTP() {
         signupName,
         mode as "signup" | "login"
       );
+
+      // `verifyOtp` already throws when token/user are missing, but TS can't infer that
+      // from the optional fields. Narrow once here so the rest of this function is type-safe.
+      const token = result.token;
+      const user = result.user;
+      if (!token || !user) {
+        throw new Error(result.message || 'Verification failed');
+      }
+
       const currentTenant = String(await getActiveTenantId()).trim().toLowerCase();
-      const tokenTenant = String(result.user.tenantId || "").trim().toLowerCase();
+      const tokenTenant = String(user.tenantId || "").trim().toLowerCase();
       if (currentTenant && tokenTenant && currentTenant !== tokenTenant) {
         await AsyncStorage.multiRemove(['token', 'user', 'jwtToken']);
+        await clearCustomerLocalCaches();
+        dispatch(apiSlice.util.resetApiState());
+        dispatch(hydrateCart({ items: [], totalAmount: 0, appliedCoupon: null }));
         throw new Error('This account belongs to a different store. Please switch store and login again.');
       }
 
-      await AsyncStorage.setItem('token', result.token);
+      let prevUserId = '';
+      try {
+        const prevRaw = await AsyncStorage.getItem('user');
+        if (prevRaw) prevUserId = String((JSON.parse(prevRaw) as { id?: string })?.id || '');
+      } catch {
+        /* ignore */
+      }
+      const newUserId = String(user.id || '');
+      if (prevUserId && newUserId && prevUserId !== newUserId) {
+        await clearCustomerLocalCaches();
+        dispatch(apiSlice.util.resetApiState());
+        dispatch(hydrateCart({ items: [], totalAmount: 0, appliedCoupon: null }));
+      }
+
+      await AsyncStorage.setItem('token', token);
 
       await AsyncStorage.setItem('user', JSON.stringify({
-        id: result.user.id,
-        phone: result.user.phoneNumber,
-        name: result.user.name,
-        email: result.user.email,
-        address: result.user.address,
-        alternatePhone: result.user.alternatePhone,
-        tenantId: result.user.tenantId || currentTenant,
+        id: user.id,
+        phone: user.phoneNumber,
+        name: user.name,
+        email: user.email,
+        address: user.address,
+        alternatePhone: user.alternatePhone,
+        tenantId: user.tenantId || currentTenant,
       }));
 
       dispatch(setCredentials({
         user: {
-          id: result.user.id,
-          phone: result.user.phoneNumber,
-          name: result.user.name,
-          email: result.user.email,
-          address: result.user.address,
-          alternatePhone: result.user.alternatePhone,
-          tenantId: result.user.tenantId || currentTenant,
+          id: user.id,
+          phone: user.phoneNumber,
+          name: user.name,
+          email: user.email,
+          address: user.address,
+          alternatePhone: user.alternatePhone,
+          tenantId: user.tenantId || currentTenant,
         },
-        token: result.token,
+        token,
       }));
 
       if (mode === "signup") {
