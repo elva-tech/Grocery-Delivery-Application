@@ -1,20 +1,42 @@
 {
+  "cli": {
+    "version": ">= 5.0.0"
+  },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_ENV": "development",
+        "EXPO_PUBLIC_TENANT_ID": "puma",
+        "EXPO_PUBLIC_OLA_MAPS_API_KEY": "Nsxkjc63LLCTzAIIOkyHXeXDjjlIoDZtVWo0kwfe"
+      }
+    },
     "preview": {
-      "android": {
-        "buildType": "apk",
-        "env": {
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EXPO_PUBLIC_TENANT_ID": "puma",
-          "EXPO_PUBLIC_ENV": "development"
-        }
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_TENANT_ID": "puma",
+        "EXPO_PUBLIC_API_DEV_URL": "https://grocery-delivery-application-6n3w.onrender.com",
+        "EXPO_PUBLIC_OLA_MAPS_API_KEY": "Nsxkjc63LLCTzAIIOkyHXeXDjjlIoDZtVWo0kwfe"
       }
     },
     "production": {
+      "android": { "buildType": "app-bundle" },
       "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_TENANT_ID": "puma",
-        "EXPO_PUBLIC_ENV": "production"
+        "EXPO_PUBLIC_API_DEV_URL": "https://grocery-delivery-application-6n3w.onrender.com",
+        "EXPO_PUBLIC_OLA_MAPS_API_KEY": "Nsxkjc63LLCTzAIIOkyHXeXDjjlIoDZtVWo0kwfe"
       }
     }
+  },
+  "submit": {
+    "production": {}
   }
 }

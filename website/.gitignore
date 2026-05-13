@@ -12,8 +12,10 @@ dist
 dist-ssr
 *.local
 
-# Private root env only (committed templates: .env.development, .env.production)
+# Env files — only `.env.example` is committed (all real values go through hosting / `.env.local`).
 .env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*

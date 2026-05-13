@@ -15,8 +15,9 @@ import * as Linking from 'expo-linking';
 import { setCredentials } from '@/store/slices/authSlice';
 import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
-import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
+import { apiSlice, useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import { extractTenantFromUrl, getActiveTenantId, saveTenantId } from '@/src/utils/tenantStorage';
+import { clearCustomerLocalCaches } from '@/src/utils/customerLocalStorage';
 import { TenantBrandingProvider } from '@/contexts/TenantBrandingContext';
 
 SplashScreen.preventAutoHideAsync();
@@ -49,7 +50,7 @@ const isClosed = storeStatus?.isClosed;
     'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
   });
 
-  // Restore auth + cart from AsyncStorage on app start
+  // Restore auth + cart from AsyncStorage on app start (never hydrate cart without a valid session).
   useEffect(() => {
     (async () => {
       try {
@@ -58,6 +59,8 @@ const isClosed = storeStatus?.isClosed;
           AsyncStorage.getItem('user'),
           AsyncStorage.getItem(CART_STORAGE_KEY),
         ]);
+        let sessionValid = false;
+
         if (token && userStr) {
           let parsedUser = JSON.parse(userStr) as Record<string, unknown>;
           const activeTenant = String(await getActiveTenantId()).trim().toLowerCase();
@@ -74,15 +77,23 @@ const isClosed = storeStatus?.isClosed;
             }
           }
 
-          // Only clear session when we know both tenants and they disagree (real store switch).
+          // Store switch: drop auth + wipe local cart/addresses so another tenant's data never leaks.
           if (savedTenant && activeTenant && savedTenant !== activeTenant) {
             await AsyncStorage.multiRemove(['token', 'user', 'jwtToken']);
+            await clearCustomerLocalCaches();
+            dispatch(apiSlice.util.resetApiState());
+            dispatch(hydrateCart({ items: [], totalAmount: 0, appliedCoupon: null }));
           } else {
             dispatch(setCredentials({ user: parsedUser, token }));
+            sessionValid = true;
           }
         }
-        if (cartStr) {
+
+        if (sessionValid && cartStr) {
           dispatch(hydrateCart(JSON.parse(cartStr)));
+        } else if (!sessionValid && cartStr) {
+          await AsyncStorage.removeItem(CART_STORAGE_KEY);
+          dispatch(hydrateCart({ items: [], totalAmount: 0, appliedCoupon: null }));
         }
       } catch (_) {
         // ignore
