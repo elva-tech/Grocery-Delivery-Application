@@ -35,6 +35,15 @@ export const MOBILE_COPY = {
     quickDelivery: 'Quick Delivery',
     qualityChecked: 'Quality Checked',
   },
+  store: {
+    closingSoonTitle: 'Closing soon',
+    closingInMinutes: (minutes: number) =>
+      minutes <= 1
+        ? 'Store closes in about a minute — place your order now.'
+        : `Store closes in ${minutes} minutes — place your order soon.`,
+    closingAt: (time: string) =>
+      `Store closes at ${time} — finish checkout to get your order in.`,
+  },
   delivery: {
     checkoutBlockedHint:
       'This address is outside our delivery area. Choose another saved address or pin a closer location.',

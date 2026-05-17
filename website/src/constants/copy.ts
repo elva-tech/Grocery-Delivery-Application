@@ -32,6 +32,15 @@ export const WEB_COPY = {
     emptyCart: 'Your cart is empty',
   },
   /** Customer-facing delivery eligibility (avoid showing raw MapService / admin jargon). */
+  store: {
+    closingSoonTitle: 'Closing soon',
+    closingInMinutes: (minutes: number) =>
+      minutes <= 1
+        ? 'Store closes in about a minute — place your order now.'
+        : `Store closes in ${minutes} minutes — place your order soon.`,
+    closingAt: (time: string) =>
+      `Store closes at ${time} — finish checkout to get your order in.`,
+  },
   delivery: {
     bannerTitle: 'We can’t deliver to this area',
     outsideDeliveryRadius:

@@ -159,9 +159,9 @@ async function verifyPayment({
     return { success: false, message: "Signature verification failed" };
   }
 
+  // Payment captured; store still accepts the order (PLACED → CONFIRMED via admin).
   await Order.findByIdAndUpdate(orderId, {
     paymentStatus: "PAID",
-    orderStatus: "CONFIRMED",
     razorpayPaymentId,
   });
 

@@ -214,6 +214,10 @@ export const apiSlice = createApi({
       isClosed: boolean;
       reason: string;
       nextChange: string | null;
+      closingSoon: boolean;
+      hasScheduledHours: boolean;
+      minutesUntilClose: number | null;
+      closesAt: string | null;
     }, void>({
       queryFn: async () => {
         try {
@@ -227,11 +231,26 @@ export const apiSlice = createApi({
               isClosed:   !data.isOpen,
               reason:     data.reason ?? 'SCHEDULE',
               nextChange: data.nextChange ?? null,
+              closingSoon: Boolean(data.closingSoon),
+              hasScheduledHours: Boolean(data.hasScheduledHours),
+              minutesUntilClose:
+                typeof data.minutesUntilClose === 'number' ? data.minutesUntilClose : null,
+              closesAt: typeof data.closesAt === 'string' ? data.closesAt : null,
             },
           };
         } catch {
           // Fail open – don't block the store if the API is unreachable
-          return { data: { isClosed: false, reason: 'UNAVAILABLE', nextChange: null } };
+          return {
+            data: {
+              isClosed: false,
+              reason: 'UNAVAILABLE',
+              nextChange: null,
+              closingSoon: false,
+              hasScheduledHours: false,
+              minutesUntilClose: null,
+              closesAt: null,
+            },
+          };
         }
       },
     }),

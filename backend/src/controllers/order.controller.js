@@ -3,6 +3,8 @@ const Tenant = require("../models/Tenant.model");
 const CustomerInvoice = require("../models/CustomerInvoice.model");
 const Address = require("../models/Address.model");
 const Inventory = require("../models/Inventory.model");
+const { initiateOrderRefund, isRefundableOrder } = require("../services/orderRefund.service");
+const { restoreOrderInventory } = require("../utils/orderInventory.util");
 const mongoose = require("mongoose");
 const User = require("../models/User.model");
 const Settings = require("../models/Settings.model");
@@ -418,6 +420,10 @@ exports.getCustomerOrderHistory = async (req, res) => {
       status: order.orderStatus,              // ✅ rename
       totalAmount: order.totalAmount,
       paymentStatus: order.paymentStatus,
+      paymentMode: order.paymentMode,
+      refundStatus: order.refundStatus || "NONE",
+      refundedAt: order.refundedAt,
+      refundAmount: order.refundAmount,
       createdAt: order.createdAt,
 
       // ✅ ADD THESE (you already store them)
@@ -731,23 +737,30 @@ exports.cancelOrder = async (req, res) => {
       return res.status(400).json({ message: "Order cannot be cancelled at this stage" });
     }
 
-    // Restore inventory stock
-    for (const item of order.items) {
-      await Inventory.findOneAndUpdate(
-        { productId: item.productId, tenantId },
-        { $inc: { availableQty: item.qty } }
-      );
-    }
+    await restoreOrderInventory(order, tenantId);
 
-    // Handle refund status for online payments
-    let refundStatus = "NOT_APPLICABLE";
-    if (order.paymentMode === "ONLINE" && order.paymentStatus === "PAID") {
-      refundStatus = "INITIATED";
-      order.paymentStatus = "REFUND_INITIATED";
+    let refundResult = null;
+    if (isRefundableOrder(order)) {
+      try {
+        refundResult = await initiateOrderRefund(order, {
+          reason: "customer_cancelled",
+        });
+      } catch (refundErr) {
+        console.error("Customer cancel: refund failed", {
+          orderId: order._id,
+          message: refundErr.message,
+        });
+        refundResult = {
+          success: false,
+          error: refundErr.message || "Refund initiation failed",
+        };
+      }
     }
 
     order.orderStatus = "CANCELLED";
     await order.save();
+
+    const refreshedOrder = await Order.findById(order._id);
 
     // Reverse billing usage — best-effort, never blocks cancellation
     try {
@@ -756,13 +769,26 @@ exports.cancelOrder = async (req, res) => {
       console.error("Billing reversal error (non-critical):", billingErr.message);
     }
 
+    const finalOrder = refreshedOrder || order;
+    let message = "Order cancelled successfully";
+    if (refundResult?.success === false) {
+      message =
+        "Order cancelled. Refund could not be started automatically — please contact support.";
+    } else if (refundResult && !refundResult.skipped && !refundResult.error) {
+      message =
+        finalOrder.paymentStatus === "REFUNDED"
+          ? "Order cancelled. Your refund has been initiated."
+          : "Order cancelled. Refund is processing (typically 5–7 business days).";
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Order cancelled successfully",
+      message,
       orderId: order._id,
-      orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus,
-      refundStatus,
+      orderStatus: finalOrder.orderStatus,
+      paymentStatus: finalOrder.paymentStatus,
+      refundStatus: finalOrder.refundStatus,
+      refund: refundResult,
     });
 
   } catch (error) {

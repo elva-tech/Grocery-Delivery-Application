@@ -9,17 +9,7 @@ import ReportIssueModal from './ReportIssueModal';
 import { useGetAppSettingsQuery } from '../api/apiSlice';
 import { resolveImageUrl } from '../utils/resolveImageUrl';
 import { useToast } from '../context/ToastContext';
-
-const STATUS_THEME: any = {
-  PLACED: { color: 'text-slate-500', bg: 'bg-slate-50', label: 'Order Placed' },
-  CONFIRMED: { color: 'text-blue-600', bg: 'bg-blue-50', label: 'Confirmed' },
-  OUT_FOR_DELIVERY: { color: 'text-amber-600', bg: 'bg-amber-50', label: 'On its way' },
-  DELIVERED: { color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Delivered' },
-  CANCELLED: { color: 'text-red-600', bg: 'bg-red-50', label: 'Cancelled' },
-  ISSUE_REPORTED: { color: 'text-purple-600', bg: 'bg-purple-50', label: 'Issue Reported' },
-  REFUND_APPROVED: { color: 'text-emerald-700', bg: 'bg-emerald-100', label: 'Refund Approved' },
-  REFUND_REJECTED: { color: 'text-red-700', bg: 'bg-red-100', label: 'Refund Rejected' },
-};
+import { getCustomerOrderStatusTheme, getOnlineRefundSubtitle } from '../utils/orderStatusDisplay';
 
 const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
@@ -163,9 +153,15 @@ const loadOrders = async () => {
   };
 
   const sections = [
-    { title: "On its way", data: orders.filter(o => o.status === 'OUT_FOR_DELIVERY') },
-    { title: "Order Placed", data: orders.filter(o => ['PLACED', 'CONFIRMED'].includes(o.status)) },
-    { title: "Delivered & Others", data: orders.filter(o => ['DELIVERED', 'ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED', 'CANCELLED'].includes(o.status)) }
+    { title: 'Waiting for confirmation', data: orders.filter(o => o.status === 'PLACED') },
+    { title: 'Order confirmed', data: orders.filter(o => o.status === 'CONFIRMED') },
+    { title: 'On its way', data: orders.filter(o => o.status === 'OUT_FOR_DELIVERY') },
+    {
+      title: 'Delivered & others',
+      data: orders.filter(o =>
+        ['DELIVERED', 'ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED', 'CANCELLED'].includes(o.status),
+      ),
+    },
   ];
 
   if (loading) return (
@@ -184,8 +180,10 @@ const loadOrders = async () => {
               <PartyPopper size={24} />
             </div>
             <div>
-              <h2 className="text-emerald-900 font-black text-xl tracking-tight">Order Successful!</h2>
-              <p className="text-emerald-600 font-bold text-sm">Your fresh supplies are being packed.</p>
+              <h2 className="text-emerald-900 font-black text-xl tracking-tight">Order received!</h2>
+              <p className="text-emerald-600 font-bold text-sm">
+                Waiting for store confirmation — track status below.
+              </p>
             </div>
           </div>
           <button onClick={() => setShowSuccess(false)} className="bg-white/50 p-2 rounded-full hover:bg-white text-emerald-900"><X size={18}/></button>
@@ -199,8 +197,10 @@ const loadOrders = async () => {
           {sections.map((section) => section.data.length > 0 && (
             <div key={section.title} className="space-y-4">
               <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{section.title}</h2>
-              {section.data.map((order) => (
-                <div 
+              {section.data.map((order) => {
+                const statusTheme = getCustomerOrderStatusTheme(order.status);
+                return (
+                <div
                   key={order.id}
                   onClick={() => setSelectedOrder(order)}
                   className={`group cursor-pointer p-6 rounded-[2rem] border-2 transition-all ${
@@ -214,10 +214,16 @@ const loadOrders = async () => {
                         {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
                       </h3>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${STATUS_THEME[order.status]?.bg} ${STATUS_THEME[order.status]?.color}`}>
-                      {STATUS_THEME[order.status]?.label}
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${statusTheme?.bg} ${statusTheme?.color}`}>
+                      {statusTheme?.label}
                     </div>
                   </div>
+                  {order.status === 'PLACED' && statusTheme.subtitle && (
+                    <p className="text-[11px] font-semibold text-amber-700 mb-3 -mt-1">{statusTheme.subtitle}</p>
+                  )}
+                  {getOnlineRefundSubtitle(order) && (
+                    <p className="text-[11px] font-semibold text-slate-600 mb-3 -mt-1">{getOnlineRefundSubtitle(order)}</p>
+                  )}
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{order.items.length} Items</p>
                     <p className="font-black text-slate-900">₹{order.totalAmount}</p>
@@ -236,7 +242,8 @@ const loadOrders = async () => {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ))}
         </div>
@@ -244,6 +251,19 @@ const loadOrders = async () => {
         <div className="md:col-span-7">
           {selectedOrder ? (
             <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-2xl h-fit animate-in fade-in slide-in-from-right-4">
+              {selectedOrder.status === 'PLACED' && (
+                <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-100 flex gap-3 items-start">
+                  <Clock className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-amber-800">
+                      {getCustomerOrderStatusTheme('PLACED').label}
+                    </p>
+                    <p className="text-sm font-semibold text-amber-700 mt-1">
+                      {getCustomerOrderStatusTheme('PLACED').subtitle}
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-50">
                 <div>
                   <h2 className="text-xl font-black text-slate-900">Summary</h2>
@@ -377,7 +397,7 @@ const loadOrders = async () => {
                             selectedOrder.status === 'REFUND_APPROVED' ? 'text-emerald-700' : 
                             selectedOrder.status === 'REFUND_REJECTED' ? 'text-red-700' : 'text-purple-700'
                           }`}>
-                            {STATUS_THEME[selectedOrder.status]?.label}
+                            {getCustomerOrderStatusTheme(selectedOrder.status)?.label}
                           </p>
                           <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
                             {selectedOrder.status === 'ISSUE_REPORTED' ? 'Reviewing your request' : 'Resolution Provided'}

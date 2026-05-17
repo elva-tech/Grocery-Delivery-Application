@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const crypto = require("crypto");
 const Order = require("../models/Order.model");
+const { applyRefundWebhook } = require("../services/orderRefund.service");
 
 // Must be registered BEFORE express.json() in app.js
 // Uses express.raw() to preserve the raw body for signature verification
@@ -33,6 +34,20 @@ router.post(
       return res.status(400).json({ message: "Invalid JSON payload" });
     }
 
+    const eventName = event?.event;
+
+    // Refund lifecycle (order cancellation refunds)
+    if (eventName && eventName.startsWith("refund.")) {
+      const refundEntity = event?.payload?.refund?.entity;
+      try {
+        await applyRefundWebhook(refundEntity);
+      } catch (err) {
+        console.error("Webhook: refund handler failed", err);
+        return res.status(500).json({ message: "Internal error" });
+      }
+      return res.status(200).json({ received: true });
+    }
+
     const paymentEntity = event?.payload?.payment?.entity;
 
     if (!paymentEntity) {
@@ -42,7 +57,6 @@ router.post(
     const razorpayPaymentId = paymentEntity.id;
     const razorpayOrderId = paymentEntity.order_id;
 
-    // Resolve order: prefer notes.order_id, fallback to razorpayOrderId field
     const internalOrderId = paymentEntity.notes?.order_id;
     const order = internalOrderId
       ? await Order.findById(internalOrderId)
@@ -54,26 +68,29 @@ router.post(
     }
 
     try {
-      if (event.event === "payment.captured") {
-        // Idempotency: skip if already PAID
-        if (order.paymentStatus === "PAID") {
-          console.log("Webhook: already PAID, skipping", { orderId: order._id, event: event.event });
+      if (eventName === "payment.captured") {
+        if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
+          console.log("Webhook: already PAID/REFUNDED, skipping", {
+            orderId: order._id,
+            event: eventName,
+          });
           return res.status(200).json({ received: true });
         }
         await Order.findByIdAndUpdate(order._id, {
           paymentStatus: "PAID",
-          orderStatus: "CONFIRMED",
           razorpayPaymentId,
         });
         console.log("Webhook: order marked PAID", {
           orderId: order._id,
           razorpayOrderId,
           razorpayPaymentId,
-          event: event.event,
+          event: eventName,
         });
-      } else if (event.event === "payment.failed") {
-        if (order.paymentStatus === "PAID") {
-          console.log("Webhook: already PAID, ignoring failed event", { orderId: order._id });
+      } else if (eventName === "payment.failed") {
+        if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
+          console.log("Webhook: already PAID/REFUNDED, ignoring failed event", {
+            orderId: order._id,
+          });
           return res.status(200).json({ received: true });
         }
         await Order.findByIdAndUpdate(order._id, {
@@ -82,7 +99,7 @@ router.post(
         console.log("Webhook: order marked FAILED", {
           orderId: order._id,
           razorpayOrderId,
-          event: event.event,
+          event: eventName,
         });
       }
     } catch (err) {
@@ -93,7 +110,5 @@ router.post(
     return res.status(200).json({ received: true });
   }
 );
-
-module.exports = router;
 
 module.exports = router;

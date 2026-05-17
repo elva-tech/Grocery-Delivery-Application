@@ -94,6 +94,10 @@ function normalizeAdminOrderRow(o) {
     },
     paymentMode: o.paymentMode || 'ONLINE',
     paymentStatus: o.paymentStatus || 'PENDING',
+    refundStatus: o.refundStatus || 'NONE',
+    refundAmount: o.refundAmount,
+    refundedAt: o.refundedAt,
+    refundFailureReason: o.refundFailureReason || '',
     itemsText: (o.items || [])
       .map(i => `${i.name} x${i.qty}`)
       .join(', '),
@@ -372,7 +376,7 @@ export const AppStateProvider = ({ children }) => {
 
     try {
 
-      await apiService.updateOrderStatus(orderId, newStatus);
+      const result = await apiService.updateOrderStatus(orderId, newStatus);
 
       const data = await apiService.getOrders();
 
@@ -380,12 +384,37 @@ export const AppStateProvider = ({ children }) => {
 
       setOrders(normalized);
 
+      if (result?.message) {
+        showToast(
+          result.refund?.success === false ? 'error' : 'success',
+          result.message,
+        );
+      }
+
+      return result;
+
     } catch (error) {
 
       console.error("Update order failed:", error);
+      showToast('error', error?.response?.data?.message || 'Failed to update order');
+      throw error;
 
     }
 
+  };
+
+  const retryOrderRefund = async (orderId) => {
+    try {
+      const result = await apiService.retryOrderRefund(orderId);
+      const data = await apiService.getOrders();
+      setOrders((data.orders || []).map(normalizeAdminOrderRow));
+      showToast('success', result.message || 'Refund initiated');
+      return result;
+    } catch (error) {
+      console.error("Retry refund failed:", error);
+      showToast('error', error?.response?.data?.message || 'Refund failed');
+      throw error;
+    }
   };
 
   return (
@@ -433,6 +462,7 @@ export const AppStateProvider = ({ children }) => {
         setCategories(prev => prev.filter(c => c.id !== id)),
 
       updateOrderStatus,
+      retryOrderRefund,
       markCODPaid: async (orderId) => {
         await apiService.markCODPaid(orderId);
         setOrders(prev => prev.map(o =>

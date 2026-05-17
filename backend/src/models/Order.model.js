@@ -70,7 +70,7 @@ const orderSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ["PENDING", "PAID", "FAILED"],
+      enum: ["PENDING", "PAID", "FAILED", "REFUND_PENDING", "REFUNDED"],
       default: "PENDING",
     },
 
@@ -86,8 +86,28 @@ const orderSchema = new mongoose.Schema(
 
     refundStatus: {
       type: String,
-      enum: ["NONE", "PARTIAL", "FULL"],
+      enum: ["NONE", "PENDING", "PARTIAL", "FULL", "FAILED"],
       default: "NONE",
+    },
+
+    razorpayRefundId: {
+      type: String,
+      default: null,
+    },
+
+    refundAmount: {
+      type: Number,
+      default: null,
+    },
+
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
+
+    refundFailureReason: {
+      type: String,
+      default: "",
     },
 
     orderStatus: {
