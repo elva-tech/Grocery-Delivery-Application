@@ -160,7 +160,7 @@ export default function CartScreen() {
     updateCart();
   }, [items]);
 
-  /** Bill summary (incl. promo) on cart; address step is delivery + pay only. */
+  /** Cart → delivery address → checkout (payment & place order). */
   const handleProceed = () => {
     if (loading || items.length === 0) return;
     if (!token) {

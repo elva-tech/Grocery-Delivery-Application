@@ -1,23 +1,32 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
+import * as Haptics from 'expo-haptics';
 import { showToast } from '@/utils/toast';
-import { clearCart } from '@/store/slices/cartSlice';
+import { clearCart, setAppliedCartCoupon, clearAppliedCartCoupon } from '@/store/slices/cartSlice';
+import { clearCheckoutDraft } from '@/store/slices/checkoutSlice';
 import {
   placeOrderBackend,
+  validateCouponApi,
   createMobilePaymentOrder,
   verifyMobilePayment,
 } from '@/api/ordersApi';
 import { getCartCalculation } from '@/api/cartApi';
-import { getAddresses, pickPreferredSavedAddress } from '@/api/addresses';
-import { checkDeliveryEligibility } from '@/api/deliveryEligibilityApi';
-import { buildDeliveryAddressPayload, formatAddressSummary } from '@/utils/indiaPincode';
+import { buildDeliveryAddressPayload } from '@/utils/indiaPincode';
 import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
 import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
 import { useGetStoreStatusQuery } from '@/api/apiSlice';
@@ -25,189 +34,102 @@ import { useGetStoreStatusQuery } from '@/api/apiSlice';
 export default function CheckoutScreen() {
   const isExpoGo = Constants.appOwnership === 'expo';
   const { items, totalAmount, appliedCoupon } = useSelector((state: RootState) => state.cart);
+  const draft = useSelector((state: RootState) => state.checkout.draft);
   const { user, token } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
   const router = useRouter();
 
-  const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number }>({ grandTotal: totalAmount, deliveryFee: 0 });
-  const [selectedAddress, setSelectedAddress] = useState<any>(null);
+  const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number }>({
+    grandTotal: totalAmount,
+    deliveryFee: 0,
+  });
   const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
+  const [couponInput, setCouponInput] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isPlacing, setIsPlacing] = useState(false);
-  const [deliveryEligibility, setDeliveryEligibility] = useState<{
-    checking: boolean;
-    eligible: boolean | null;
-    message: string;
-    /** From same `/process` response used for eligibility (sent as `addressUrl` on place order). */
-    mapLink: string;
-  }>({ checking: false, eligible: null, message: '', mapLink: '' });
 
   const { data: storeStatus } = useGetStoreStatusQuery();
   const isStoreClosed = storeStatus?.isClosed ?? false;
 
   useEffect(() => {
-    if (items.length === 0) { router.replace('/(tabs)'); return; }
-    getCartCalculation(items).then(setBill).catch(() => {});
-    if (!token) {
-      setSelectedAddress(null);
+    if (items.length === 0) {
+      router.replace('/(tabs)/cart');
       return;
     }
-    getAddresses()
-      .then(async list => {
-        if (list.length === 0) return;
-        const sel = await pickPreferredSavedAddress(list);
-        setSelectedAddress(sel || list[0]);
-      })
-      .catch(() => {});
-  }, [items, token]);
-
-  /** After changing address on the Addresses tab, reload preferred address when returning here. */
-  useFocusEffect(
-    useCallback(() => {
-      if (items.length === 0) return;
-      if (!token) {
-        setSelectedAddress(null);
-        return;
-      }
-      let cancelled = false;
-      getAddresses()
-        .then(async list => {
-          if (cancelled) return;
-          if (list.length === 0) {
-            setSelectedAddress(null);
-            return;
-          }
-          const sel = await pickPreferredSavedAddress(list);
-          if (!cancelled) setSelectedAddress(sel || list[0]);
-        })
-        .catch(() => {});
-      return () => {
-        cancelled = true;
-      };
-    }, [items.length, token]),
-  );
+    if (!draft) {
+      router.replace('/addresses');
+    }
+  }, [items.length, draft]);
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (!selectedAddress) {
-        setDeliveryEligibility({ checking: false, eligible: null, message: '', mapLink: '' });
-        return;
-      }
-      const lat = Number(selectedAddress.lat);
-      const lng = Number(selectedAddress.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
-        setDeliveryEligibility({
-          checking: false,
-          eligible: null,
-          message: 'Add a map pin for this address (Use Current Location on Addresses) to verify delivery.',
-          mapLink: '',
-        });
-        return;
-      }
-      setDeliveryEligibility(prev => ({ ...prev, checking: true, message: '', mapLink: '' }));
-      try {
-        const result = await checkDeliveryEligibility(lat, lng);
-        if (cancelled) return;
-        const eligible =
-          typeof result.isEligible === 'boolean'
-            ? result.isEligible
-            : typeof result.eligible === 'boolean'
-              ? result.eligible
-              : false;
-        const mapLink =
-          (typeof result.mapLink === 'string' && result.mapLink.trim()) ||
-          (typeof (result as { map_link?: string }).map_link === 'string' &&
-            (result as { map_link: string }).map_link.trim()) ||
-          '';
-        setDeliveryEligibility({
-          checking: false,
-          eligible,
-          message: typeof result.message === 'string' ? result.message : '',
-          mapLink,
-        });
-      } catch (e: unknown) {
-        if (cancelled) return;
-        setDeliveryEligibility({
-          checking: false,
-          eligible: null,
-          message: e instanceof Error ? e.message : 'Could not verify delivery.',
-          mapLink: '',
-        });
-      }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedAddress]);
+    if (items.length === 0) return;
+    getCartCalculation(items).then(setBill).catch(() => {});
+  }, [items]);
 
   const couponDiscount = appliedCoupon?.discountAmount ?? 0;
   const finalAmount = Math.max(0, bill.grandTotal - couponDiscount);
 
-  const deliveryBlocksPay =
-    deliveryEligibility.checking ||
-    deliveryEligibility.eligible === false ||
-    (deliveryEligibility.eligible === null &&
-      deliveryEligibility.message.toLowerCase().includes('map pin'));
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim() || !token) return;
+    setCouponError('');
+    setIsApplyingCoupon(true);
+    try {
+      const result = await validateCouponApi(couponInput.trim().toUpperCase(), bill.grandTotal, token);
+      dispatch(setAppliedCartCoupon({ code: result.code, discountAmount: result.discountAmount }));
+      setCouponInput('');
+      showToast('success', 'Coupon Applied', result.message || `Saved ₹${result.discountAmount}!`);
+    } catch (err: any) {
+      setCouponError(err?.message || 'Invalid coupon code');
+      dispatch(clearAppliedCartCoupon());
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
 
   const handlePlaceOrder = async () => {
-    if (isStoreClosed) { showToast('error', 'Store Closed', 'We are not accepting orders right now.'); return; }
-    if (items.length === 0) { showToast('error', 'Empty Cart', 'Add items first.'); return; }
+    if (isStoreClosed) {
+      showToast('error', 'Store Closed', 'We are not accepting orders right now.');
+      return;
+    }
+    if (items.length === 0) {
+      showToast('error', 'Empty Cart', 'Add items first.');
+      return;
+    }
     if (!token) {
       showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
       router.push('/auth/landing');
       return;
     }
-    if (!selectedAddress) {
-      showToast('error', 'Address required', 'Add a delivery address in Addresses first.');
-      return;
-    }
-    if (deliveryEligibility.checking) {
-      showToast('info', 'Please wait', 'Checking delivery for this address…');
-      return;
-    }
-    if (deliveryEligibility.eligible === false) {
-      showToast(
-        'error',
-        MOBILE_COPY.delivery.unavailableToastTitle,
-        customerFacingDeliveryUnavailable(deliveryEligibility.message) ||
-          MOBILE_COPY.delivery.checkoutBlockedHint,
-      );
-      return;
-    }
-    if (
-      deliveryEligibility.eligible === null &&
-      deliveryEligibility.message.toLowerCase().includes('map pin')
-    ) {
-      showToast('error', 'Pin required', deliveryEligibility.message);
+    if (!draft?.deliverySource) {
+      showToast('error', 'Address required', 'Select a delivery address first.');
+      router.replace('/addresses');
       return;
     }
 
     try {
       setIsPlacing(true);
-
-      const addrPayload = buildDeliveryAddressPayload(selectedAddress);
+      const addrPayload = buildDeliveryAddressPayload(draft.deliverySource);
       const orderPayload = {
         items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
         paymentMode: paymentMethod,
         deliveryAddress: {
           ...addrPayload,
-          addressUrl: deliveryEligibility.mapLink || '',
+          addressUrl: draft.addressUrl || '',
         },
         couponCode: appliedCoupon?.code ?? null,
       };
 
       if (paymentMethod === 'COD') {
-        // COD: place order directly, skip Razorpay
         await placeOrderBackend(orderPayload, token);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        dispatch(clearCheckoutDraft());
         dispatch(clearCart());
         router.replace('/(tabs)/order-success');
         return;
       }
 
-      // ONLINE: existing Razorpay flow
       const order = await placeOrderBackend(orderPayload, token);
-
       const paymentData = await createMobilePaymentOrder(order.orderId, token);
       const rawPhone = ((user as any)?.phone || '').replace(/^\+91\s?/, '').slice(-10);
 
@@ -224,8 +146,13 @@ export default function CheckoutScreen() {
           razorpayModule = null;
         }
       }
+      if (!RAZORPAY_KEY_ID) {
+        throw new Error('Payment configuration missing. Please contact support.');
+      }
       if (!razorpayModule || typeof razorpayModule.open !== 'function') {
-        throw new Error('Online payment is unavailable in Expo Go. Use a dev build/APK for Razorpay.');
+        throw new Error(
+          'Online payment is unavailable in this build. Please use a development build or installed APK.',
+        );
       }
 
       const rzpResponse: any = await razorpayModule.open({
@@ -254,6 +181,8 @@ export default function CheckoutScreen() {
       );
 
       if (verified.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        dispatch(clearCheckoutDraft());
         dispatch(clearCart());
         router.replace('/(tabs)/order-success');
       } else {
@@ -270,54 +199,55 @@ export default function CheckoutScreen() {
     }
   };
 
+  if (!draft || items.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator style={{ marginTop: 40 }} color="#4b6f9e" />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name="arrow-back" size={24} color="#2c3e50" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Checkout</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery Address</Text>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>Deliver to</Text>
+            <TouchableOpacity onPress={() => router.replace('/addresses')}>
+              <Text style={styles.changeLink}>Change</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.addressCard}>
             <Ionicons name="location-outline" size={20} color="#4b6f9e" />
-            <Text style={styles.addressText}>
-              {selectedAddress
-                ? (formatAddressSummary(selectedAddress) || selectedAddress.label || 'Saved address')
-                : 'No address saved — add one in Addresses'}
-            </Text>
-          </View>
-          {!selectedAddress && (
-            <TouchableOpacity onPress={() => router.push('/(tabs)/addresses')}>
-              <Text style={{ color: '#4b6f9e', fontSize: 13, marginTop: 6, marginLeft: 4 }}>+ Add delivery address</Text>
-            </TouchableOpacity>
-          )}
-          {selectedAddress && deliveryEligibility.checking ? (
-            <View style={[styles.deliveryBannerCheckout, styles.deliveryBannerCheckoutNeutral]}>
-              <ActivityIndicator size="small" color="#4b6f9e" />
-              <Text style={styles.deliveryBannerCheckoutText}>Checking delivery for this address…</Text>
-            </View>
-          ) : selectedAddress && deliveryEligibility.eligible === false ? (
-            <View style={[styles.deliveryBannerCheckout, styles.deliveryBannerCheckoutBad]}>
-              <Ionicons name="alert-circle" size={18} color="#dc2626" />
-              <Text style={styles.deliveryBannerCheckoutBadText}>
-                {customerFacingDeliveryUnavailable(deliveryEligibility.message)}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.addressMode}>
+                {draft.orderMode === 'others' ? 'Someone else' : 'My address'}
               </Text>
+              <Text style={styles.addressText}>{draft.summaryText}</Text>
             </View>
-          ) : selectedAddress && deliveryEligibility.eligible === null && deliveryEligibility.message ? (
-            <View style={[styles.deliveryBannerCheckout, styles.deliveryBannerCheckoutWarn]}>
-              <Ionicons name="information-circle-outline" size={18} color="#b45309" />
-              <Text style={styles.deliveryBannerCheckoutWarnText}>{deliveryEligibility.message}</Text>
-            </View>
-          ) : null}
+          </View>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Order Summary</Text>
           {items.map(item => (
             <View key={item.id} style={styles.itemRow}>
-              <Text style={styles.itemInfo}>{item.quantity}x {item.name}</Text>
+              <Text style={styles.itemInfo} numberOfLines={1}>
+                {item.quantity}x {item.name}
+              </Text>
               <Text style={styles.itemPrice}>₹{item.price * item.quantity}</Text>
             </View>
           ))}
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Items</Text>
+            <Text style={styles.totalLabel}>Subtotal</Text>
             <Text style={styles.totalValue}>₹{totalAmount}</Text>
           </View>
           {bill.deliveryFee > 0 && (
@@ -332,10 +262,60 @@ export default function CheckoutScreen() {
               <Text style={[styles.totalValue, { color: '#16a34a' }]}>−₹{appliedCoupon.discountAmount}</Text>
             </View>
           )}
-          <View style={[styles.totalRow, { borderTopWidth: 2 }]}>
-            <Text style={[styles.totalLabel, { fontWeight: '800' }]}>Total</Text>
-            <Text style={[styles.totalValue, { fontWeight: '800' }]}>₹{finalAmount}</Text>
+          <View style={[styles.totalRow, styles.grandTotalRow]}>
+            <Text style={styles.grandTotalLabel}>Total</Text>
+            <Text style={styles.grandTotalValue}>₹{finalAmount}</Text>
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Coupon</Text>
+          {appliedCoupon ? (
+            <View style={styles.couponApplied}>
+              <Ionicons name="pricetag" size={15} color="#16a34a" />
+              <Text style={styles.couponAppliedText}>
+                {appliedCoupon.code} · −₹{appliedCoupon.discountAmount}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  dispatch(clearAppliedCartCoupon());
+                  setCouponError('');
+                }}
+              >
+                <Ionicons name="close-circle" size={18} color="#dc2626" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.couponRow}>
+                <TextInput
+                  style={styles.couponInput}
+                  placeholder="Enter coupon code"
+                  placeholderTextColor="#94a3b8"
+                  value={couponInput}
+                  onChangeText={t => {
+                    setCouponInput(t.toUpperCase());
+                    setCouponError('');
+                  }}
+                  autoCapitalize="characters"
+                  returnKeyType="done"
+                  onSubmitEditing={handleApplyCoupon}
+                />
+                <TouchableOpacity
+                  style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon) && { opacity: 0.5 }]}
+                  onPress={handleApplyCoupon}
+                  disabled={!couponInput.trim() || isApplyingCoupon}
+                >
+                  {isApplyingCoupon ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.couponApplyText}>Apply</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+              {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
+            </>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -352,14 +332,14 @@ export default function CheckoutScreen() {
                 color={paymentMethod === 'ONLINE' ? '#4b6f9e' : '#94a3b8'}
               />
               <View style={styles.paymentOptionText}>
-                <Text style={[styles.paymentOptionLabel, paymentMethod === 'ONLINE' && styles.paymentOptionLabelSelected]}>
+                <Text
+                  style={[styles.paymentOptionLabel, paymentMethod === 'ONLINE' && styles.paymentOptionLabelSelected]}
+                >
                   Online Payment
                 </Text>
                 <Text style={styles.paymentOptionSub}>UPI, Cards, Net Banking</Text>
               </View>
-              {paymentMethod === 'ONLINE' && (
-                <Ionicons name="checkmark-circle" size={18} color="#4b6f9e" />
-              )}
+              {paymentMethod === 'ONLINE' && <Ionicons name="checkmark-circle" size={18} color="#4b6f9e" />}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -373,20 +353,19 @@ export default function CheckoutScreen() {
                 color={paymentMethod === 'COD' ? '#16a34a' : '#94a3b8'}
               />
               <View style={styles.paymentOptionText}>
-                <Text style={[styles.paymentOptionLabel, paymentMethod === 'COD' && styles.paymentOptionLabelCOD]}>
+                <Text
+                  style={[styles.paymentOptionLabel, paymentMethod === 'COD' && styles.paymentOptionLabelCOD]}
+                >
                   Cash on Delivery
                 </Text>
                 <Text style={styles.paymentOptionSub}>Pay when your order arrives</Text>
               </View>
-              {paymentMethod === 'COD' && (
-                <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
-              )}
+              {paymentMethod === 'COD' && <Ionicons name="checkmark-circle" size={18} color="#16a34a" />}
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
 
-      {/* Pay-on-delivery note */}
       {paymentMethod === 'COD' && (
         <View style={styles.codNote}>
           <Ionicons name="cash-outline" size={13} color="#16a34a" />
@@ -398,30 +377,21 @@ export default function CheckoutScreen() {
         style={[
           styles.placeOrderBtn,
           paymentMethod === 'COD' && styles.placeOrderBtnCOD,
-          (items.length === 0 || isPlacing || isStoreClosed || deliveryBlocksPay) && styles.btnDisabled,
+          (isPlacing || isStoreClosed) && styles.btnDisabled,
         ]}
         onPress={handlePlaceOrder}
         activeOpacity={0.85}
-        disabled={items.length === 0 || isPlacing || isStoreClosed || deliveryBlocksPay}
+        disabled={isPlacing || isStoreClosed}
       >
         {isPlacing ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.btnText}>
             {isStoreClosed
-              ? '🔴 Store Closed'
-              : items.length === 0
-              ? 'Your Basket is Empty'
-              : deliveryEligibility.checking
-              ? 'Checking delivery…'
-              : deliveryEligibility.eligible === false
-              ? 'Outside delivery area'
-              : deliveryEligibility.eligible === null &&
-                  deliveryEligibility.message.toLowerCase().includes('map pin')
-                ? 'Pin address on map'
+              ? 'Store Closed'
               : paymentMethod === 'COD'
-              ? `Place Order (COD)  ₹${finalAmount}`
-              : `Confirm & Pay  ₹${finalAmount}`}
+                ? `Place Order (COD) · ₹${finalAmount}`
+                : `Confirm & Pay · ₹${finalAmount}`}
           </Text>
         )}
       </TouchableOpacity>
@@ -429,50 +399,91 @@ export default function CheckoutScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6f9fc' },
-  content: { padding: 20 },
-  section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12, color: '#2c3e50' },
-  addressCard: { flexDirection: 'row', backgroundColor: '#ffffff', padding: 16, borderRadius: 14, gap: 10, borderWidth: 1, borderColor: '#dbe4ef', alignItems: 'center' },
-  addressText: { color: '#7b8a9a', flex: 1, fontSize: 14, lineHeight: 20 },
-  deliveryBannerCheckout: {
+  header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  content: { flex: 1, padding: 20 },
+  section: { marginBottom: 24 },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#2c3e50' },
+  changeLink: { fontSize: 13, fontWeight: '700', color: '#4b6f9e' },
+  addressCard: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 14,
     gap: 10,
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
     borderWidth: 1,
+    borderColor: '#dbe4ef',
+    alignItems: 'flex-start',
   },
-  deliveryBannerCheckoutNeutral: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#e2e8f0',
-  },
-  deliveryBannerCheckoutBad: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-  },
-  deliveryBannerCheckoutWarn: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fde68a',
-  },
-  deliveryBannerCheckoutText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#64748b' },
-  deliveryBannerCheckoutBadText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#991b1b', lineHeight: 18 },
-  deliveryBannerCheckoutWarnText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 17 },
-  itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  itemInfo: { color: '#2c3e50', fontSize: 14 },
+  addressMode: { fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 },
+  addressText: { color: '#334155', flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, gap: 12 },
+  itemInfo: { color: '#2c3e50', fontSize: 14, flex: 1 },
   itemPrice: { fontWeight: '600', color: '#2c3e50' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#dbe4ef' },
-  totalLabel: { fontSize: 18, fontWeight: '700', color: '#2c3e50' },
-  totalValue: { fontSize: 18, fontWeight: '700', color: '#4b6f9e' },
-  placeOrderBtn: { marginHorizontal: 20, marginBottom: 20, backgroundColor: '#4b6f9e', padding: 18, borderRadius: 16, alignItems: 'center' },
-  placeOrderBtnCOD: { backgroundColor: '#16a34a' },
-  btnDisabled: { backgroundColor: '#cbd5e1' },
-  btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  totalLabel: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  totalValue: { fontSize: 14, fontWeight: '700', color: '#2c3e50' },
+  grandTotalRow: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#dbe4ef' },
+  grandTotalLabel: { fontSize: 18, fontWeight: '800', color: '#2c3e50' },
+  grandTotalValue: { fontSize: 18, fontWeight: '800', color: '#4b6f9e' },
+  couponRow: { flexDirection: 'row', gap: 8 },
+  couponInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 13,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderColor: '#dbe4ef',
+    letterSpacing: 0.5,
+  },
+  couponApplyBtn: {
+    backgroundColor: '#4b6f9e',
+    borderRadius: 12,
+    height: 44,
+    paddingHorizontal: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  couponApplyText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dcfce7',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#86efac',
+    gap: 8,
+  },
+  couponAppliedText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#16a34a' },
+  couponError: { fontSize: 12, color: '#dc2626', marginTop: 6 },
   paymentOptions: { gap: 10 },
-  paymentOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', padding: 14, borderRadius: 14, gap: 12, borderWidth: 1.5, borderColor: '#dbe4ef' },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    borderRadius: 14,
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: '#dbe4ef',
+  },
   paymentOptionSelected: { borderColor: '#4b6f9e', backgroundColor: '#eef3fb' },
   paymentOptionSelectedCOD: { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
   paymentOptionText: { flex: 1 },
@@ -480,6 +491,29 @@ const styles = StyleSheet.create({
   paymentOptionLabelSelected: { color: '#4b6f9e' },
   paymentOptionLabelCOD: { color: '#16a34a' },
   paymentOptionSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
-  codNote: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 20, marginBottom: 8, backgroundColor: '#f0fdf4', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#bbf7d0' },
+  codNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
   codNoteText: { fontSize: 11, color: '#16a34a', fontWeight: '600' },
+  placeOrderBtn: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: '#4b6f9e',
+    padding: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  placeOrderBtnCOD: { backgroundColor: '#16a34a' },
+  btnDisabled: { backgroundColor: '#cbd5e1' },
+  btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
 });

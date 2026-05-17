@@ -33,6 +33,8 @@ export default function CompleteProfile() {
   const [email, setEmail] = useState(authUser?.email || "");
   const [alternatePhone, setAlternatePhone] = useState(authUser?.alternatePhone || "");
   const [addressInputMode, setAddressInputMode] = useState<"auto" | "manual">("auto");
+  /** True when address fields were filled by GPS reverse-geocode (not user typing). */
+  const [addressAutoFilled, setAddressAutoFilled] = useState(false);
   const [addressLine, setAddressLine] = useState("");
   const [landmark, setLandmark] = useState("");
   const [city, setCity] = useState("");
@@ -129,6 +131,7 @@ export default function CompleteProfile() {
       if (detailed.city) setCity(detailed.city);
       if (detailed.state) setStateField(detailed.state);
       if (detailed.pincode) setPincode(detailed.pincode);
+      setAddressAutoFilled(true);
       showToast("success", "Address detected", "You can edit the details if needed");
     } catch (error: any) {
       showToast("error", "Location", error?.message || "Could not detect address");
@@ -204,7 +207,10 @@ export default function CompleteProfile() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modeBtn, addressInputMode === "manual" && styles.modeBtnActive]}
-                onPress={() => setAddressInputMode("manual")}
+                onPress={() => {
+                  setAddressInputMode("manual");
+                  setAddressAutoFilled(false);
+                }}
               >
                 <Text style={[styles.modeBtnText, addressInputMode === "manual" && styles.modeBtnTextActive]}>Manual Entry</Text>
               </TouchableOpacity>
@@ -228,7 +234,7 @@ export default function CompleteProfile() {
                 onChangeText={setAddressLine}
                 placeholder="House / Building / Street"
                 placeholderTextColor="#94a3b8"
-                editable={addressInputMode === "manual" || !addressLine}
+                editable={addressInputMode === "manual" || !addressAutoFilled}
               />
             </View>
             <View style={styles.inputWrapper}>
@@ -249,7 +255,7 @@ export default function CompleteProfile() {
                 onChangeText={setCity}
                 placeholder="City"
                 placeholderTextColor="#94a3b8"
-                editable={addressInputMode === "manual" || !city}
+                editable={addressInputMode === "manual" || !addressAutoFilled}
               />
             </View>
             <View style={styles.row}>
@@ -261,7 +267,7 @@ export default function CompleteProfile() {
                   onChangeText={setStateField}
                   placeholder="State"
                   placeholderTextColor="#94a3b8"
-                  editable={addressInputMode === "manual" || !stateField}
+                  editable={addressInputMode === "manual" || !addressAutoFilled}
                 />
               </View>
               <View style={[styles.inputWrapper, { flex: 1 }]}>
@@ -273,7 +279,7 @@ export default function CompleteProfile() {
                   keyboardType="number-pad"
                 placeholder="6-digit PIN code"
                   placeholderTextColor="#94a3b8"
-                  editable={addressInputMode === "manual" || !pincode}
+                  editable={addressInputMode === "manual" || !addressAutoFilled}
                 />
               </View>
             </View>
