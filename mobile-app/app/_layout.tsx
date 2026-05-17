@@ -163,6 +163,7 @@ const isClosed = storeStatus?.isClosed;
         <Stack.Screen name="auth/landing" />
         <Stack.Screen name="auth/store-code" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="checkout" />
         <Stack.Screen name="product/[id]" options={{ headerShown: true, headerTransparent: true, headerTitle: '' }} />
       </Stack>
   

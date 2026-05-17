@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import authReducer from './slices/authSlice';
 import cartReducer from './slices/cartSlice';
+import checkoutReducer from './slices/checkoutSlice';
 import { apiSlice } from '@/api/apiSlice';
 
 export const CART_STORAGE_KEY = '@enandi_cart';
@@ -10,6 +11,7 @@ export const store = configureStore({
   reducer: {
     auth: authReducer,
     cart: cartReducer,
+    checkout: checkoutReducer,
     [apiSlice.reducerPath]: apiSlice.reducer,
   },
   middleware: (getDefaultMiddleware) =>

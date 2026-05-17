@@ -7,14 +7,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useDispatch, useSelector } from 'react-redux';
 
 import AddressMapPicker from '@/components/AddressMapPicker';
 
-import { clearCart } from '@/store/slices/cartSlice';
+import { setCheckoutDraft } from '@/store/slices/checkoutSlice';
 import { RootState } from '@/store/store';
 import { showToast } from '@/utils/toast';
 import {
@@ -27,15 +26,8 @@ import {
   getPreferredDeliveryAddressId,
   PREFERRED_DELIVERY_ADDRESS_CHANGED,
 } from '@/api/addresses';
-import {
-  placeOrderBackend,
-  createMobilePaymentOrder,
-  verifyMobilePayment,
-} from '@/api/ordersApi';
 import { getCartCalculation } from '@/api/cartApi';
-import { RAZORPAY_KEY_ID } from '@/src/config/constants';
 import {
-  buildDeliveryAddressPayload,
   formatAddressSummary,
   isValidIndianPincode,
   lookupIndianPincode,
@@ -71,10 +63,11 @@ const EMPTY_OTHERS: OthersData = {
 };
 
 export default function AddressesScreen() {
-  const isExpoGo = Constants.appOwnership === 'expo';
   const router = useRouter();
   const dispatch = useDispatch();
-  const { items, totalAmount, appliedCoupon } = useSelector((state: RootState) => state.cart);
+  const { items, totalAmount } = useSelector((state: RootState) => state.cart);
+  const isCheckoutFlow = (items?.length ?? 0) > 0;
+  const screenTitle = isCheckoutFlow ? 'Delivery Address' : 'Saved Addresses';
   const { user, token } = useSelector((state: RootState) => state.auth);
 
   const [bill, setBill] = useState<{ grandTotal: number; deliveryFee: number; isFreeDelivery: boolean }>(
@@ -88,12 +81,13 @@ export default function AddressesScreen() {
   const [adding, setAdding] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressInputMode, setAddressInputMode] = useState<'auto' | 'manual'>('auto');
+  /** True when line1 was set by GPS/map reverse-geocode (not user typing). */
+  const [line1AutoFilled, setLine1AutoFilled] = useState(false);
   const [showOthersModal, setShowOthersModal] = useState(false);
   const [othersForm, setOthersForm] = useState<OthersData>(EMPTY_OTHERS);
   const [othersConfirmed, setOthersConfirmed] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false); // New state for API call
   const [label, setLabel] = useState('');
   const [line1, setLine1] = useState('');
   const [line2, setLine2] = useState('');
@@ -299,6 +293,7 @@ export default function AddressesScreen() {
     setAddrLng(0);
     setRegion(null);
     setAddressInputMode('auto');
+    setLine1AutoFilled(false);
   };
 
   const startEditAddress = (addr: any) => {
@@ -309,6 +304,7 @@ export default function AddressesScreen() {
     setAddressInputMode(hasPin ? 'auto' : 'manual');
     setLabel(String(addr.label || ''));
     setLine1(String(addr.line1 || ''));
+    setLine1AutoFilled(hasPin && Boolean(String(addr.line1 || '').trim()));
     setLine2(String(addr.line2 || ''));
     setLandmark(String(addr.landmark || ''));
     setCity(String(addr.city || ''));
@@ -497,9 +493,6 @@ export default function AddressesScreen() {
     setOrderMode('others');
   };
 
-  const couponDiscount = appliedCoupon?.discountAmount ?? 0;
-  const finalAmount = Math.max(0, bill.grandTotal - couponDiscount);
-
   const deliveryGateActive =
     (orderMode === 'self' && Boolean(selectedId)) || (orderMode === 'others' && othersConfirmed);
 
@@ -509,11 +502,8 @@ export default function AddressesScreen() {
       deliveryEligibility.eligible === false ||
       (deliveryEligibility.eligible === null && Boolean(deliveryEligibility.message.trim())));
 
-  const handleFinalConfirm = async () => {
-    if (!items || items.length === 0) {
-      showToast('error', 'Empty Cart', 'Add items before placing an order.');
-      return;
-    }
+  const handleContinueToCheckout = () => {
+    if (!isCheckoutFlow) return;
     if (orderMode === 'self' && !selectedId) {
       showToast('error', 'Required', 'Select a delivery address');
       return;
@@ -551,118 +541,45 @@ export default function AddressesScreen() {
       return;
     }
 
-    try {
-      setIsPlacingOrder(true);
+    const deliverySource =
+      orderMode === 'self'
+        ? addresses.find((a: any) => a.id === selectedId)
+        : {
+            line1: othersForm.line1,
+            line2: othersForm.line2,
+            landmark: othersForm.landmark,
+            city: othersForm.city,
+            state: othersForm.state,
+            pincode: othersForm.pincode,
+            recipientName: othersForm.recipientName,
+            recipientPhone: othersForm.recipientPhone,
+            phone: othersForm.recipientPhone,
+            isMyAddress: false,
+            lat: othersGeo?.lat ?? 0,
+            lng: othersGeo?.lng ?? 0,
+          };
 
-      const deliverySource =
-        orderMode === 'self'
-          ? addresses.find((a: any) => a.id === selectedId)
-          : {
-              line1: othersForm.line1,
-              line2: othersForm.line2,
-              landmark: othersForm.landmark,
-              city: othersForm.city,
-              state: othersForm.state,
-              pincode: othersForm.pincode,
-              recipientName: othersForm.recipientName,
-              recipientPhone: othersForm.recipientPhone,
-              phone: othersForm.recipientPhone,
-              isMyAddress: false,
-              lat: othersGeo?.lat ?? 0,
-              lng: othersGeo?.lng ?? 0,
-            };
-
-      if (!deliverySource) {
-        showToast('error', 'Address', 'Select a delivery address');
-        setIsPlacingOrder(false);
-        return;
-      }
-
-      const addrPayload = buildDeliveryAddressPayload(deliverySource);
-      const order = await placeOrderBackend(
-        {
-          items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
-          paymentMode: 'ONLINE',
-          deliveryAddress: {
-            ...addrPayload,
-            addressUrl: deliveryEligibility.mapLink || '',
-          },
-          couponCode: appliedCoupon?.code ?? null,
-        },
-        token,
-      );
-
-      const paymentData = await createMobilePaymentOrder(order.orderId, token);
-
-      const rawPhone = ((user as any)?.phone || '').replace(/^\+91\s?/, '').slice(-10);
-
-      const rzpOptions = {
-        description: 'Grocery Order',
-        currency: paymentData.currency || 'INR',
-        key: RAZORPAY_KEY_ID,
-        amount: String(paymentData.amount),
-        name: 'Grocery Order',
-        order_id: paymentData.razorpay_order_id,
-        prefill: {
-          email: (user as any)?.email || '',
-          contact: rawPhone,
-          name: (user as any)?.name || '',
-        },
-        theme: { color: '#0F2C1D' },
-      };
-
-      // Expo Go does not include react-native-razorpay native module.
-      // Require at call time so this screen can still load in Expo Go.
-      if (isExpoGo) {
-        throw new Error('Online payment is unavailable in Expo Go. Use a dev build/APK for Razorpay.');
-      }
-
-      let razorpayModule: any = null;
-      if (Platform.OS !== 'web') {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          razorpayModule = require('react-native-razorpay')?.default;
-        } catch {
-          razorpayModule = null;
-        }
-      }
-      if (!RAZORPAY_KEY_ID) {
-        throw new Error('Payment configuration missing. Please contact support.');
-      }
-      if (!razorpayModule || typeof razorpayModule.open !== 'function') {
-        throw new Error('Online payment is unavailable in this build. Please use a development build or installed APK.');
-      }
-
-      const rzpResponse: any = await razorpayModule.open(rzpOptions);
-
-      const verified = await verifyMobilePayment(
-        {
-          order_id: order.orderId,
-          razorpay_order_id: rzpResponse.razorpay_order_id,
-          razorpay_payment_id: rzpResponse.razorpay_payment_id,
-          razorpay_signature: rzpResponse.razorpay_signature,
-        },
-        token,
-      );
-
-      if (verified.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setOthersForm(EMPTY_OTHERS);
-        setOthersConfirmed(false);
-        dispatch(clearCart());
-        router.replace('/(tabs)/order-success');
-      } else {
-        showToast('error', 'Payment Error', 'Verification failed. Contact support.');
-      }
-    } catch (error: any) {
-      if (error?.code === 0 || String(error?.description).toLowerCase().includes('cancel')) {
-        showToast('error', 'Cancelled', 'Payment was cancelled');
-      } else {
-        showToast('error', 'Order Failed', error?.message || 'Please try again');
-      }
-    } finally {
-      setIsPlacingOrder(false);
+    if (!deliverySource) {
+      showToast('error', 'Address', 'Select a delivery address');
+      return;
     }
+
+    const summaryText =
+      orderMode === 'self'
+        ? formatAddressSummary(deliverySource) || String((deliverySource as any).label || 'Saved address')
+        : formatAddressSummary(othersForm) ||
+          `${othersForm.recipientName} · ${othersForm.line1}`;
+
+    dispatch(
+      setCheckoutDraft({
+        orderMode,
+        deliverySource: deliverySource as Record<string, unknown>,
+        addressUrl: deliveryEligibility.mapLink || '',
+        summaryText,
+      }),
+    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/checkout');
   };
 
   /** Only captures pin + reverse-geocoded fields. Delivery eligibility runs on Home / Checkout (like storefront). */
@@ -686,6 +603,7 @@ export default function AddressesScreen() {
       const detailed = await getAddressFromCoordsDetailed(lat, lng, controller.signal);
       if (!controller.signal.aborted) {
         setLine1(detailed.line1);
+        setLine1AutoFilled(Boolean(detailed.line1?.trim()));
         if (detailed.city) setCity(detailed.city);
         if (detailed.state) setStateField(detailed.state);
         if (detailed.pincode) setPincode(detailed.pincode);
@@ -741,7 +659,7 @@ export default function AddressesScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color="#2c3e50" />
           </TouchableOpacity>
-          <Text style={styles.title}>Checkout Details</Text>
+          <Text style={styles.title}>{screenTitle}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.loginGateBody}>
@@ -763,11 +681,11 @@ export default function AddressesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#2c3e50" />
         </TouchableOpacity>
-        <Text style={styles.title}>Checkout Details</Text>
+        <Text style={styles.title}>{screenTitle}</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {!adding && (
+      {isCheckoutFlow && !adding && (
         <View style={styles.modeToggleContainer}>
           <TouchableOpacity
             style={[styles.modeBtn, orderMode === 'self' && styles.modeBtnActive]}
@@ -812,7 +730,10 @@ export default function AddressesScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.inputModeBtn, addressInputMode === 'manual' && styles.inputModeBtnActive]}
-                onPress={() => setAddressInputMode('manual')}
+                onPress={() => {
+                  setAddressInputMode('manual');
+                  setLine1AutoFilled(false);
+                }}
               >
                 <Ionicons
                   name="create-outline"
@@ -885,7 +806,7 @@ export default function AddressesScreen() {
               value={line1}
               onChangeText={setLine1}
               style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-              editable={addressInputMode === 'manual' || !line1}
+              editable={addressInputMode === 'manual' || !line1AutoFilled}
               multiline
             />
             <Text style={styles.fieldLabel}>Address Line 2</Text>
@@ -1100,7 +1021,7 @@ export default function AddressesScreen() {
         )}
       </ScrollView>
 
-      {!adding && (
+      {!adding && isCheckoutFlow && (
         <View style={styles.footer}>
           {(!items || items.length === 0) ? (
             <View style={styles.emptyCartFooter}>
@@ -1118,61 +1039,42 @@ export default function AddressesScreen() {
             </View>
             
       ) : (
-  <View>
-    {appliedCoupon ? (
-      <View style={styles.appliedCouponHint}>
-        <Ionicons name="pricetag" size={14} color="#15803d" />
-        <Text style={styles.appliedCouponHintText}>
-          Promo · {appliedCoupon.code} · −₹{appliedCoupon.discountAmount}
-        </Text>
-      </View>
-    ) : null}
-
-    <TouchableOpacity
-      style={[
-        styles.confirmBtn,
-        isPlacingOrder && { opacity: 0.85 },
-        deliveryPayBlocked && styles.confirmBtnDisabled,
-      ]}
-      onPress={handleFinalConfirm}
-      disabled={isPlacingOrder || deliveryPayBlocked}
-      activeOpacity={0.85}
-    >
-      <View style={styles.confirmBtnInner}>
-        {isPlacingOrder ? (
-          <ActivityIndicator color="#fff" style={{ flex: 1 }} />
-        ) : (
-          <>
-            <View style={styles.confirmBtnLeft}>
-              <Text style={styles.confirmBtnItemCount}>{items.length} item{items.length > 1 ? 's' : ''}</Text>
-              <Text style={[styles.confirmBtnText, deliveryPayBlocked && styles.confirmBtnTextMuted]}>
-                {deliveryGateActive && deliveryEligibility.checking
-                  ? 'Checking delivery…'
-                  : deliveryGateActive && deliveryEligibility.eligible === false
-                    ? 'Outside delivery area'
-                    : deliveryGateActive &&
-                        deliveryEligibility.eligible === null &&
-                        deliveryEligibility.message.trim()
-                      ? 'Verify recipient PIN'
-                      : 'Pay & Place Order'}
-              </Text>
-            </View>
-            <View style={styles.confirmBtnRight}>
-              <Text style={[styles.confirmBtnAmount, deliveryPayBlocked && styles.confirmBtnTextMuted]}>
-                ₹{finalAmount}
-              </Text>
-              <Ionicons
-                name="arrow-forward-circle"
-                size={22}
-                color={deliveryPayBlocked ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.8)'}
-              />
-            </View>
-          </>
-        )}
-      </View>
-    </TouchableOpacity>
-  </View>
-)}
+            <TouchableOpacity
+              style={[styles.confirmBtn, deliveryPayBlocked && styles.confirmBtnDisabled]}
+              onPress={handleContinueToCheckout}
+              disabled={deliveryPayBlocked}
+              activeOpacity={0.85}
+            >
+              <View style={styles.confirmBtnInner}>
+                <View style={styles.confirmBtnLeft}>
+                  <Text style={styles.confirmBtnItemCount}>
+                    {items.length} item{items.length > 1 ? 's' : ''}
+                  </Text>
+                  <Text style={[styles.confirmBtnText, deliveryPayBlocked && styles.confirmBtnTextMuted]}>
+                    {deliveryGateActive && deliveryEligibility.checking
+                      ? 'Checking delivery…'
+                      : deliveryGateActive && deliveryEligibility.eligible === false
+                        ? 'Outside delivery area'
+                        : deliveryGateActive &&
+                            deliveryEligibility.eligible === null &&
+                            deliveryEligibility.message.trim()
+                          ? 'Verify recipient PIN'
+                          : 'Continue to Checkout'}
+                  </Text>
+                </View>
+                <View style={styles.confirmBtnRight}>
+                  <Text style={[styles.confirmBtnAmount, deliveryPayBlocked && styles.confirmBtnTextMuted]}>
+                    ₹{bill.grandTotal}
+                  </Text>
+                  <Ionicons
+                    name="arrow-forward-circle"
+                    size={22}
+                    color={deliveryPayBlocked ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.8)'}
+                  />
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -1476,7 +1378,48 @@ const styles = StyleSheet.create({
   deliveryBannerAddrWarnText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 17 },
 
   confirmBtn: { backgroundColor: '#4b6f9e', borderRadius: 16, shadowColor: '#4b6f9e', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
+  confirmBtnCOD: { backgroundColor: '#16a34a', shadowColor: '#16a34a' },
   confirmBtnDisabled: { backgroundColor: '#94a3b8', shadowOpacity: 0.08, elevation: 2 },
+  paymentSectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  paymentOptions: { gap: 8, marginBottom: 8 },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 12,
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+  },
+  paymentOptionSelected: { borderColor: '#4b6f9e', backgroundColor: '#eef3fb' },
+  paymentOptionSelectedCOD: { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
+  paymentOptionText: { flex: 1 },
+  paymentOptionLabel: { fontSize: 14, fontWeight: '700', color: '#64748b' },
+  paymentOptionLabelSelected: { color: '#4b6f9e' },
+  paymentOptionLabelCOD: { color: '#16a34a' },
+  paymentOptionSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  codNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  codNoteText: { fontSize: 11, color: '#16a34a', fontWeight: '600' },
   confirmBtnTextMuted: { opacity: 0.85 },
   confirmBtnInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 20 },
   confirmBtnLeft: { flexDirection: 'column' },
