@@ -1,5 +1,6 @@
 const Store  = require("../models/Store.model");
 const Tenant = require("../models/Tenant.model");
+const { getClosingSoonInfo } = require("../utils/storeClosingSoon");
 
 /* ─────────────────────────────────────────────
    GET STORE STATUS
@@ -18,6 +19,10 @@ async function getStoreStatus(tenantId) {
       schedule:       store.schedule,
       manualOverride: store.manualOverride,
       suspended:      true,
+      closingSoon:    false,
+      hasScheduledHours: false,
+      minutesUntilClose: null,
+      closesAt:       null,
     };
   }
 
@@ -30,12 +35,22 @@ async function getStoreStatus(tenantId) {
     nextChange = store.isOpen ? store.schedule.closeTime : store.schedule.openTime;
   }
 
+  const closing = getClosingSoonInfo({
+    isOpen: store.isOpen,
+    manualOverride: store.manualOverride,
+    schedule: store.schedule,
+  });
+
   return {
     isOpen:         store.isOpen,
     reason,
     nextChange:     nextChange ? nextChange.toISOString() : null,
     schedule:       store.schedule,
     manualOverride: store.manualOverride,
+    closingSoon:    closing.closingSoon,
+    hasScheduledHours: closing.hasScheduledHours,
+    minutesUntilClose: closing.minutesUntilClose,
+    closesAt:       closing.closesAt,
   };
 }
 

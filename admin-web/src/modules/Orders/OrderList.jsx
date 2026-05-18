@@ -23,7 +23,8 @@ const StarRating = ({ value }) => (
 
 const OrderList = () => {
   const { showToast } = useToast();
-  const { orders, riders, updateOrderStatus, assignRider, markCODPaid, refreshOrders } = useAppState();
+  const { orders, riders, updateOrderStatus, assignRider, markCODPaid, retryOrderRefund, refreshOrders } = useAppState();
+  const [retryingRefundId, setRetryingRefundId] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
   const [deliveryAddressModalOrder, setDeliveryAddressModalOrder] = useState(null);
@@ -103,9 +104,12 @@ const OrderList = () => {
     }
   };
 
-  const confirmCancellation = () => {
-    updateOrderStatus(cancellingOrder.id, 'CANCELLED');
-    setCancellingOrder(null);
+  const confirmCancellation = async () => {
+    try {
+      await updateOrderStatus(cancellingOrder.id, 'CANCELLED');
+    } finally {
+      setCancellingOrder(null);
+    }
   };
 
   const columns = [
@@ -382,16 +386,64 @@ const OrderList = () => {
                   <Banknote size={14} /> Mark Paid
                 </button>
               )}
-              {/* Show Paid badge when already paid */}
-              {(row.paymentStatus || '').toUpperCase() === 'PAID' && (
+              {/* Show Paid badge when already paid (active orders only) */}
+              {(row.paymentStatus || '').toUpperCase() === 'PAID' && status !== 'CANCELLED' && (
                 <div className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase border border-emerald-100">
                    <PackageCheck size={14} /> Paid
+                </div>
+              )}
+              {(row.paymentStatus || '').toUpperCase() === 'REFUNDED' && (
+                <div className="flex items-center gap-1 bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase border border-blue-100">
+                  Refunded
                 </div>
               )}
               
               {/* Optional: Show Cancelled label in actions to keep row height consistent */}
               {status === 'CANCELLED' && (
-                <span className="text-[10px] font-bold text-slate-400 uppercase px-3">Voided</span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase px-3">Cancelled</span>
+                  {(row.paymentMode || '').toUpperCase() === 'ONLINE' && (
+                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                      (row.paymentStatus || '') === 'REFUNDED' || row.refundStatus === 'FULL'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : row.refundStatus === 'FAILED'
+                        ? 'bg-red-50 text-red-700'
+                        : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {(row.paymentStatus || '') === 'REFUNDED' || row.refundStatus === 'FULL'
+                        ? 'Refunded'
+                        : row.refundStatus === 'FAILED'
+                        ? 'Refund failed'
+                        : (row.paymentStatus || '') === 'REFUND_PENDING' || row.refundStatus === 'PENDING'
+                        ? 'Refund processing'
+                        : row.paymentStatus === 'PAID'
+                        ? 'Paid — refund needed'
+                        : 'Online'}
+                    </span>
+                  )}
+                  {(row.paymentMode || '').toUpperCase() === 'ONLINE' &&
+                    row.refundStatus !== 'FULL' &&
+                    (row.paymentStatus || '') !== 'REFUNDED' &&
+                    (row.refundStatus === 'FAILED' ||
+                      (row.paymentStatus || '') === 'PAID' ||
+                      (row.paymentStatus || '') === 'REFUND_PENDING') && (
+                    <button
+                      type="button"
+                      disabled={retryingRefundId === row.id}
+                      onClick={async () => {
+                        setRetryingRefundId(row.id);
+                        try {
+                          await retryOrderRefund(row.id);
+                        } finally {
+                          setRetryingRefundId(null);
+                        }
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:underline disabled:opacity-50"
+                    >
+                      {retryingRefundId === row.id ? 'Refunding…' : 'Retry refund'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           );

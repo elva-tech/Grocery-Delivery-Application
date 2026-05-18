@@ -10,6 +10,7 @@ const {
   getRevenue,
   getPendingOrders,
   markCODPaid,
+  retryOrderRefund,
 } = require("../controllers/admin.controller");
 
 const {
@@ -86,6 +87,13 @@ router.patch(
   authMiddleware,
   adminOnly,
   markCODPaid
+);
+
+router.post(
+  "/orders/:id/refund",
+  authMiddleware,
+  adminOnly,
+  retryOrderRefund
 );
 
 //////////////////////////////////////////////////////

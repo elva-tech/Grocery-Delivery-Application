@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
+import StoreClosingSoonBanner from './components/layout/StoreClosingSoonBanner';
 import PromoBanners from './components/home/PromoBanners';
 import CategoryStrip from './components/home/CategoryStrip';
 import CategorySidebar from './components/category/CategorySidebar';
@@ -157,6 +158,10 @@ const App = () => {
 
   const isClosed = storeStatus?.isClosed ?? false;
   const reason = storeStatus?.reason ?? "";
+  const showClosingSoon =
+    !isClosed &&
+    Boolean(storeStatus?.closingSoon) &&
+    (storeStatus?.minutesUntilClose ?? 0) > 0;
 
   // RESET LOGIC: Clears filters when switching between Home and Browse
   useEffect(() => {
@@ -494,6 +499,13 @@ const App = () => {
         selectedDeliveryAddress={selectedAddress}
         onSelectDeliveryAddress={applyDeliveryAddress}
       />
+
+      {showClosingSoon && storeStatus?.minutesUntilClose != null && (
+        <StoreClosingSoonBanner
+          minutesUntilClose={storeStatus.minutesUntilClose}
+          closesAt={storeStatus.closesAt}
+        />
+      )}
 
       <div className="flex-grow flex max-w-7xl mx-auto w-full min-h-[calc(100vh-80px)]">
         {isBrowseMode && (

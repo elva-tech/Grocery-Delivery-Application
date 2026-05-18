@@ -16,6 +16,7 @@ import { setCredentials } from '@/store/slices/authSlice';
 import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
+import StoreClosingSoonBanner from '@/components/StoreClosingSoonBanner';
 import { extractTenantFromUrl, getActiveTenantId, saveTenantId } from '@/src/utils/tenantStorage';
 import { TenantBrandingProvider } from '@/contexts/TenantBrandingContext';
 
@@ -39,8 +40,12 @@ useEffect(() => {
   const [authRestored, setAuthRestored] = useState(false);
 
   // Store Status - fetched from backend
-  const { data: storeStatus } = useGetStoreStatusQuery();
-const isClosed = storeStatus?.isClosed;
+  const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 30_000 });
+  const isClosed = storeStatus?.isClosed ?? false;
+  const showClosingSoon =
+    !isClosed &&
+    Boolean(storeStatus?.closingSoon) &&
+    (storeStatus?.minutesUntilClose ?? 0) > 0;
 
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
@@ -166,7 +171,16 @@ const isClosed = storeStatus?.isClosed;
         <Stack.Screen name="checkout" />
         <Stack.Screen name="product/[id]" options={{ headerShown: true, headerTransparent: true, headerTitle: '' }} />
       </Stack>
-  
+
+      {showClosingSoon && storeStatus?.minutesUntilClose != null && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 9000 }}>
+          <StoreClosingSoonBanner
+            minutesUntilClose={storeStatus.minutesUntilClose}
+            closesAt={storeStatus.closesAt}
+          />
+        </View>
+      )}
+
       {/* 🔥 GLOBAL STORE CLOSED POPUP */}
       {isClosed && (
         <View style={{

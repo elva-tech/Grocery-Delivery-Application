@@ -25,17 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useGetAppSettingsQuery } from '@/api/apiSlice';
 import { API_BASE_URL } from '@/src/config/constants';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
-
-const STATUS_THEME: any = {
-  PLACED: { color: '#64748b', label: 'Order Placed' },
-  CONFIRMED: { color: '#4b6f9e', label: 'Confirmed' },
-  OUT_FOR_DELIVERY: { color: '#f59e0b', label: 'On its way' },
-  DELIVERED: { color: '#10b981', label: 'Delivered' },
-  CANCELLED: { color: '#ef4444', label: 'Cancelled' },
-  ISSUE_REPORTED: { color: '#8b5cf6', label: 'Issue Reported' },
-  REFUND_APPROVED: { color: '#10b981', label: 'Refund Approved' },
-  REFUND_REJECTED: { color: '#ef4444', label: 'Refund Rejected' },
-};
+import { getCustomerOrderStatusTheme, getOnlineRefundSubtitle } from '@/src/utils/orderStatusDisplay';
 
 const REPORT_REASONS = [
   "Item damaged",
@@ -188,9 +178,6 @@ export default function OrdersScreen() {
       msg: "Are you sure you want to cancel this order?",
       action: async () => {
         try {
-          // #region agent log
-          fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H2',location:'orders.tsx:cancelAction',message:'Calling cancel API',data:{orderId:orderToCancel?.id??null},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           await cancelOrderApi(orderToCancel.id);
           setOrders(prev =>
             prev.map(o =>
@@ -267,9 +254,6 @@ export default function OrdersScreen() {
     if (starValue === 0) return showToast('error', 'Select Stars', 'Please tap a star to rate.');
     setIsSubmittingRating(true);
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H2',location:'orders.tsx:submitRating',message:'Submitting rating',data:{orderId:ratingOrder?._id??ratingOrder?.id??null,rating:starValue},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       await rateOrderApi(ratingOrder._id ?? ratingOrder.id, starValue, ratingComment);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('success', 'Thank you!', 'Your feedback helps us improve.');
@@ -290,16 +274,26 @@ export default function OrdersScreen() {
     fetchOrders(true);
   }, [fetchOrders]);
 
-  // Group orders: Active → Delivered → Past
   const groupedList = useMemo(() => {
-    const ACTIVE = ['PLACED', 'CONFIRMED', 'OUT_FOR_DELIVERY'];
-    const active = orders.filter(o => ACTIVE.includes(o.status));
+    const awaiting = orders.filter(o => o.status === 'PLACED');
+    const active = orders.filter(o => ['CONFIRMED', 'OUT_FOR_DELIVERY'].includes(o.status));
     const delivered = orders.filter(o => o.status === 'DELIVERED');
-    const past = orders.filter(o => !ACTIVE.includes(o.status) && o.status !== 'DELIVERED');
+    const past = orders.filter(
+      o => !['PLACED', 'CONFIRMED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(o.status),
+    );
     const result: any[] = [];
-    if (active.length) result.push({ _sectionHeader: true, label: '🚚  Active Orders', count: active.length }, ...active);
-    if (delivered.length) result.push({ _sectionHeader: true, label: '✅  Delivered', count: delivered.length }, ...delivered);
-    if (past.length) result.push({ _sectionHeader: true, label: '📋  Past Orders', count: past.length }, ...past);
+    if (awaiting.length) {
+      result.push({ _sectionHeader: true, label: '⏳  Waiting for confirmation', count: awaiting.length }, ...awaiting);
+    }
+    if (active.length) {
+      result.push({ _sectionHeader: true, label: '🚚  Active orders', count: active.length }, ...active);
+    }
+    if (delivered.length) {
+      result.push({ _sectionHeader: true, label: '✅  Delivered', count: delivered.length }, ...delivered);
+    }
+    if (past.length) {
+      result.push({ _sectionHeader: true, label: '📋  Past orders', count: past.length }, ...past);
+    }
     return result;
   }, [orders]);
 
@@ -320,7 +314,7 @@ export default function OrdersScreen() {
         </View>
       );
     }
-    const theme = STATUS_THEME[item.status] || STATUS_THEME.PLACED;
+    const theme = getCustomerOrderStatusTheme(item.status);
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -334,17 +328,18 @@ export default function OrdersScreen() {
             <Text style={[styles.badgeText, { color: theme.color }]}>{theme.label}</Text>
           </View>
         </View>
+        {item.status === 'PLACED' && theme.subtitle ? (
+          <Text style={styles.awaitingSubtitle}>{theme.subtitle}</Text>
+        ) : null}
+        {getOnlineRefundSubtitle(item) ? (
+          <Text style={styles.refundSubtitle}>{getOnlineRefundSubtitle(item)}</Text>
+        ) : null}
         <View style={styles.detailsRow}>
           <Text style={styles.itemCount}>{item.items?.length || 0} Items</Text>
           <Text style={styles.totalPrice}>₹{item.totalAmount}</Text>
         </View>
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => {
-            // #region agent log
-            fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H1',location:'orders.tsx:viewButton',message:'View button pressed',data:{orderId:item?.id??null,orderMongoId:item?._id??null,status:item?.status??null},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
-            setSelectedOrder(item);
-          }}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setSelectedOrder(item)}>
             <Text style={styles.secondaryBtnText}>View Items</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => handleReorder(item.items)}>
@@ -357,9 +352,6 @@ export default function OrdersScreen() {
           <TouchableOpacity
             style={styles.rateBtn}
             onPress={() => {
-              // #region agent log
-              fetch('http://127.0.0.1:7483/ingest/03cf6856-fcd6-4b13-83d9-e0c194bcfc7f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eaad9a'},body:JSON.stringify({sessionId:'eaad9a',runId:'pre-fix',hypothesisId:'H1',location:'orders.tsx:rateButton',message:'Rate button pressed',data:{orderId:item?.id??null,orderMongoId:item?._id??null,hasRating:Boolean(item?.rating?.value)},timestamp:Date.now()})}).catch(()=>{});
-              // #endregion
               setStarValue(0); setRatingComment(''); setRatingOrder(item);
             }}
           >
@@ -449,6 +441,19 @@ export default function OrdersScreen() {
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
             >
+              {selectedOrder?.status === 'PLACED' && (
+                <View style={styles.awaitingBanner}>
+                  <Ionicons name="time-outline" size={18} color="#d97706" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.awaitingBannerTitle}>
+                      {getCustomerOrderStatusTheme('PLACED').label}
+                    </Text>
+                    <Text style={styles.awaitingBannerText}>
+                      {getCustomerOrderStatusTheme('PLACED').subtitle}
+                    </Text>
+                  </View>
+                </View>
+              )}
               {/* Delivery info row */}
               {(selectedOrder?.address || selectedOrder?.deliverySlot) && (
                 <View style={styles.deliveryInfoBox}>
@@ -721,6 +726,21 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   badgeText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   dateText: { fontSize: 13, color: '#94a3b8' },
+  awaitingSubtitle: { fontSize: 12, fontWeight: '600', color: '#d97706', marginBottom: 10, marginTop: -4 },
+  refundSubtitle: { fontSize: 12, fontWeight: '600', color: '#64748b', marginBottom: 10, marginTop: -4 },
+  awaitingBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  awaitingBannerTitle: { fontSize: 11, fontWeight: '900', color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5 },
+  awaitingBannerText: { fontSize: 13, fontWeight: '600', color: '#b45309', marginTop: 4 },
   detailsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, paddingVertical: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#f8fafc' },
   itemCount: { color: '#64748b', fontSize: 14, fontWeight: '600' },
   totalPrice: { fontWeight: '900', color: '#1e293b', fontSize: 18 },

@@ -1,4 +1,9 @@
 const { createOrderStatusNotification } = require("../services/notification.service");
+const {
+  initiateOrderRefund,
+  isRefundableOrder,
+} = require("../services/orderRefund.service");
+const { restoreOrderInventory } = require("../utils/orderInventory.util");
 const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const Product = require("../models/Product.model");
@@ -121,13 +126,27 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Handle cancellation - restore inventory
+    let refundResult = null;
+
+    // Handle cancellation - restore inventory + Razorpay refund for paid online orders
     if (status === "CANCELLED" && currentStatus !== "CANCELLED") {
-      for (const item of order.items) {
-        await Product.findByIdAndUpdate(
-          item.productId,
-          { $inc: { quantity: item.qty } }
-        );
+      await restoreOrderInventory(order, req.user.tenantId);
+
+      if (isRefundableOrder(order)) {
+        try {
+          refundResult = await initiateOrderRefund(order, {
+            reason: "admin_cancelled",
+          });
+        } catch (refundErr) {
+          console.error("Admin cancel: refund failed", {
+            orderId: order._id,
+            message: refundErr.message,
+          });
+          refundResult = {
+            success: false,
+            error: refundErr.message || "Refund initiation failed",
+          };
+        }
       }
     }
 
@@ -161,6 +180,8 @@ exports.updateOrderStatus = async (req, res) => {
 
     await order.save();
 
+    const refreshedOrder = await Order.findById(order._id);
+
     try {
       await createOrderStatusNotification({
         tenantId: order.tenantId,
@@ -172,11 +193,26 @@ exports.updateOrderStatus = async (req, res) => {
       console.log("Notification failed but order updated:", err.message);
     }
 
-    return res.status(200).json({
+    const response = {
       success: true,
       message: "Order status updated successfully",
-      order
-    });
+      order: refreshedOrder || order,
+    };
+
+    if (status === "CANCELLED" && refundResult) {
+      response.refund = refundResult;
+      if (refundResult.success === false) {
+        response.message =
+          "Order cancelled. Online refund could not be started — use Retry refund in admin.";
+      } else if (refundResult.skipped === false && !refundResult.error) {
+        response.message =
+          refundResult.paymentStatus === "REFUNDED"
+            ? "Order cancelled and refund completed."
+            : "Order cancelled. Refund is processing (5–7 business days).";
+      }
+    }
+
+    return res.status(200).json(response);
 
   } catch (error) {
     console.error("Error updating order status:", error);
@@ -513,5 +549,63 @@ exports.markCODPaid = async (req, res) => {
   } catch (error) {
     console.error("markCODPaid error:", error);
     return res.status(500).json({ success: false, message: "Failed to mark order as paid" });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// RETRY RAZORPAY REFUND (admin)
+//////////////////////////////////////////////////////////////
+
+exports.retryOrderRefund = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.user.tenantId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid order ID" });
+    }
+
+    const order = await Order.findOne({ _id: id, tenantId });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    if (order.orderStatus !== "CANCELLED") {
+      return res.status(400).json({
+        success: false,
+        message: "Refunds can only be retried for cancelled orders",
+      });
+    }
+
+    if (!isRefundableOrder(order)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This order is not eligible for refund (COD, unpaid, or already refunded)",
+      });
+    }
+
+    const refundResult = await initiateOrderRefund(order, {
+      reason: "admin_retry_refund",
+    });
+
+    const refreshedOrder = await Order.findById(order._id);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        refreshedOrder?.paymentStatus === "REFUNDED"
+          ? "Refund completed"
+          : "Refund initiated — processing at Razorpay",
+      refund: refundResult,
+      order: refreshedOrder,
+    });
+  } catch (error) {
+    console.error("retryOrderRefund error:", error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Failed to initiate refund",
+    });
   }
 };

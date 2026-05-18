@@ -157,6 +157,11 @@ updateProduct: async (productId, payload) => {
     return res.data;
   },
 
+  retryOrderRefund: async (orderId) => {
+    const res = await api.post(`/api/admin/orders/${orderId}/refund`);
+    return res.data;
+  },
+
   /* -------- RIDER APIs -------- */
 
   getRiders: async () => {
