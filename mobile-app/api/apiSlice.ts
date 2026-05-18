@@ -24,6 +24,15 @@ export interface AppSettings {
   allowOrderCancellation: boolean;
 }
 
+export interface ProductVariant {
+  variantId: string;
+  label: string;
+  price: number;
+  availableQty: number;
+  isDefault?: boolean;
+  inStock?: boolean;
+}
+
 export interface Product {
   id: string;
   parentCategoryId: string;
@@ -36,6 +45,9 @@ export interface Product {
   unit: string;
   image: string[];
   stock: number;
+  variants?: ProductVariant[];
+  variantCount?: number;
+  defaultVariantId?: string;
 }
 
 export interface Category {
@@ -48,19 +60,44 @@ export interface Category {
 
 /* ---------------- NORMALIZER ---------------- */
 
-const normalizeProduct = (p: any): Product => ({
-  id: String(p.productId ?? p._id),
-  name: p.name,
-  parentCategoryId: p.category || '',
-  subCategoryId: p.subcategory || '',
-  category: p.category || '',
-  subcategory: p.subcategory || '',
-  description: p.description || '',
-  price: p.price,
-  unit: p.unit,
-  image: p.imageUrl ? [p.imageUrl] : [],
-  stock: p.availableQty ?? 0,
-});
+const normalizeProduct = (p: any): Product => {
+  const rawVariants: any[] = Array.isArray(p.variants) ? p.variants : [];
+  const variants: ProductVariant[] = rawVariants
+    .map((v) => ({
+      variantId: String(v.variantId ?? v._id ?? ''),
+      label: v.label || '',
+      price: Number(v.price) || 0,
+      availableQty: Number(v.availableQty ?? 0),
+      isDefault: Boolean(v.isDefault),
+      inStock: v.inStock !== false && Number(v.availableQty ?? 0) > 0,
+    }))
+    .filter((v) => v.variantId.length > 0);
+  const def = variants.find((v) => v.isDefault) || variants[0];
+  const imageUrls: string[] = [];
+  if (Array.isArray(p.images)) {
+    for (const img of p.images) {
+      if (img?.url) imageUrls.push(String(img.url).trim());
+    }
+  }
+  if (!imageUrls.length && p.imageUrl) imageUrls.push(String(p.imageUrl).trim());
+
+  return {
+    id: String(p.productId ?? p._id),
+    name: p.name,
+    parentCategoryId: p.category || '',
+    subCategoryId: p.subcategory || '',
+    category: p.category || '',
+    subcategory: p.subcategory || '',
+    description: p.description || '',
+    price: def?.price ?? (Number(p.price) || 0),
+    unit: def?.label ?? (p.unit || ''),
+    image: imageUrls,
+    stock: def?.availableQty ?? p.availableQty ?? 0,
+    variants: variants.length ? variants : undefined,
+    variantCount: variants.length || undefined,
+    defaultVariantId: def?.variantId,
+  };
+};
 
 /** Derives a flat category list (parents + subs) from the product list. */
 const deriveCategories = (products: Product[]): Category[] => {

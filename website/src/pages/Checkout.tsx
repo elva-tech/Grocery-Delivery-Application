@@ -145,7 +145,11 @@ const handlePlaceOrder = async () => {
     (typeof details?.map_link === 'string' && details.map_link.trim()) ||
     '';
   const orderPayload = {
-    items: items.map(item => ({ productId: item.id, qty: item.quantity })),
+    items: items.map(item => ({
+      productId: item.productId || item.id.split(':')[0],
+      variantId: item.variantId || item.id.split(':')[1],
+      qty: item.quantity,
+    })),
     paymentMode: paymentMethod,
     deliveryAddress: {
       ...buildDeliveryAddressPayload(address || {}),

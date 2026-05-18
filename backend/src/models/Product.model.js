@@ -8,6 +8,16 @@ const productImageSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const productVariantSchema = new mongoose.Schema(
+  {
+    label: { type: String, required: true, trim: true },
+    price: { type: Number, required: true, min: 0 },
+    isDefault: { type: Boolean, default: false },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: true }
+);
+
 const productSchema = new mongoose.Schema(
   {
     tenantId: {
@@ -34,14 +44,21 @@ const productSchema = new mongoose.Schema(
       index: true,
     },
 
+    /** Display price from default variant (backward compatible). */
     price: {
       type: Number,
       required: true,
     },
 
+    /** Display unit label from default variant (backward compatible). */
     unit: {
       type: String,
       default: "",
+    },
+
+    variants: {
+      type: [productVariantSchema],
+      default: [],
     },
 
     images: {
@@ -51,7 +68,7 @@ const productSchema = new mongoose.Schema(
 
     description: {
       type: String,
-      default: ""
+      default: "",
     },
 
     isAvailable: {
@@ -62,14 +79,9 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// 🔍 Indexes
-// Compound index for tenant + category filtering
 productSchema.index({ tenantId: 1, category: 1 });
-// Query available products
 productSchema.index({ tenantId: 1, isAvailable: 1 });
-// List available products sorted by newest
 productSchema.index({ tenantId: 1, isAvailable: 1, createdAt: -1 });
-// Search by name (text search)
 productSchema.index({ tenantId: 1, name: "text" });
 
 module.exports = mongoose.model("Product", productSchema);

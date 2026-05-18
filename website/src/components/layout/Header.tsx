@@ -74,7 +74,7 @@ const Header: React.FC<HeaderProps> = ({
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { totalAmount } = useSelector((state: RootState) => state.cart);
-  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   const [location, setLocation] = useState("Detecting...");
   const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
@@ -85,7 +85,6 @@ const Header: React.FC<HeaderProps> = ({
   const [showAppModal, setShowAppModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,7 +323,7 @@ const Header: React.FC<HeaderProps> = ({
 
                 {/* {PROFILE BUTTON} */}
                 <button
-                  onClick={() => setShowProfile(true)}
+                  onClick={() => navigate('/profile')}
                   className="flex items-center gap-2 bg-blue-50 hover:bg-[#4b6f9e] text-[#4b6f9e] hover:text-white px-3 py-2 rounded-xl transition-all"
                 >
                   <User size={16} strokeWidth={2.5} />
@@ -478,45 +477,6 @@ const Header: React.FC<HeaderProps> = ({
                 >
                   {WEB_COPY.header.confirmLogoutAction}
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* { PROFILE MODAL} */}
-      {showProfile && (
-        <div
-          onClick={() => setShowProfile(false)}
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl p-6 w-[90%] max-w-xs shadow-2xl animate-in zoom-in-95"
-          >
-            <h2 className="text-lg font-black text-slate-900 mb-4 text-center">
-              Profile
-            </h2>
-
-            <div className="flex flex-col gap-3">
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-400 font-bold">NAME</p>
-                <p className="text-sm font-black text-slate-800">
-                  {user?.name || 'N/A'}
-                </p>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-400 font-bold">PHONE</p>
-                <p className="text-sm font-black text-slate-800">
-                  {user?.phone || 'N/A'}
-                </p>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-400 font-bold">EMAIL</p>
-                <p className="text-sm font-black text-slate-800 break-all">
-                  {user?.email || 'N/A'}
-                </p>
               </div>
             </div>
           </div>

@@ -30,6 +30,9 @@ import Pagination from './components/ui/Pagination';
 import confetti from 'canvas-confetti';
 import Footer from './components/layout/Footer';
 import Orders from './pages/Orders';
+import Profile from './pages/Profile';
+import Account from './pages/Account';
+import SavedAddresses from './pages/SavedAddresses';
 import LegalPage from './pages/LegalPage';
 import ContactUs from './pages/ContactUs';
 import { WEB_COPY, customerFacingDeliveryUnavailable } from './constants/copy';
@@ -692,6 +695,23 @@ const App = () => {
             <Route
               path="/orders"
               element={<Orders openCart={() => setIsCartOpen(true)} />}
+            />
+            <Route
+              path="/profile"
+              element={
+                <Profile
+                  openCart={() => setIsCartOpen(true)}
+                  onLogin={() => setIsLoginOpen(true)}
+                />
+              }
+            />
+            <Route
+              path="/account"
+              element={<Account onLogin={() => setIsLoginOpen(true)} />}
+            />
+            <Route
+              path="/saved-addresses"
+              element={<SavedAddresses onLogin={() => setIsLoginOpen(true)} />}
             />
             <Route path="/about" element={<LegalPage />} />
             <Route path="/contact" element={<ContactUs />} />

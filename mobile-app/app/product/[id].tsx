@@ -3,7 +3,7 @@
  * @description Product detail view with full-bleed image gallery and cart logic fixes.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { showToast } from '@/utils/toast';
 import { resolveProductImageGallery, resolveProductImageUri } from '@/utils/resolveProductImageUri';
+import { buildCartPayload, cartLineId, getDefaultVariant } from '@/utils/productVariants';
 import { MOBILE_COPY } from '@/src/constants/copy';
 
 const { width } = Dimensions.get('window');
@@ -32,9 +33,27 @@ export default function ProductDetailScreen() {
   const { data: allProducts } = useGetProductsQuery();
   const product = allProducts?.find(p => p.id === id);
 
-  // FIX: Explicitly checking if THIS specific ID is in the cart
+  const defaultVariant = useMemo(
+    () => (product ? getDefaultVariant(product) : null),
+    [product]
+  );
+  const [selectedVariantId, setSelectedVariantId] = useState('');
+  useEffect(() => {
+    if (defaultVariant) setSelectedVariantId(defaultVariant.variantId);
+  }, [id, defaultVariant?.variantId]);
+
+  const selectedVariant = useMemo(() => {
+    if (!product || !defaultVariant) return null;
+    const list = product.variants?.length ? product.variants : [defaultVariant];
+    return list.find((v) => v.variantId === selectedVariantId) || defaultVariant;
+  }, [product, selectedVariantId, defaultVariant]);
+
+  const lineId = product && selectedVariant
+    ? cartLineId(product.id, selectedVariant.variantId)
+    : '';
+
   const cartItem = useSelector((state: RootState) =>
-    state.cart.items.find(item => item.id === id)
+    lineId ? state.cart.items.find((item) => item.id === lineId) : undefined
   );
 
   // Smooth Scroll Handler for Image Gallery
@@ -64,10 +83,16 @@ export default function ProductDetailScreen() {
   const primaryImage = resolveProductImageUri(product);
 
   const handleAddToCart = () => {
+    if (!product || !selectedVariant || selectedVariant.availableQty <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    dispatch(addToCart({ ...product, image: primaryImage ?? undefined }));
+    dispatch(addToCart(buildCartPayload(product, selectedVariant)));
     showToast('success', MOBILE_COPY.home.addToCartToastTitle, `${product.name} ${MOBILE_COPY.home.addToCartToastSuffix}`);
   };
+
+  const variantOptions = product?.variants?.length ? product.variants : defaultVariant ? [defaultVariant] : [];
+  const displayPrice = selectedVariant?.price ?? product?.price ?? 0;
+  const displayUnit = selectedVariant?.label ?? product?.unit ?? '';
+  const displayStock = selectedVariant?.availableQty ?? product?.stock ?? 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -146,13 +171,41 @@ export default function ProductDetailScreen() {
           </View>
 
           <Text style={styles.name}>{product.name}</Text>
-          <Text style={styles.unitDetail}>{product.unit} • {MOBILE_COPY.product.packedForDelivery}</Text>
+          <Text style={styles.unitDetail}>{displayUnit} • {MOBILE_COPY.product.packedForDelivery}</Text>
+
+          {variantOptions.length > 1 && (
+            <View style={styles.variantPickerWrap}>
+              <Text style={styles.variantPickerLabel}>Select option</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.variantChips}>
+                {variantOptions.map((v) => {
+                  const active = v.variantId === selectedVariantId;
+                  const disabled = v.availableQty <= 0;
+                  return (
+                    <TouchableOpacity
+                      key={v.variantId}
+                      disabled={disabled}
+                      onPress={() => setSelectedVariantId(v.variantId)}
+                      style={[
+                        styles.variantChip,
+                        active && styles.variantChipActive,
+                        disabled && styles.variantChipDisabled,
+                      ]}
+                    >
+                      <Text style={[styles.variantChipText, active && styles.variantChipTextActive]}>
+                        {v.label} · ₹{v.price}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           <View style={styles.metaRow}>
             <View style={styles.stockBadge}>
-              <View style={[styles.stockDot, product.stock > 10 ? styles.inStock : styles.lowStock]} />
+              <View style={[styles.stockDot, displayStock > 10 ? styles.inStock : styles.lowStock]} />
               <Text style={styles.stockText}>
-                {product.stock > 10 ? 'In Stock' : `Hurry, only ${product.stock} left`}
+                {displayStock > 10 ? 'In Stock' : displayStock > 0 ? `Hurry, only ${displayStock} left` : 'Out of Stock'}
               </Text>
             </View>
           </View>
@@ -205,13 +258,13 @@ export default function ProductDetailScreen() {
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
           <Text style={styles.footerLabel}>Grand Total</Text>
-          <Text style={styles.footerPrice}>₹{product.price}</Text>
+          <Text style={styles.footerPrice}>₹{displayPrice}</Text>
         </View>
 
         {cartItem ? (
           <View style={styles.quantityContainer}>
             <TouchableOpacity
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); dispatch(removeFromCart(product.id)); }}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); dispatch(removeFromCart(lineId)); }}
               style={styles.qtyBtn}
             >
               <Ionicons name="remove" size={22} color="#fff" />
@@ -281,6 +334,23 @@ const styles = StyleSheet.create({
   inStock: { backgroundColor: '#2ecc71' },
   lowStock: { backgroundColor: '#e67e22' },
   stockText: { fontSize: 12, color: '#7b8a9a', fontWeight: '500' },
+
+  variantPickerWrap: { marginTop: 16 },
+  variantPickerLabel: { fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 },
+  variantChips: { flexGrow: 0 },
+  variantChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    marginRight: 8,
+    backgroundColor: '#fff',
+  },
+  variantChipActive: { borderColor: BRAND_BLUE, backgroundColor: '#f0f7ff' },
+  variantChipDisabled: { opacity: 0.4 },
+  variantChipText: { fontSize: 13, fontWeight: '600', color: '#475569' },
+  variantChipTextActive: { color: BRAND_BLUE },
 
   divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 25 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#2c3e50', marginBottom: 15 },

@@ -9,16 +9,27 @@ export interface SendOtpResponse {
   message: string;
 }
 
+export interface AuthUserPayload {
+  id: string;
+  phoneNumber: string;
+  name?: string;
+  email?: string;
+  alternatePhone?: string;
+  role?: string;
+  tenantId?: string;
+}
+
 export interface VerifyOtpResponse {
   success: boolean;
   message: string;
   token?: string;
-  user?: {
-    id: string;
-    phoneNumber: string;
-    name?: string;
-    tenantId?: string;
-  };
+  user?: AuthUserPayload;
+}
+
+export interface UpdateProfileResponse {
+  success: boolean;
+  message?: string;
+  user?: AuthUserPayload;
 }
 
 /**
@@ -80,4 +91,41 @@ export const verifyOtp = async (
     console.error('verifyOtp error:', error);
     throw error;
   }
+};
+
+/**
+ * Update authenticated user profile
+ */
+export const updateProfile = async (data: {
+  name: string;
+  email?: string;
+  alternatePhone?: string;
+}): Promise<UpdateProfileResponse> => {
+  const token = localStorage.getItem('token')?.trim();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const body: Record<string, string> = { name: data.name.trim() };
+  if (data.email !== undefined) body.email = data.email.trim();
+  if (data.alternatePhone !== undefined) body.alternatePhone = data.alternatePhone.trim();
+
+  const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-platform': 'web',
+      'x-tenant-id': getTenantId(),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const resData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(resData.message || 'Failed to update profile');
+  }
+
+  return resData;
 };

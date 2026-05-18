@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { useDispatch, useSelector } from 'react-redux';
 import { useGetProductsByCategoryQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
+import { buildCartPayload, getDefaultVariant } from '@/utils/productVariants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -37,10 +38,10 @@ export default function CategoryScreen() {
   const handleAddToCart = (product: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    dispatch(addToCart({
-      ...product,
-      image: Array.isArray(product.image) ? product.image[0] : product.image
-    }));
+    const def = getDefaultVariant(product);
+    const payload = buildCartPayload(product, def);
+    if (Array.isArray(product.image) && product.image[0]) payload.image = product.image[0];
+    dispatch(addToCart(payload));
 
     showToast('success', 'Added!', `${product.name} added to basket`);
   };

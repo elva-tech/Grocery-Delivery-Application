@@ -4,7 +4,7 @@ import DataTable from '../../components/shared/DataTable';
 import CustomButton from '../../components/shared/CustomButton';
 import ProductForm from './ProductForm';
 import CategoryForm from './CategoryForm';
-import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight, Search, X, Loader, AlertCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, FolderPlus, Package, ChevronRight, Search, X, Loader, AlertCircle, AlertTriangle } from 'lucide-react';
 import Pagination from '../../components/shared/Pagination';
 import usePagination from '../../hooks/usePagination';
 import { APP_CONFIG } from '../../config/appConfig';
@@ -13,6 +13,101 @@ import { useToast } from '../../context/ToastContext';
 import resolveImageUrl from '../../utils/resolveImageUrl';
 
 /** Build { url, public_id }[] for API from form `image` (strings and/or { url, public_id }). */
+/** Summary for success modal after save (variants-aware). */
+const buildSuccessSummary = (v) => {
+  const variants = Array.isArray(v.variants) ? v.variants : [];
+  const def = variants.find((r) => r.isDefault) || variants[0];
+  const totalStock = variants.reduce((sum, r) => sum + (Number(r.stock) || 0), 0);
+  return {
+    name: v.name,
+    price: def?.price ?? '',
+    unit: def?.label ?? '',
+    stock: totalStock,
+    variantCount: variants.length,
+    variantsSummary: variants
+      .map((r) => `${r.label}: ₹${r.price} (stock ${r.stock ?? 0})`)
+      .join(' · '),
+  };
+};
+
+/** Admin table: price column (single vs multiple options). */
+function formatPriceCell(row) {
+  const count = row.variantCount ?? row.variants?.length ?? 0;
+  if (count > 1) {
+    const min = row.priceMin ?? row.price;
+    const max = row.priceMax ?? row.price;
+    const range =
+      min === max ? `₹${min}` : `₹${min} – ₹${max}`;
+    return { main: range, sub: `${count} pack/size options` };
+  }
+  const label = row.variants?.[0]?.label || row.unit;
+  return {
+    main: `₹${row.price}`,
+    sub: label ? `Option: ${label}` : null,
+  };
+}
+
+function variantQty(v) {
+  return Number(v.availableQty ?? v.stock ?? 0);
+}
+
+function variantThreshold(v) {
+  const n = Number(v.thresholdQty ?? v.threshold ?? 10);
+  return Number.isFinite(n) ? n : 10;
+}
+
+function variantsForStockRow(row) {
+  if (Array.isArray(row.variants) && row.variants.length > 0) return row.variants;
+  return [
+    {
+      label: row.unit || 'Standard',
+      availableQty: row.stock ?? row.availableQty ?? 0,
+      thresholdQty: row.thresholdQty ?? row.threshold ?? 10,
+    },
+  ];
+}
+
+/** Admin table: stock — alert when any size/pack is at or below its own threshold. */
+function formatStockCell(row) {
+  const variants = variantsForStockRow(row);
+  const total = variants.reduce((sum, v) => sum + variantQty(v), 0);
+  const lowVariants = variants.filter((v) => variantQty(v) <= variantThreshold(v));
+  const isLow = lowVariants.length > 0;
+
+  const breakdown = variants
+    .map((v) => {
+      const qty = variantQty(v);
+      const low = qty <= variantThreshold(v);
+      return low ? `${v.label}: ${qty} units (low)` : `${v.label}: ${qty} units`;
+    })
+    .join(' · ');
+
+  const tooltip = isLow
+    ? [
+        'Low stock — reorder this size/pack:',
+        ...lowVariants.map(
+          (v) =>
+            `• ${v.label}: ${variantQty(v)} left (alert when ≤ ${variantThreshold(v)})`
+        ),
+        variants.length > 1 ? `Total across all options: ${total} units` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : variants.length > 1
+      ? `Total: ${total} units · ${variants.length} options`
+      : `${total} units in stock`;
+
+  const optionLabel = variants.length === 1 ? variants[0]?.label || row.unit : null;
+
+  return {
+    main: `${total} units in stock`,
+    sub: variants.length > 1 ? breakdown : optionLabel ? `Option: ${optionLabel}` : null,
+    isLow,
+    tooltip,
+    lowLabels: lowVariants.map((v) => v.label).join(', '),
+  };
+}
+
 const buildImagesPayload = (imageField) => {
   if (!Array.isArray(imageField)) return [];
   return imageField
@@ -152,25 +247,44 @@ const ProductList = () => {
     {
       header: 'Price',
       accessor: 'price',
-      render: (v) => `₹${v}`
+      render: (_v, row) => {
+        const { main, sub } = formatPriceCell(row);
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="font-bold text-slate-800">{main}</span>
+            {sub && (
+              <span className="text-[10px] text-slate-400 font-medium">{sub}</span>
+            )}
+          </div>
+        );
+      },
     },
 
     {
       header: 'Stock',
       accessor: 'stock',
-      render: (v, row) => {
-        const unitLabel = row.unit
-          ? (String(row.unit).trim().replace(/^\d+(\.\d+)?\s*/, '').trim() || String(row.unit).trim())
-          : 'units';
-        const threshold = row.threshold ?? row.thresholdQty ?? 10;
-        const isLow = v <= threshold;
+      render: (_v, row) => {
+        const { main, sub, isLow, tooltip, lowLabels } = formatStockCell(row);
         return (
-          <div className="flex flex-col gap-0.5">
-            <span className={`font-bold ${isLow ? 'text-red-500' : 'text-slate-600'}`}>
-              {v} {unitLabel}
-            </span>
+          <div
+            className={`flex flex-col gap-0.5 max-w-[240px] rounded-lg -m-1 p-1 cursor-help ${
+              isLow ? 'bg-red-50/80 ring-1 ring-red-200' : ''
+            }`}
+            title={tooltip}
+          >
+            <div className="flex items-center gap-1.5">
+              {isLow && <AlertTriangle size={14} className="text-red-500 shrink-0" aria-hidden />}
+              <span className={`font-bold ${isLow ? 'text-red-500' : 'text-slate-600'}`}>
+                {main}
+              </span>
+            </div>
+            {sub && (
+              <span className="text-[10px] text-slate-400 leading-snug">{sub}</span>
+            )}
             {isLow && (
-              <span className="text-[9px] font-black uppercase tracking-widest text-red-400">Low Stock</span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-red-500">
+                Low: {lowLabels}
+              </span>
             )}
           </div>
         );
@@ -283,15 +397,28 @@ const ProductList = () => {
                 typeof v.freeSubcategoryName === 'string' ? v.freeSubcategoryName.trim() : '';
 
               const imagesPayload = buildImagesPayload(v.image);
+              const variantsPayload = (v.variants || []).map((row, idx) => ({
+                label: String(row.label || '').trim(),
+                price: Number(row.price),
+                stock: Math.max(0, Math.floor(Number(row.stock) || 0)),
+                isDefault: Boolean(row.isDefault),
+                sortOrder: idx,
+                variantId: row.variantId || undefined,
+                threshold: row.threshold != null ? Number(row.threshold) : 10,
+              }));
+
+              const def = variantsPayload.find((r) => r.isDefault) || variantsPayload[0];
+
               const payload = {
                 name: v.name,
                 description: v.description || '',
                 category: catObj?.name || freeCat || v.parentCategoryId,
                 subcategory: subCatObj?.name || freeSub || v.subCategoryId || '',
-                price: Number(v.price),
-                unit: `${v.unitValue} ${v.unitType}`,
-                stocks: Number(v.stock),
-                threshold: v.threshold != null ? Number(v.threshold) : 10,
+                variants: variantsPayload,
+                price: def?.price,
+                unit: def?.label,
+                stocks: def?.stock,
+                threshold: def?.threshold ?? 10,
                 images: imagesPayload,
                 imageUrl: imagesPayload[0]?.url || '',
               };
@@ -307,10 +434,7 @@ const ProductList = () => {
                 await updateProduct();
                 setSuccessData({
                   mode: 'edit',
-                  name: v.name,
-                  price: v.price,
-                  unit: `${v.unitValue} ${v.unitType}`,
-                  stock: v.stock,
+                  ...buildSuccessSummary(v),
                 });
                 setShowSuccess(true);
 
@@ -320,10 +444,7 @@ const ProductList = () => {
                 await addProduct();
                 setSuccessData({
                   mode: 'add',
-                  name: v.name,
-                  price: v.price,
-                  unit: `${v.unitValue} ${v.unitType}`,
-                  stock: v.stock,
+                  ...buildSuccessSummary(v),
                 });
 
                 setShowSuccess(true);
@@ -463,8 +584,22 @@ const ProductList = () => {
         </p>
 
         <div className="text-xs text-slate-400 space-y-1">
-          <p>₹{successData?.price} • {successData?.unit}</p>
-          <p>Stock: {successData?.stock}</p>
+          {successData?.variantCount > 1 ? (
+            <>
+              <p className="font-semibold text-slate-500">
+                {successData.variantCount} options saved
+              </p>
+              <p className="text-[10px] leading-relaxed break-words">
+                {successData.variantsSummary}
+              </p>
+              <p>Total stock: {successData.stock}</p>
+            </>
+          ) : (
+            <>
+              <p>₹{successData?.price} • {successData?.unit}</p>
+              <p>Stock: {successData?.stock}</p>
+            </>
+          )}
         </div>
 
       </div>

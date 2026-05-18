@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useGetCategoriesQuery, useGetProductsByCategoryQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
+import { buildCartPayload, getDefaultVariant } from '@/utils/productVariants';
 import { showToast } from '@/utils/toast';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
@@ -87,10 +88,10 @@ const base = activeSub
 
   const handleAddToCart = (product: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    dispatch(addToCart({
-      ...product,
-      image: resolveProductImageUri(product) ?? undefined
-    }));
+    const def = getDefaultVariant(product);
+    const payload = buildCartPayload(product, def);
+    if (resolveProductImageUri(product)) payload.image = resolveProductImageUri(product)!;
+    dispatch(addToCart(payload));
     showToast('success', 'Added', `${product.name} added to basket`);
   };
 

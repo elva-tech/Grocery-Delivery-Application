@@ -32,6 +32,10 @@ const orderSchema = new mongoose.Schema(
         name: String,
         qty: Number,
         price: Number,
+        variantId: {
+          type: mongoose.Schema.Types.ObjectId,
+          default: null,
+        },
         unit: { type: String, default: "pcs" },
         imageUrl: { type: String, default: "" },
       },

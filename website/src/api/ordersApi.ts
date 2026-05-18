@@ -195,7 +195,7 @@ export const validateCouponApi = async (code: string, cartTotal: number): Promis
 };
 
 export const placeOrderApi = async (payload: {
-  items: { productId: string; qty: number }[];
+  items: { productId: string; variantId?: string; qty: number }[];
   paymentMode: 'COD' | 'ONLINE';
   deliveryAddress: {
     line1: string;
