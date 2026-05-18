@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Colors, Fonts } from "@/theme/theme";
+import { StoreLogo } from "@/components/StoreLogo";
 import { saveTenantId } from "@/src/utils/tenantStorage";
 import { ACTIVE_API_URL } from "@/src/config/constants";
 
@@ -55,6 +56,7 @@ export default function StoreCodeEntry() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.inner}>
+        <StoreLogo layout="stack" size={72} style={styles.brandMark} />
         <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Enter Store Code</Text>
         <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>
           Ask your store for a 4-character code, or scan the QR at the counter.
@@ -116,6 +118,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
+  },
+  brandMark: {
+    marginBottom: 28,
   },
   title: {
     fontSize: 26,

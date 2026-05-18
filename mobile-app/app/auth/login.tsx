@@ -12,16 +12,14 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
-import { Image } from "expo-image";
 import { Colors, Fonts } from "@/theme/theme";
+import { StoreLogo } from "@/components/StoreLogo";
 import { sendOtp } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
-import { useTenantBranding } from "@/contexts/TenantBrandingContext";
 import { MOBILE_COPY } from "@/src/constants/copy";
 
 export default function Login() {
     const router = useRouter();
-    const { storeName, logoUri } = useTenantBranding();
     const [phone, setPhone] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -58,16 +56,7 @@ export default function Login() {
               style={{ flex: 1 }}
             >
               <ScrollView contentContainerStyle={styles.container} bounces={false}>
-                <View style={styles.brandRow}>
-                  <Image
-                    source={logoUri ? { uri: logoUri } : require('../../assets/logo-2.png')}
-                    style={styles.brandLogo}
-                    contentFit="contain"
-                  />
-                  <Text style={[styles.brandName, { fontFamily: Fonts.bold }]} numberOfLines={1}>
-                    {storeName}
-                  </Text>
-                </View>
+                <StoreLogo layout="stack" size={64} showTagline style={styles.brandRow} />
                 <LottieView
                   source={require('../../assets/animations/truck.json')}
                   autoPlay

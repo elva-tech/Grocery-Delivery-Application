@@ -10,10 +10,18 @@ import React, {
 import { DeviceEventEmitter } from 'react-native';
 
 import { fetchTenantDetails, type TenantDetails } from '@/api/tenantApi';
-import { APP_BRAND } from '@/src/config/constants';
+import { titleCaseTenantId } from '@/src/utils/brandWords';
+import { getTenantId } from '@/src/utils/getTenantId';
+import {
+  readTenantBrandingCache,
+  writeTenantBrandingCache,
+} from '@/src/utils/tenantBrandingCache';
+import { getActiveTenantId } from '@/src/utils/tenantStorage';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
 export type TenantBrandingValue = {
+  /** Cache applied and bootstrap finished — safe to show branded UI. */
+  ready: boolean;
   loading: boolean;
   error: string | null;
   raw: TenantDetails | null;
@@ -22,11 +30,8 @@ export type TenantBrandingValue = {
   tagline: string;
   heroTitle: string;
   heroSubtitle: string;
-  /** Short badge from tenant (e.g. “Shop local”) — optional. */
   heroBadge: string;
-  /** Single-line area hint for delivery row (store address or empty). */
   storeAddressLine: string;
-  /** Customer-facing support email (matches website: supportEmail || contactEmail). */
   supportEmail: string;
   supportPhone: string;
   supportHours: string;
@@ -35,39 +40,82 @@ export type TenantBrandingValue = {
 
 const TenantBrandingContext = createContext<TenantBrandingValue | null>(null);
 
+function cacheToTenantDetails(
+  tenantId: string,
+  cached: NonNullable<Awaited<ReturnType<typeof readTenantBrandingCache>>>,
+): TenantDetails {
+  return {
+    tenantId,
+    storeName: cached.storeName,
+    logo: cached.logo,
+    tagline: cached.tagline,
+    heroTitle: cached.heroTitle,
+    heroSubtitle: cached.heroSubtitle,
+    heroBadge: cached.heroBadge,
+  };
+}
+
 export function TenantBrandingProvider({ children }: { children: ReactNode }) {
   const [raw, setRaw] = useState<TenantDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tenantId, setTenantId] = useState(getTenantId);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (tid: string, opts?: { hadCache?: boolean }) => {
+    if (!opts?.hadCache) setLoading(true);
     setError(null);
     try {
       const data = await fetchTenantDetails();
       setRaw(data);
+      await writeTenantBrandingCache({
+        tenantId: data.tenantId || tid,
+        storeName: data.storeName,
+        logo: data.logo,
+        tagline: data.tagline,
+        heroTitle: data.heroTitle,
+        heroSubtitle: data.heroSubtitle,
+        heroBadge: data.heroBadge,
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load store';
       setError(msg);
-      setRaw(null);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    load();
+  const bootstrap = useCallback(async () => {
+    setReady(false);
+    const tid = (await getActiveTenantId()).trim() || getTenantId();
+    setTenantId(tid);
+    const cached = await readTenantBrandingCache(tid);
+    if (cached) {
+      setRaw(cacheToTenantDetails(tid, cached));
+      setLoading(false);
+    } else {
+      setRaw(null);
+      setLoading(true);
+    }
+    setReady(true);
+    await load(tid, { hadCache: Boolean(cached) });
   }, [load]);
+
+  useEffect(() => {
+    bootstrap();
+  }, [bootstrap]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('tenant-changed', () => {
-      load();
+      bootstrap();
     });
     return () => sub.remove();
-  }, [load]);
+  }, [bootstrap]);
 
   const value = useMemo((): TenantBrandingValue => {
-    const storeName = raw?.storeName?.trim() || APP_BRAND;
+    const tid = raw?.tenantId?.trim() || tenantId || getTenantId();
+    const storeName =
+      raw?.storeName?.trim() || titleCaseTenantId(tid) || 'Store';
     const logoUri = raw?.logo?.trim()
       ? resolveProductImageUri({ imageUrl: raw.logo.trim() })
       : null;
@@ -79,6 +127,7 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
     const storeAddressLine = raw?.storeAddress?.trim() || '';
     const heroBadge = raw?.heroBadge?.trim() || '';
     return {
+      ready,
       loading,
       error,
       raw,
@@ -94,9 +143,9 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
       supportEmail,
       supportPhone,
       supportHours,
-      refetch: load,
+      refetch: () => bootstrap(),
     };
-  }, [raw, loading, error, load]);
+  }, [raw, loading, ready, error, bootstrap, tenantId]);
 
   return (
     <TenantBrandingContext.Provider value={value}>{children}</TenantBrandingContext.Provider>

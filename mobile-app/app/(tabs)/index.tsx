@@ -35,6 +35,7 @@ import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
+import { StoreLogo } from '@/components/StoreLogo';
 import { fetchBanners, type BannerRecord } from '@/api/bannerApi';
 import {
   getAddresses,
@@ -169,7 +170,7 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
 
-  const { storeName, logoUri, tagline, heroBadge } = useTenantBranding();
+  const { tagline, heroBadge } = useTenantBranding();
 
   const [banners, setBanners] = useState<BannerRecord[]>([]);
   const [bannerLoading, setBannerLoading] = useState(true);
@@ -329,16 +330,7 @@ export default function HomeScreen() {
   const renderHeader = () => (
     <View style={styles.headerWrapper}>
       <View style={styles.headerTopRow}>
-        <Image
-          source={logoUri ? { uri: logoUri } : require('../../assets/logo-2.png')}
-          style={styles.logoImage}
-          contentFit="contain"
-        />
-        <View style={styles.headerBrandBlock}>
-          <Text style={styles.brandName} numberOfLines={1}>
-            {storeName}
-          </Text>
-        </View>
+        <StoreLogo layout="header" size={48} showTagline style={styles.headerBrandBlock} />
         <TouchableOpacity
           style={styles.profileButton}
           onPress={() => router.push('/(tabs)/profile')}

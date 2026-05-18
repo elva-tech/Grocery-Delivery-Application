@@ -11,18 +11,19 @@ import {
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { APP_BRAND, SUPPORT_PHONE } from '@/src/config/constants';
+import { SUPPORT_PHONE } from '@/src/config/constants';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 
-const BRAND = APP_BRAND;
+type LegalPage = { title: string; sections: { heading: string; body: string }[] };
 
-const PAGES: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
+function buildLegalPages(brand: string): Record<string, LegalPage> {
+  return {
   terms: {
     title: 'Terms of Service',
     sections: [
       {
         heading: '1. Delivery Policy',
-        body: `${BRAND} specialises in fresh daily deliveries. Orders placed before 10:00 PM will be delivered the following morning between 5:00 AM and 8:00 AM.`,
+        body: `${brand} specialises in fresh daily deliveries. Orders placed before 10:00 PM will be delivered the following morning between 5:00 AM and 8:00 AM.`,
       },
       {
         heading: '2. Pricing & Payments',
@@ -38,7 +39,7 @@ const PAGES: Record<string, { title: string; sections: { heading: string; body: 
       },
       {
         heading: '5. Modifications',
-        body: `${BRAND} reserves the right to update these terms to reflect changes in our business or legal requirements.`,
+        body: `${brand} reserves the right to update these terms to reflect changes in our business or legal requirements.`,
       },
     ],
   },
@@ -80,7 +81,7 @@ const PAGES: Record<string, { title: string; sections: { heading: string; body: 
       },
       {
         heading: 'Processing Time',
-        body: `Approved refunds are credited to your original payment method or ${BRAND} Wallet within 3–5 business days.`,
+        body: `Approved refunds are credited to your original payment method or ${brand} Wallet within 3–5 business days.`,
       },
       {
         heading: 'Non-Returnable Items',
@@ -113,8 +114,8 @@ const PAGES: Record<string, { title: string; sections: { heading: string; body: 
     title: 'About Us',
     sections: [
       {
-        heading: `About ${BRAND}`,
-        body: `At ${BRAND}, we are committed to delivering pure, high-quality dairy and grocery products to your doorstep. Our platform bridges the gap between quality producers and health-conscious consumers.`,
+        heading: `About ${brand}`,
+        body: `At ${brand}, we are committed to delivering pure, high-quality dairy and grocery products to your doorstep. Our platform bridges the gap between quality producers and health-conscious consumers.`,
       },
       {
         heading: 'Our Mission',
@@ -124,6 +125,7 @@ const PAGES: Record<string, { title: string; sections: { heading: string; body: 
     ],
   },
 };
+}
 
 function CustomerSupportScreen() {
   const { storeName, supportEmail, supportPhone, supportHours, loading, error } =
@@ -212,14 +214,16 @@ function CustomerSupportScreen() {
         </View>
       ) : null}
 
-      <Text style={styles.supportFooter}>© 2026 {storeName || BRAND}</Text>
+      <Text style={styles.supportFooter}>© 2026 {storeName}</Text>
     </ScrollView>
   );
 }
 
 export default function LegalScreen() {
+  const { storeName } = useTenantBranding();
   const { page } = useLocalSearchParams<{ page?: string }>();
   const key = (page as string) || 'terms';
+  const pages = buildLegalPages(storeName);
 
   if (key === 'support') {
     return (
@@ -230,7 +234,7 @@ export default function LegalScreen() {
     );
   }
 
-  const content = PAGES[key] || PAGES.terms;
+  const content = pages[key] || pages.terms;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -268,7 +272,7 @@ export default function LegalScreen() {
         </View>
       ))}
 
-      <Text style={styles.footer}>© 2026 {BRAND}</Text>
+      <Text style={styles.footer}>© 2026 {storeName}</Text>
     </ScrollView>
   );
 }
