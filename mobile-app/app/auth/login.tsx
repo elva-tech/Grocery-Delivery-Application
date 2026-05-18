@@ -13,7 +13,7 @@ import {
 import { useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
 import { Colors, Fonts } from "@/theme/theme";
-import { StoreLogo } from "@/components/StoreLogo";
+import { StoreLogo } from '@/src/components/StoreLogo';
 import { sendOtp } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
 import { MOBILE_COPY } from "@/src/constants/copy";

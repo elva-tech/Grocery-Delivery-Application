@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Colors, Fonts } from "@/theme/theme";
-import { StoreLogo } from "@/components/StoreLogo";
+import { StoreLogo } from '@/src/components/StoreLogo';
 import { saveTenantId } from "@/src/utils/tenantStorage";
 import { ACTIVE_API_URL } from "@/src/config/constants";
 

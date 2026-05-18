@@ -35,7 +35,7 @@ import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
-import { StoreLogo } from '@/components/StoreLogo';
+import { StoreLogo } from '@/src/components/StoreLogo';
 import { fetchBanners, type BannerRecord } from '@/api/bannerApi';
 import {
   getAddresses,
@@ -175,7 +175,7 @@ export default function HomeScreen() {
   const [banners, setBanners] = useState<BannerRecord[]>([]);
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerError, setBannerError] = useState<string | null>(null);
-  const [deliverToText, setDeliverToText] = useState(MOBILE_COPY.home.deliverToFallback);
+  const [deliverToText, setDeliverToText] = useState<string>(MOBILE_COPY.home.deliverToFallback);
   const [deliveryEligibility, setDeliveryEligibility] = useState<{
     checking: boolean;
     eligible: boolean | null;

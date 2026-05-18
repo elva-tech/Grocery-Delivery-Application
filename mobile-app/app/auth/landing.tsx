@@ -8,7 +8,7 @@ import { Colors, Fonts } from "@/theme/theme";
 
 import { useTenantBranding } from "@/contexts/TenantBrandingContext";
 
-import { StoreLogo } from "@/components/StoreLogo";
+import { StoreLogo } from '@/src/components/StoreLogo';
 
 
 
