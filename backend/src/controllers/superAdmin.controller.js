@@ -283,6 +283,20 @@ exports.updateTenantDetails = async (req, res) => {
       );
     if (!updated) return res.status(404).json({ success: false, message: "Tenant not found" });
 
+    if (tenantUpdates.contactEmail !== undefined) {
+      await User.updateOne(
+        { tenantId: updated.tenantId, role: "ADMIN" },
+        { $set: { email: tenantUpdates.contactEmail || "" } }
+      );
+    }
+
+    if (tenantUpdates.phoneNumber) {
+      await User.updateOne(
+        { tenantId: updated.tenantId, role: "ADMIN" },
+        { $set: { phoneNumber: tenantUpdates.phoneNumber } }
+      );
+    }
+
     return res.json({ success: true, tenant: updated });
   } catch (err) {
     console.error("[super/updateTenantDetails]", err);

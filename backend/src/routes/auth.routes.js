@@ -6,6 +6,7 @@ const { resolveTenant } = require("../middleware/tenant.middleware");
 
 router.post("/send-otp", resolveTenant, authController.sendOtp);
 router.post("/verify-otp", resolveTenant, authController.verifyOtp);
+router.post("/admin-login", resolveTenant, authController.adminLogin);
 router.patch("/profile", authMiddleware, authController.updateProfile);
 
 module.exports = router;
