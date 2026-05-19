@@ -38,17 +38,32 @@ const imagesFromPayload = (p) => {
 const normaliseProduct = p => {
   const imageRows = imagesFromPayload(p);
   const urls = imageRows.map((r) => r.url);
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const totalStock =
+    variants.length > 0
+      ? variants.reduce((sum, v) => sum + (Number(v.availableQty) || 0), 0)
+      : Number(p.availableQty ?? 0);
+  const prices = variants.length > 0
+    ? variants.map((v) => Number(v.price)).filter((n) => Number.isFinite(n) && n > 0)
+    : [Number(p.price)].filter((n) => Number.isFinite(n) && n > 0);
+  const priceMin = prices.length ? Math.min(...prices) : Number(p.price) || 0;
+  const priceMax = prices.length ? Math.max(...prices) : Number(p.price) || 0;
+
   return {
   id:               String(p.productId || p._id || ''),
   productId:        String(p.productId || p._id || ''),
   name:             p.name,
   description:      p.description || '',
   price:            p.price,
+  priceMin,
+  priceMax,
   unit:             p.unit,
+  variants,
+  variantCount:     variants.length,
   imageUrl:         urls[0] || '',
   images:           imageRows,
-  stock:            p.availableQty ?? 0,
-  availableQty:     p.availableQty ?? 0,
+  stock:            totalStock,
+  availableQty:     totalStock,
   threshold:        p.thresholdQty ?? 10,
   thresholdQty:     p.thresholdQty ?? 10,
   status:           'Active',

@@ -111,7 +111,11 @@ export default function CheckoutScreen() {
       setIsPlacing(true);
       const addrPayload = buildDeliveryAddressPayload(draft.deliverySource);
       const orderPayload = {
-        items: items.map((i: any) => ({ productId: i.id, qty: i.quantity })),
+        items: items.map((i: any) => ({
+          productId: i.productId || String(i.id).split(':')[0],
+          variantId: i.variantId || String(i.id).split(':')[1],
+          qty: i.quantity,
+        })),
         paymentMode: paymentMethod,
         deliveryAddress: {
           ...addrPayload,

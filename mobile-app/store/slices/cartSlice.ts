@@ -1,12 +1,15 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-interface CartItem {
+export interface CartItem {
   id: string;
+  productId: string;
+  variantId: string;
   name: string;
   price: number;
   quantity: number;
   image: string;
   unit: string;
+  stock?: number;
 }
 
 export type AppliedCartCoupon = { code: string; discountAmount: number };
@@ -14,7 +17,6 @@ export type AppliedCartCoupon = { code: string; discountAmount: number };
 interface CartState {
   items: CartItem[];
   totalAmount: number;
-  /** Set on cart bill summary; sent with place order from address / checkout. */
   appliedCoupon: AppliedCartCoupon | null;
 }
 
@@ -37,7 +39,7 @@ const cartSlice = createSlice({
           ? { code: p.appliedCoupon.code, discountAmount: p.appliedCoupon.discountAmount }
           : null;
     },
-    addToCart: (state, action: PayloadAction<any>) => {
+    addToCart: (state, action: PayloadAction<CartItem>) => {
       const existingItem = state.items.find(item => item.id === action.payload.id);
       if (existingItem) {
         existingItem.quantity += 1;

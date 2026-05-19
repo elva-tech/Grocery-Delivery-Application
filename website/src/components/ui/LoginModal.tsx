@@ -125,6 +125,9 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
           id: response.user?.id || Math.random().toString(36).substr(2, 9),
           phone: response.user?.phoneNumber || phone,
           name: response.user?.name || 'User',
+          email: response.user?.email || '',
+          alternatePhone: response.user?.alternatePhone || '',
+          role: response.user?.role || 'CUSTOMER',
           tenantId: response.user?.tenantId || currentTenant,
         };
         // Store token and user data in localStorage for persistence

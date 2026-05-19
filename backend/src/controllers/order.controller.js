@@ -3,6 +3,8 @@ const Tenant = require("../models/Tenant.model");
 const CustomerInvoice = require("../models/CustomerInvoice.model");
 const Address = require("../models/Address.model");
 const Inventory = require("../models/Inventory.model");
+const Product = require("../models/Product.model");
+const { findVariantOnProduct } = require("../utils/productVariants.util");
 const { initiateOrderRefund, isRefundableOrder } = require("../services/orderRefund.service");
 const { restoreOrderInventory } = require("../utils/orderInventory.util");
 const mongoose = require("mongoose");
@@ -196,26 +198,43 @@ exports.placeCustomerOrder = async (req, res) => {
     let orderItems = [];
     let totalAmount = 0;
 
+    const stockDeductions = [];
+
     for (const item of items) {
       if (!mongoose.Types.ObjectId.isValid(item.productId) || item.qty <= 0) {
         return res.status(400).json({ message: "Invalid product details" });
       }
 
-      const inventory = await Inventory.findOne({
-        productId: item.productId,
-        tenantId,
-      }).populate("productId");
-
-      if (!inventory) {
+      const product = await Product.findOne({ _id: item.productId, tenantId });
+      if (!product) {
         return res.status(400).json({
           success: false,
           message:
             "This product is not available at your store. Clear your cart, confirm you are logged into the correct store, and try again.",
-          error: "No inventory for product",
+          error: "Product not found",
         });
       }
 
-      if (!inventory.productId) {
+      const variant = findVariantOnProduct(product, item.variantId);
+      if (!variant) {
+        return res.status(400).json({ message: "Invalid product variant" });
+      }
+
+      const invFilter = {
+        tenantId,
+        productId: product._id,
+        variantId: variant._id,
+      };
+      let inventory = await Inventory.findOne(invFilter);
+      if (!inventory) {
+        inventory = await Inventory.findOne({
+          tenantId,
+          productId: product._id,
+          variantId: null,
+        });
+      }
+
+      if (!inventory) {
         return res.status(400).json({
           success: false,
           message:
@@ -227,29 +246,30 @@ exports.placeCustomerOrder = async (req, res) => {
       if (inventory.availableQty < item.qty) {
         return res.status(400).json({
           success: false,
-          message: `Insufficient stock for ${productRow.name}.`,
+          message: `Insufficient stock for ${product.name} (${variant.label}).`,
           error: `Only ${inventory.availableQty} available`,
         });
       }
 
       orderItems.push({
-        productId: inventory.productId._id,
-        name: inventory.productId.name,
+        productId: product._id,
+        variantId: variant._id,
+        name: product.name,
         qty: item.qty,
-        price: inventory.productId.price,
-        unit: inventory.productId.unit || "pcs",
-        imageUrl: resolveProductImageUrl(inventory.productId),
+        price: variant.price,
+        unit: variant.label || "pcs",
+        imageUrl: resolveProductImageUrl(product),
       });
 
-      totalAmount += inventory.productId.price * item.qty;
+      totalAmount += variant.price * item.qty;
+      stockDeductions.push({ invFilter, inventory, qty: item.qty });
     }
 
-    // Deduct stock
-    for (const item of items) {
-      await Inventory.findOneAndUpdate(
-        { productId: item.productId, tenantId },
-        { $inc: { availableQty: -item.qty } }
-      );
+    for (const { invFilter, inventory, qty } of stockDeductions) {
+      const filter = inventory.variantId
+        ? invFilter
+        : { tenantId, productId: inventory.productId, variantId: inventory.variantId };
+      await Inventory.findOneAndUpdate(filter, { $inc: { availableQty: -qty } });
     }
 
     // Apply settings: delivery charge + discount

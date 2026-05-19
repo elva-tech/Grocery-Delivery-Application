@@ -114,11 +114,6 @@ export default function AccountScreen() {
             keyboardType="number-pad"
             maxLength={10}
           />
-
-          <View style={styles.roleRow}>
-            <Text style={styles.roleLabel}>Role</Text>
-            <Text style={styles.roleValue}>{String(user?.role || 'CUSTOMER')}</Text>
-          </View>
         </View>
       </ScrollView>
 
@@ -181,17 +176,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: Fonts.regular,
   },
-  roleRow: {
-    marginTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#edf2f7',
-    paddingTop: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  roleLabel: { fontSize: 12, color: '#64748b', fontFamily: Fonts.medium },
-  roleValue: { fontSize: 13, color: Colors.PRIMARY, fontFamily: Fonts.semibold },
   footer: {
     position: 'absolute',
     left: 0,

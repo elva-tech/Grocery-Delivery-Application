@@ -5,13 +5,17 @@ import { Plus, Minus } from 'lucide-react';
 import { addToCart, removeFromCart } from '../../store/slices/cartSlice';
 import type { RootState } from '../../store/store';
 import { resolveImageUrl } from '../../utils/resolveImageUrl';
+import { buildCartPayload, cartLineId, getDefaultVariant } from '../../utils/productVariants';
 
 const ProductCard = memo(({ product }: { product: any }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  const defaultVariant = getDefaultVariant(product);
+  const lineId = cartLineId(product.id, defaultVariant.variantId);
+
   const cartItem = useSelector((state: RootState) =>
-    state.cart.items.find((item: any) => item.id === product.id)
+    state.cart.items.find((item: any) => item.id === lineId)
   );
   const quantity = cartItem?.quantity || 0;
 
@@ -42,7 +46,9 @@ const ProductCard = memo(({ product }: { product: any }) => {
           {product.name}
         </h4>
         <span className="text-[8px] sm:text-[10px] text-slate-400 font-bold italic block truncate">
-          {product.unit || '500ml'}
+          {product.variantCount && product.variantCount > 1
+            ? `${product.variantCount} options`
+            : (product.unit || defaultVariant.label)}
         </span>
       </div>
 
@@ -57,7 +63,7 @@ const ProductCard = memo(({ product }: { product: any }) => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                dispatch(addToCart(product));
+                dispatch(addToCart(buildCartPayload(product, defaultVariant)));
               }}
               className="bg-[#4b6f9e] text-white w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md hover:bg-[#1e293b] active:scale-90 transition-all"
             >
@@ -70,7 +76,7 @@ const ProductCard = memo(({ product }: { product: any }) => {
               className="flex flex-col sm:flex-row items-center bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl overflow-hidden shadow-sm"
             >
               <button
-                onClick={() => dispatch(removeFromCart(product.id))}
+                onClick={() => dispatch(removeFromCart(lineId))}
                 className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
               >
                 <Minus size={12} strokeWidth={3} />
@@ -81,7 +87,7 @@ const ProductCard = memo(({ product }: { product: any }) => {
               </span>
               
               <button
-                onClick={() => dispatch(addToCart(product))}
+                onClick={() => dispatch(addToCart(buildCartPayload(product, defaultVariant)))}
                 className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-[#4b6f9e] hover:bg-blue-50 transition-colors"
               >
                 <Plus size={12} strokeWidth={3} />

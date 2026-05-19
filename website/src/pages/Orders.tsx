@@ -10,6 +10,7 @@ import { useGetAppSettingsQuery } from '../api/apiSlice';
 import { resolveImageUrl } from '../utils/resolveImageUrl';
 import { useToast } from '../context/ToastContext';
 import { getCustomerOrderStatusTheme, getOnlineRefundSubtitle } from '../utils/orderStatusDisplay';
+import { cartLineId } from '../utils/productVariants';
 
 const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
@@ -79,16 +80,25 @@ const loadOrders = async () => {
 };
 
  const handleReorder = (items: any[]) => {
-  items.forEach(item => {
-    dispatch(addToCart({
-      id: item.productId,          // ✅ FIX (cart id)
-      productId: item.productId,   // ✅ IMPORTANT (backend use)
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: resolveImageUrl(item),
-      imageUrl: item.imageUrl ?? item.image,
-    }));
+  items.forEach((item) => {
+    const productId = String(item.productId || item.id || '');
+    const variantId = String(item.variantId || productId);
+    const qty = Math.max(1, Number(item.quantity) || 1);
+    for (let i = 0; i < qty; i += 1) {
+      dispatch(
+        addToCart({
+          id: cartLineId(productId, variantId),
+          productId,
+          variantId,
+          name: item.name,
+          price: Number(item.price) || 0,
+          quantity: 1,
+          unit: item.unit || item.label || 'Standard',
+          image: resolveImageUrl(item) || '/placeholder.png',
+          stock: item.stock,
+        })
+      );
+    }
   });
 
   openCart();

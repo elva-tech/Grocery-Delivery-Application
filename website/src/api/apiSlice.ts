@@ -47,6 +47,19 @@ const fetchProductsFromApi = async (tenantId: string): Promise<Product[]> => {
       urls.push(p.imageUrl.trim());
     }
     const mongoId = p.productId ?? p._id;
+    const rawVariants: any[] = Array.isArray(p.variants) ? p.variants : [];
+    const variants: ProductVariant[] = rawVariants.map((v) => ({
+      variantId: String(v.variantId ?? v._id ?? ''),
+      label: v.label || '',
+      price: Number(v.price) || 0,
+      availableQty: Number(v.availableQty ?? 0),
+      isDefault: Boolean(v.isDefault),
+      inStock: v.inStock !== false && Number(v.availableQty ?? 0) > 0,
+      sortOrder: Number(v.sortOrder ?? 0),
+    })).filter((v) => v.variantId.length > 0);
+
+    const def = variants.find((v) => v.isDefault) || variants[0];
+
     return {
       id: mongoId != null ? String(mongoId) : '',
       parentCategoryId: p.category ? toCatId(p.category) : '',
@@ -55,10 +68,13 @@ const fetchProductsFromApi = async (tenantId: string): Promise<Product[]> => {
       subcategory: p.subcategory || '',
       name: p.name,
       description: p.description || '',
-      price: p.price,
-      unit: p.unit || '',
+      price: def?.price ?? (Number(p.price) || 0),
+      unit: def?.label ?? (p.unit || ''),
       image: urls.length ? urls : ['/placeholder.png'],
-      stock: p.availableQty ?? 0,
+      stock: def?.availableQty ?? p.availableQty ?? 0,
+      variants: variants.length ? variants : undefined,
+      variantCount: variants.length || undefined,
+      defaultVariantId: def?.variantId,
     };
   }).filter((p) => p.id.length > 0);
 
@@ -83,6 +99,16 @@ export interface AppSettings {
   allowOrderCancellation: boolean;
 }
 
+export interface ProductVariant {
+  variantId: string;
+  label: string;
+  price: number;
+  availableQty: number;
+  isDefault?: boolean;
+  inStock?: boolean;
+  sortOrder?: number;
+}
+
 export interface Product {
   id: string;
   parentCategoryId: string;
@@ -95,6 +121,9 @@ export interface Product {
   image: string[];
   stock: number;
   description?: string;
+  variants?: ProductVariant[];
+  variantCount?: number;
+  defaultVariantId?: string;
 }
 
 export interface Category {

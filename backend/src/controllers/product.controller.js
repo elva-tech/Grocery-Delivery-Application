@@ -7,6 +7,14 @@ const {
   MAX_PRODUCT_IMAGE_SLOTS,
 } = require("../services/cloudinary.service");
 const tenantPolicy = require("../config/tenantPolicy");
+const {
+  parseVariantsFromBody,
+  normalizeVariantDefaults,
+  syncProductTopLevel,
+  buildVariantsForWrite,
+  formatProductForCustomer,
+  ensureProductVariants,
+} = require("../utils/productVariants.util");
 
 function imageValidationStatus(message) {
   if (message === "Cross-tenant image access not allowed") return 403;
@@ -104,22 +112,106 @@ function mergeProductImages(fileImages, jsonImages, legacyImageUrl) {
   return merged;
 }
 
+async function syncInventoriesForVariants(tenantId, product, variantInputs) {
+  const normalized = normalizeVariantDefaults(variantInputs);
+  const variantDocs = buildVariantsForWrite(product, normalized);
+  product.variants = variantDocs;
+  syncProductTopLevel(product);
+
+  const totalStock = normalized.reduce((sum, v) => sum + v.stock, 0);
+  product.isAvailable = totalStock > 0;
+  await product.save();
+
+  const keepVariantIds = new Set(product.variants.map((v) => String(v._id)));
+
+  for (let i = 0; i < product.variants.length; i++) {
+    const variant = product.variants[i];
+    const input = normalized[i];
+    await Inventory.findOneAndUpdate(
+      { tenantId, productId: product._id, variantId: variant._id },
+      {
+        $set: {
+          availableQty: input.stock,
+          thresholdQty: input.thresholdQty,
+        },
+        $setOnInsert: { tenantId, productId: product._id, variantId: variant._id },
+      },
+      { upsert: true, new: true }
+    );
+  }
+
+  const keepIds = [...keepVariantIds].map((id) => new mongoose.Types.ObjectId(id));
+  await Inventory.deleteMany({
+    tenantId,
+    productId: product._id,
+    variantId: { $nin: keepIds, $ne: null },
+  });
+
+  await Inventory.deleteMany({
+    tenantId,
+    productId: product._id,
+    variantId: null,
+  });
+}
+
+function formatAdminInventoryRow(product, inventories) {
+  const variants = ensureProductVariants(product);
+  const invList = inventories || [];
+  const invByVariant = new Map();
+  let legacyInv = null;
+  for (const inv of invList) {
+    if (inv.variantId) invByVariant.set(String(inv.variantId), inv);
+    else legacyInv = inv;
+  }
+
+  const variantRows = variants.map((v, idx) => {
+    const inv =
+      invByVariant.get(String(v._id)) ||
+      (variants.length === 1 && legacyInv ? legacyInv : null);
+    const qty = inv?.availableQty ?? 0;
+    return {
+      variantId: String(v._id),
+      label: v.label,
+      price: v.price,
+      isDefault: Boolean(v.isDefault),
+      sortOrder: v.sortOrder ?? 0,
+      availableQty: qty,
+      thresholdQty: inv?.thresholdQty ?? 10,
+    };
+  });
+
+  const totalStock = variantRows.reduce((s, r) => s + r.availableQty, 0);
+  const def = variantRows.find((r) => r.isDefault) || variantRows[0];
+
+  const imagesNorm = product.images?.length
+    ? product.images
+    : product.imageUrl
+      ? [{ url: product.imageUrl, public_id: "" }]
+      : [];
+
+  return {
+    productId: product._id,
+    name: product.name,
+    category: product.category,
+    subcategory: product.subcategory,
+    description: product.description,
+    price: def?.price ?? product.price,
+    unit: def?.label ?? product.unit,
+    variants: variantRows,
+    images: imagesNorm,
+    imageUrl: imagesNorm[0]?.url || "",
+    isAvailable: product.isAvailable,
+    availableQty: totalStock,
+    thresholdQty: def?.thresholdQty ?? 10,
+  };
+}
+
 /* ================= ADD PRODUCT ================= */
 
 const addProduct = async (req, res) => {
   try {
     const body = req.body || {};
-    const {
-      name,
-      category,
-      subcategory,
-      description,
-      unit,
-      threshold,
-      imageUrl,
-    } = body;
-    const price = parseBodyNumber(body.price);
-    const stocks = parseBodyNumber(body.stocks ?? body.stock, NaN);
+    const { name, category, subcategory, description, imageUrl } = body;
 
     if (req.user.role !== "ADMIN") {
       return res.status(403).json({ message: "Access denied. Admin only." });
@@ -130,14 +222,12 @@ const addProduct = async (req, res) => {
       return res.status(401).json({ message: "Tenant context is required" });
     }
 
-    let finalStocks = stocks;
-    if (isNaN(finalStocks)) finalStocks = 0;
-
     const missingFields = [];
     if (!name) missingFields.push("name");
     if (!category) missingFields.push("category");
-    if (body.price === undefined || body.price === "") missingFields.push("price");
-    if (!unit) missingFields.push("unit");
+
+    const variantInputs = parseVariantsFromBody(body);
+    if (!variantInputs) missingFields.push("variants (at least one with label and price)");
 
     if (missingFields.length > 0) {
       return res.status(400).json({
@@ -145,8 +235,11 @@ const addProduct = async (req, res) => {
       });
     }
 
-    if (isNaN(price) || price <= 0) {
-      return res.status(400).json({ message: "Price must be a positive number" });
+    let normalized;
+    try {
+      normalized = normalizeVariantDefaults(variantInputs);
+    } catch (err) {
+      return res.status(400).json({ message: err.message || "Invalid variants" });
     }
 
     const existingProduct = await Product.findOne({ tenantId, name });
@@ -155,8 +248,7 @@ const addProduct = async (req, res) => {
     }
 
     const jsonImages = parseImagesFromJsonBody(body);
-    const legacyUrl =
-      typeof imageUrl === "string" ? imageUrl.trim() : "";
+    const legacyUrl = typeof imageUrl === "string" ? imageUrl.trim() : "";
     const initialImages = mergeProductImages([], jsonImages, legacyUrl);
 
     if (initialImages.length > 0) {
@@ -171,25 +263,26 @@ const addProduct = async (req, res) => {
       }
     }
 
+    const def = normalized.find((v) => v.isDefault) || normalized[0];
     const product = await Product.create({
       tenantId,
       name,
       category,
       subcategory: subcategory || "",
       description: description || "",
-      price,
-      unit,
+      price: def.price,
+      unit: def.label,
+      variants: normalized.map((v) => ({
+        label: v.label,
+        price: v.price,
+        isDefault: v.isDefault,
+        sortOrder: v.sortOrder,
+      })),
       images: initialImages,
-      isAvailable: finalStocks > 0,
+      isAvailable: normalized.some((v) => v.stock > 0),
     });
 
-    const thresholdNum = parseBodyNumber(threshold, NaN);
-    await Inventory.create({
-      tenantId,
-      productId: product._id,
-      availableQty: finalStocks,
-      thresholdQty: !isNaN(thresholdNum) ? thresholdNum : 10,
-    });
+    await syncInventoriesForVariants(tenantId, product, normalized);
 
     if (req.files && req.files.length > 0) {
       try {
@@ -220,7 +313,6 @@ const addProduct = async (req, res) => {
             .json({ message: imgCheck1.message });
         }
         product.images = combined;
-        product.isAvailable = finalStocks > 0;
         await product.save();
       } catch (uploadErr) {
         console.error("Add product upload error:", uploadErr);
@@ -327,9 +419,6 @@ const updateProductFromAdmin = async (req, res) => {
       updateData.price = priceNum;
     }
 
-    const { stocks, stock } = req.body;
-    const finalStocks = Number(stocks ?? stock);
-
     const product = await Product.findOne({ _id: id, tenantId });
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
@@ -338,22 +427,16 @@ const updateProductFromAdmin = async (req, res) => {
     const previousImages = [...(product.images || [])];
 
     Object.assign(product, updateData);
-    await product.save();
 
-    if (!isNaN(finalStocks)) {
-      const inventory = await Inventory.findOne({
-        tenantId,
-        productId: product._id,
-      });
-
-      if (inventory) {
-        inventory.availableQty = finalStocks;
-        const { threshold } = req.body;
-        if (threshold != null) inventory.thresholdQty = Number(threshold);
-        await inventory.save();
+    const variantInputs = parseVariantsFromBody(req.body);
+    if (variantInputs) {
+      try {
+        const normalized = normalizeVariantDefaults(variantInputs);
+        await syncInventoriesForVariants(tenantId, product, normalized);
+      } catch (err) {
+        return res.status(400).json({ message: err.message || "Invalid variants" });
       }
-
-      product.isAvailable = finalStocks > 0;
+    } else {
       await product.save();
     }
 
@@ -653,77 +736,44 @@ const getAvailableProducts = async (req, res) => {
   try {
     const category = req.query?.category?.trim();
     const tenantId = req.tenantId;
-    console.log("Tenant in controller:", tenantId);
 
     if (!tenantId) {
       return res.status(400).json({ message: "Tenant ID missing" });
     }
 
     const visibility = tenantPolicy.buildProductTenantRoot(tenantId);
-    const matchClauses = [
-      visibility,
-      { isAvailable: true },
-      { $or: [{ isActive: true }, { isActive: { $exists: false } }] },
-    ];
+    const filter = {
+      ...visibility,
+      isAvailable: true,
+      $or: [{ isActive: true }, { isActive: { $exists: false } }],
+    };
     if (category) {
       const safeCategory = escapeRegex(category);
-      matchClauses.push({
-        category: {
-          $regex: `^${safeCategory}$`,
-          $options: "i",
-        },
-      });
+      filter.category = { $regex: `^${safeCategory}$`, $options: "i" };
     }
-    const matchStage = { $and: matchClauses };
 
-    const products = await Product.aggregate([
-      { $match: matchStage },
-      {
-        $lookup: {
-          from: "inventories",
-          localField: "_id",
-          foreignField: "productId",
-          as: "inventory",
-        },
-      },
-      { $unwind: "$inventory" },
-      { $match: { "inventory.availableQty": { $gt: 0 } } },
-      {
-        $addFields: {
-          imagesNorm: {
-            $cond: [
-              { $gt: [{ $size: { $ifNull: ["$images", []] } }, 0] },
-              { $ifNull: ["$images", []] },
-              {
-                $cond: [
-                  { $gt: [{ $strLenCP: { $ifNull: ["$imageUrl", ""] } }, 0] },
-                  [{ url: "$imageUrl", public_id: "" }],
-                  [],
-                ],
-              },
-            ],
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          productId: "$_id",
-          name: 1,
-          category: 1,
-          subcategory: 1,
-          description: 1,
-          price: 1,
-          unit: 1,
-          images: "$imagesNorm",
-          imageUrl: {
-            $ifNull: [{ $arrayElemAt: ["$imagesNorm.url", 0] }, ""],
-          },
-          availableQty: "$inventory.availableQty",
-        },
-      },
-      { $sort: { name: 1 } },
-    ]);
+    const productDocs = await Product.find(filter).sort({ name: 1 }).lean();
+    const productIds = productDocs.map((p) => p._id);
+    const inventories = await Inventory.find({
+      tenantId,
+      productId: { $in: productIds },
+    }).lean();
+
+    const invByProduct = new Map();
+    for (const inv of inventories) {
+      const key = String(inv.productId);
+      if (!invByProduct.has(key)) invByProduct.set(key, []);
+      invByProduct.get(key).push(inv);
+    }
+
+    const products = [];
+    for (const product of productDocs) {
+      const formatted = formatProductForCustomer(
+        product,
+        invByProduct.get(String(product._id)) || []
+      );
+      if (formatted) products.push(formatted);
+    }
 
     return res.status(200).json({ products });
   } catch (error) {
@@ -784,58 +834,24 @@ const getInventory = async (req, res) => {
 
     const tenantId = req.user.tenantId;
 
-    const inventory = await Inventory.aggregate([
-      {
-        $match: { tenantId },
-      },
-      {
-        $lookup: {
-          from: "products",
-          localField: "productId",
-          foreignField: "_id",
-          as: "product",
-        },
-      },
-      { $unwind: "$product" },
-      { $match: tenantPolicy.buildProductTenantNested("product", tenantId) },
-      {
-        $addFields: {
-          imagesNorm: {
-            $cond: [
-              { $gt: [{ $size: { $ifNull: ["$product.images", []] } }, 0] },
-              { $ifNull: ["$product.images", []] },
-              {
-                $cond: [
-                  { $gt: [{ $strLenCP: { $ifNull: ["$product.imageUrl", ""] } }, 0] },
-                  [{ url: "$product.imageUrl", public_id: "" }],
-                  [],
-                ],
-              },
-            ],
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          productId: "$product._id",
-          name: "$product.name",
-          category: "$product.category",
-          subcategory: "$product.subcategory",
-          description: "$product.description",
-          price: "$product.price",
-          unit: "$product.unit",
-          images: "$imagesNorm",
-          imageUrl: {
-            $ifNull: [{ $arrayElemAt: ["$imagesNorm.url", 0] }, ""],
-          },
-          isAvailable: "$product.isAvailable",
-          availableQty: 1,
-          thresholdQty: 1,
-        },
-      },
-      { $sort: { name: 1 } },
-    ]);
+    const visibility = tenantPolicy.buildProductTenantRoot(tenantId);
+    const productDocs = await Product.find(visibility).sort({ name: 1 }).lean();
+    const productIds = productDocs.map((p) => p._id);
+    const inventories = await Inventory.find({
+      tenantId,
+      productId: { $in: productIds },
+    }).lean();
+
+    const invByProduct = new Map();
+    for (const inv of inventories) {
+      const key = String(inv.productId);
+      if (!invByProduct.has(key)) invByProduct.set(key, []);
+      invByProduct.get(key).push(inv);
+    }
+
+    const inventory = productDocs.map((product) =>
+      formatAdminInventoryRow(product, invByProduct.get(String(product._id)) || [])
+    );
 
     return res.status(200).json({
       success: true,
