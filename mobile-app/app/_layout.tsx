@@ -9,8 +9,8 @@ import { toastConfig } from '@/utils/toastConfig';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'expo-image';
 import * as Linking from 'expo-linking';
 import { setCredentials } from '@/store/slices/authSlice';
 import { hydrateCart } from '@/store/slices/cartSlice';
@@ -18,7 +18,7 @@ import { CART_STORAGE_KEY } from '@/store/store';
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import StoreClosingSoonBanner from '@/components/StoreClosingSoonBanner';
 import { extractTenantFromUrl, getActiveTenantId, saveTenantId } from '@/src/utils/tenantStorage';
-import { TenantBrandingProvider } from '@/contexts/TenantBrandingContext';
+import { TenantBrandingProvider, useTenantBranding } from '@/contexts/TenantBrandingContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -28,16 +28,9 @@ function RootLayoutNav() {
   const dispatch = useDispatch();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [mounted, setMounted] = useState(false);
-const [animationFinished, setAnimationFinished] = useState(false);
-
-useEffect(() => {
-  const timeout = setTimeout(() => {
-    setAnimationFinished(true);
-  }, 3000); // max wait 3s
-
-  return () => clearTimeout(timeout);
-}, []);
+  const [appReady, setAppReady] = useState(false);
   const [authRestored, setAuthRestored] = useState(false);
+  const { ready: brandingReady, loading: brandingLoading, logoUri } = useTenantBranding();
 
   // Store Status - fetched from backend
   const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 30_000 });
@@ -118,41 +111,45 @@ useEffect(() => {
 
   useEffect(() => { setMounted(true); }, []);
 
-  useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
+  const fontsReady = fontsLoaded || Boolean(fontError);
+  const brandingSettled = brandingReady && !brandingLoading;
 
   useEffect(() => {
-    if (!mounted || !segments?.length || !fontsLoaded || !animationFinished || !authRestored) return;
-    
+    if (!fontsReady || !brandingSettled || !authRestored) return;
+
+    let cancelled = false;
+    (async () => {
+      if (logoUri) {
+        try {
+          await Image.prefetch(logoUri);
+        } catch {
+          /* ignore */
+        }
+      }
+      if (cancelled) return;
+      await SplashScreen.hideAsync();
+      if (!cancelled) setAppReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fontsReady, brandingSettled, authRestored, logoUri]);
+
+  useEffect(() => {
+    if (!mounted || !segments?.length || !appReady) return;
+
     const rootSegment = segments[0];
     const inAuthFlow = rootSegment === 'auth';
 
-    // Production-safe redirect check
     if (!isAuthenticated && !inAuthFlow) {
       router.replace('/auth/landing');
     } else if (isAuthenticated && inAuthFlow) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, segments, mounted, fontsLoaded, animationFinished]);
+  }, [isAuthenticated, segments, mounted, appReady]);
 
-  if (!fontsLoaded && !fontError) return null;
-
-  if (!animationFinished) {
-    return (
-      <View style={styles.animationContainer}>
-        <LottieView
-          source={require('../assets/animations/Loading_car.json')}
-          autoPlay
-          loop={false}
-          onAnimationFinish={() => setAnimationFinished(true)}
-          style={styles.logoAnimation}
-        />
-      </View>
-    );
-  }
+  if (!appReady) return null;
 
   return (
     <View
@@ -251,15 +248,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  animationContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   appRoot: { flex: 1 },
-  logoAnimation: {
-    width: 300,
-    height: 300,
-  },
 });

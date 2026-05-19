@@ -1,16 +1,14 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
-import { Image } from "expo-image";
 import { Colors, Fonts } from "@/theme/theme";
 import { sendOtp } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
-import { useTenantBranding } from "@/contexts/TenantBrandingContext";
+import { StoreLogo } from '@/src/components/StoreLogo';
 import { MOBILE_COPY } from "@/src/constants/copy";
 
 export default function Register() {
   const router = useRouter();
-  const { storeName, logoUri } = useTenantBranding();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -41,16 +39,7 @@ export default function Register() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container} bounces={false}>
-        <View style={styles.brandRow}>
-          <Image
-            source={logoUri ? { uri: logoUri } : require('../../assets/logo-2.png')}
-            style={styles.brandLogo}
-            contentFit="contain"
-          />
-          <Text style={[styles.brandName, { fontFamily: Fonts.bold }]} numberOfLines={1}>
-            {storeName}
-          </Text>
-        </View>
+        <StoreLogo layout="stack" size={64} showTagline style={styles.brandRow} />
 
         <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Create Account</Text>
         <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>{MOBILE_COPY.auth.registerSubtitle}</Text>

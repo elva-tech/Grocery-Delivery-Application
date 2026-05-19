@@ -27,11 +27,13 @@ import {
 } from '@/api/ordersApi';
 import { getCartCalculation } from '@/api/cartApi';
 import { buildDeliveryAddressPayload } from '@/utils/indiaPincode';
-import { RAZORPAY_KEY_ID, APP_BRAND } from '@/src/config/constants';
+import { RAZORPAY_KEY_ID } from '@/src/config/constants';
+import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
 import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
+  const { storeName } = useTenantBranding();
   const isExpoGo = Constants.appOwnership === 'expo';
   const { items, totalAmount, appliedCoupon } = useSelector((state: RootState) => state.cart);
   const draft = useSelector((state: RootState) => state.checkout.draft);
@@ -164,7 +166,7 @@ export default function CheckoutScreen() {
         currency: paymentData.currency || 'INR',
         key: RAZORPAY_KEY_ID,
         amount: String(paymentData.amount),
-        name: APP_BRAND,
+        name: storeName,
         order_id: paymentData.razorpay_order_id,
         prefill: {
           email: (user as any)?.email || '',

@@ -11,7 +11,6 @@ import { showToast } from '@/utils/toast';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Fonts } from '@/theme/theme';
-import { APP_BRAND } from '@/src/config/constants';
 import { MOBILE_COPY } from '@/src/constants/copy';
 import Constants from 'expo-constants';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
@@ -226,9 +225,9 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <View style={styles.appInfo}>
-          <Text style={styles.appName}>{storeName || APP_BRAND}</Text>
+          <Text style={styles.appName}>{storeName}</Text>
           <Text style={styles.versionText}>Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
-          <Text style={styles.copyrightText}>© {new Date().getFullYear()} {APP_BRAND}</Text>
+          <Text style={styles.copyrightText}>© {new Date().getFullYear()} {storeName}</Text>
         </View>
 
       </ScrollView>
