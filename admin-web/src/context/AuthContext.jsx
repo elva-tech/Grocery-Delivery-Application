@@ -26,15 +26,15 @@ export const AuthProvider = ({ children }) => {
     }
   });
 
-  const login = async (phoneNumber, otp) => {
+  const login = async (identifier, password) => {
     try {
-      const response = await apiService.verifyOtp(phoneNumber, otp);
-      
+      const response = await apiService.adminLogin(identifier, password);
 
       if (response.success && response.token) {
         const userData = {
           id: response.user.id,
           phoneNumber: response.user.phoneNumber,
+          email: response.user.email || '',
           role: response.user.role,
           tenantId: response.user.tenantId,
         };

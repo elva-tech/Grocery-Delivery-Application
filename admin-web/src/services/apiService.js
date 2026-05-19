@@ -126,16 +126,10 @@ updateProduct: async (productId, payload) => {
 
   /* -------- AUTH APIs -------- */
 
-  sendOtp: async (phoneNumber) => {
-    const res = await api.post("/api/auth/send-otp", { phoneNumber });
-    return res.data;
-  },
-
-  verifyOtp: async (phoneNumber, otp) => {
-    const res = await api.post("/api/auth/verify-otp", {
-      phoneNumber,
-      otp,
-      forAdminLogin: true,
+  adminLogin: async (identifier, password) => {
+    const res = await api.post("/api/auth/admin-login", {
+      identifier,
+      password,
     });
     return res.data;
   },

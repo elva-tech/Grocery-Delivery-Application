@@ -552,6 +552,7 @@ exports.createTenant = async (req, res) => {
       tenantId,
       phoneNumber: phone,
       name:        ownerName.trim(),
+      email:       contactEmail ? contactEmail.trim().toLowerCase() : "",
       role:        "ADMIN",
       isActive:    true,
       password:    hashedPassword,
