@@ -16,6 +16,7 @@ import SettingsPage from './modules/Settings/SettingsPage';
 import CouponManagement from './modules/Coupons/CouponManagement';
 
 import PaymentPlan from './modules/Settings/PaymentPlan';
+import InvoiceHistory from './modules/Settings/InvoiceHistory';
 import Schedule from './modules/Settings/Schedule';
 import StoreProfilePage from './modules/Settings/StoreProfilePage';
 
@@ -31,6 +32,7 @@ const AppRoutes = () => {
         <Route path="export" element={<ReportsPage />} />
         <Route path="/riders" element={<RiderManagement />} />
         <Route path="/settings/payment-plan" element={<PaymentPlan />} />
+        <Route path="/settings/invoices" element={<InvoiceHistory />} />
         <Route path="/settings/schedule" element={<Schedule />} />
 
         

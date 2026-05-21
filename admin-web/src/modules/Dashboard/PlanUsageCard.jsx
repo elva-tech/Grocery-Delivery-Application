@@ -3,7 +3,7 @@ import { CreditCard, Zap, Package, TrendingUp, Calendar, AlertCircle, CheckCircl
 
 const fmt = (n) => `₹${(n || 0).toLocaleString('en-IN')}`;
 
-const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangePlan }) => {
+const PlanUsageCard = ({ subscription, usage, invoice, prepaidInvoice, loading, error, onChangePlan }) => {
   // ── Loading ──────────────────────────────────────────────────
   if (loading) {
     return (
@@ -32,13 +32,26 @@ const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangeP
   if (!subscription) return null;
 
   const plan = subscription.planId || {};
-  const isSubscription = plan.pricingType === 'SUBSCRIPTION';
-  const ordersCount   = usage?.ordersCount    || 0;
-  const extraOrders   = usage?.extraOrders    || 0;
-  const includedOrders = plan.includedOrders  || 0;
-  const currentBill   = invoice?.totalAmount  || 0;
-  const extraCharges  = invoice?.extraCharges || 0;
-  const perOrderCharges = invoice?.perOrderCharges || 0;
+  const pricingModel =
+    subscription.effective_pricing_model ||
+    plan.effective_pricing_model ||
+    plan.pricing_model ||
+    plan.pricingType;
+  const isSubscription = pricingModel === 'SUBSCRIPTION';
+  const isPerOrder = pricingModel === 'PER_ORDER';
+  const prepaidPaid =
+    prepaidInvoice?.payment_status === 'PAID' || prepaidInvoice?.invoice_status === 'PAID';
+  const prepaidDue = Number(prepaidInvoice?.totalAmount ?? prepaidInvoice?.total_amount ?? 0);
+  const ordersCount   = usage?.orders_used ?? usage?.ordersCount ?? 0;
+  const extraOrders   = usage?.extra_orders ?? usage?.extraOrders ?? 0;
+  const includedOrders = plan.included_orders ?? plan.includedOrders ?? 0;
+  const currentBill   = invoice?.totalAmount ?? invoice?.total_amount ?? 0;
+  const extraCharges  = invoice?.extraCharges ?? invoice?.extra_charges ?? 0;
+  const perOrderCharges = invoice?.perOrderCharges ?? invoice?.per_order_charges ?? 0;
+  const invoiceStatus = invoice?.invoice_status || invoice?.status;
+  const dueDate = invoice?.due_date
+    ? new Date(invoice.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : null;
 
   // Progress bar for SUBSCRIPTION plans
   const pct = isSubscription && includedOrders > 0
@@ -51,11 +64,12 @@ const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangeP
     pct >= 80    ? 'bg-amber-500' :
     'bg-emerald-500';
 
+  const dateOpts = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
   const cycleStart = subscription.billingCycleStart
-    ? new Date(subscription.billingCycleStart).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    ? new Date(subscription.billingCycleStart).toLocaleDateString('en-IN', dateOpts)
     : '—';
   const cycleEnd = subscription.billingCycleEnd
-    ? new Date(subscription.billingCycleEnd).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    ? new Date(subscription.billingCycleEnd).toLocaleDateString('en-IN', dateOpts)
     : '—';
 
   const nextPlan = subscription.nextPlanId;
@@ -73,6 +87,11 @@ const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangeP
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
             Billing Cycle: {cycleStart} – {cycleEnd}
           </p>
+          {(plan.description || subscription?.plan_snapshot?.description) && (
+            <p className="text-sm text-slate-600 mt-2 max-w-md leading-relaxed">
+              {plan.description || subscription?.plan_snapshot?.description}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col items-end gap-1">
@@ -95,7 +114,7 @@ const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangeP
         <div className="bg-gray-50 rounded-2xl p-4">
           <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Monthly Fee</p>
           <p className="text-lg font-black text-slate-800">
-            {isSubscription ? fmt(plan.monthlyPrice) : 'Free'}
+            {isSubscription ? fmt(plan.monthly_price ?? plan.monthlyPrice) : isPerOrder ? 'Pay per order' : 'Free'}
           </p>
         </div>
 
@@ -119,7 +138,9 @@ const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangeP
         </div>
 
         <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
-          <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 mb-1">Current Bill</p>
+          <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 mb-1">
+            {isSubscription ? 'Extra usage bill' : 'Current Bill'}
+          </p>
           <p className="text-lg font-black text-emerald-700">{fmt(currentBill)}</p>
         </div>
 
@@ -150,12 +171,47 @@ const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangeP
         </div>
       )}
 
+      {isSubscription && prepaidInvoice && (
+        <div className="text-sm border-t border-gray-50 pt-4 flex items-center gap-2">
+          <CheckCircle2 size={14} className={prepaidPaid ? 'text-emerald-600' : 'text-amber-500'} />
+          <span className="text-slate-600">
+            Monthly fee (prepaid):{' '}
+            <span className="font-bold">{prepaidPaid ? `Paid ${fmt(prepaidDue)}` : `Due ${fmt(prepaidDue)}`}</span>
+            {' · '}Extra orders billed at month-end
+          </span>
+        </div>
+      )}
+
+      {/* ── Due date & invoice status ───────────────────────── */}
+      {(dueDate || invoiceStatus) && (
+        <div className="flex flex-wrap gap-3 text-[10px] font-bold uppercase tracking-wider border-t border-gray-50 pt-4">
+          {dueDate && (
+            <span className="text-gray-500">
+              Due: <span className="text-slate-800">{dueDate}</span>
+            </span>
+          )}
+          {invoiceStatus && (
+            <span
+              className={`px-2 py-0.5 rounded-full ${
+                invoiceStatus === 'PAID'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : invoiceStatus === 'OVERDUE'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-amber-100 text-amber-700'
+              }`}
+            >
+              {invoiceStatus}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── PER_ORDER plan breakdown ─────────────────────────── */}
-      {!isSubscription && plan.pricePerOrder > 0 && (
+      {isPerOrder && (plan.price_per_order ?? plan.pricePerOrder) > 0 && (
         <div className="flex items-center gap-2 text-sm text-slate-600 border-t border-gray-50 pt-4">
           <Zap size={14} className="text-blue-500 shrink-0" />
           <span>
-            Charged at <span className="font-bold">{fmt(plan.pricePerOrder)}</span> per order
+            Charged at <span className="font-bold">{fmt(plan.price_per_order ?? plan.pricePerOrder)}</span> per order
             &nbsp;·&nbsp;
             <span className="font-bold">{ordersCount}</span> orders this cycle
           </span>
@@ -168,7 +224,7 @@ const PlanUsageCard = ({ subscription, usage, invoice, loading, error, onChangeP
           <TrendingUp size={14} className="text-red-500 shrink-0" />
           <span className="text-slate-600">
             <span className="font-bold text-red-500">{extraOrders}</span> extra orders ×{' '}
-            {fmt(plan.pricePerExtraOrder)} = <span className="font-bold">{fmt(extraCharges)}</span>
+            {fmt(plan.price_per_extra_order ?? plan.pricePerExtraOrder)} = <span className="font-bold">{fmt(extraCharges)}</span>
           </span>
         </div>
       )}

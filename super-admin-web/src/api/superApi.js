@@ -57,6 +57,26 @@ export const fetchTenants = async () => {
   return data.tenants;
 };
 
+export const fetchTenantEnterprisePlan = async (tenantMongoId) => {
+  const res = await fetch(apiUrl(`/api/super/tenant/${tenantMongoId}/enterprise`), {
+    headers: authHeader(),
+  });
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message || 'Failed to load enterprise plan');
+  return data.data;
+};
+
+export const updateTenantEnterprisePlan = async (tenantMongoId, payload) => {
+  const res = await fetch(apiUrl(`/api/super/tenant/${tenantMongoId}/enterprise`), {
+    method: 'PATCH',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message || 'Failed to save enterprise pricing');
+  return data;
+};
+
 export const updateTenantPlan = async (id, plan) => {
   const res = await fetch(apiUrl(`/api/super/tenant/${id}/plan`), {
     method: 'PATCH',
@@ -220,10 +240,52 @@ export const fetchBillingOverview = async (days = 30) => {
   return data.data; // [{ tenantId, invoice, revenue }]
 };
 
-export const markTenantInvoicePaid = async (id) => {
+export const fetchPaymentPlans = async () => {
+  const res = await fetch(apiUrl('/api/super/plans'), { headers: authHeader() });
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message || 'Failed to fetch plans');
+  return data.data;
+};
+
+export const createPaymentPlan = async (payload) => {
+  const res = await fetch(apiUrl('/api/super/plans'), {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message || 'Failed to create plan');
+  return data.data;
+};
+
+export const updatePaymentPlan = async (id, payload) => {
+  const res = await fetch(apiUrl(`/api/super/plans/${id}`), {
+    method: 'PATCH',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message || 'Failed to update plan');
+  return data.data;
+};
+
+export const disablePaymentPlan = async (id) => {
+  const res = await fetch(apiUrl(`/api/super/plans/${id}`), {
+    method: 'DELETE',
+    headers: authHeader(),
+  });
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message || 'Failed to disable plan');
+  return data.data;
+};
+
+export const markTenantInvoicePaid = async (id, invoiceId) => {
   const res = await fetch(apiUrl(`/api/super/tenant/${id}/invoice/mark-paid`), {
     method: 'PATCH',
     headers: authHeader(),
+    body: JSON.stringify({
+      ...(invoiceId ? { invoiceId: String(invoiceId) } : {}),
+    }),
   });
   const data = await parseJsonSafe(res);
   if (!res.ok) throw new Error(data.message || 'Failed to mark invoice paid');

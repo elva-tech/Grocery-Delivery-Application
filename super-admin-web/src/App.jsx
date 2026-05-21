@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import CreateStorePage from './pages/CreateStorePage';
+import PlansManagement from './pages/PlansManagement';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('super_admin_token');
@@ -18,6 +19,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <CreateStorePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/plans"
+          element={
+            <PrivateRoute>
+              <PlansManagement />
             </PrivateRoute>
           }
         />

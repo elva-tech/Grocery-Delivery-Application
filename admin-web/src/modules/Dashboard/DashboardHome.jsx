@@ -5,6 +5,7 @@ import TopProductsSection from './TopProductsSection';
 import DailySalesChart from './DailySalesChart';
 import RatingSummaryCard from './RatingSummaryCard';
 import PlanUsageCard from './PlanUsageCard';
+import SuspensionWarningBanner from '../../components/billing/SuspensionWarningBanner';
 import { 
   ShoppingBag, 
   IndianRupee, 
@@ -45,7 +46,12 @@ const DashboardHome = () => {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   // Billing state
-  const [billingData, setBillingData] = useState({ subscription: null, usage: null, invoice: null });
+  const [billingData, setBillingData] = useState({
+    subscription: null,
+    usage: null,
+    invoice: null,
+    prepaidInvoice: null,
+  });
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingError, setBillingError] = useState(null);
   
@@ -181,9 +187,10 @@ const DashboardHome = () => {
           apiService.getCurrentInvoice(),
         ]);
         setBillingData({
-          subscription: subRes.data  || null,
-          usage:        usageRes.data  || null,
-          invoice:      invoiceRes.data || null,
+          subscription: subRes.data || null,
+          usage: usageRes.data || null,
+          invoice: invoiceRes.data || null,
+          prepaidInvoice: invoiceRes.prepaidInvoice || null,
         });
       } catch (err) {
         console.error('Billing fetch error:', err);
@@ -386,12 +393,18 @@ const DashboardHome = () => {
       </div>
 
       {/* ── Plan & Billing ───────────────────────────────────────── */}
+      <SuspensionWarningBanner
+        invoice={billingData.invoice}
+        subscription={billingData.subscription}
+      />
       <PlanUsageCard
         subscription={billingData.subscription}
         usage={billingData.usage}
         invoice={billingData.invoice}
+        prepaidInvoice={billingData.prepaidInvoice}
         loading={billingLoading}
         error={billingError}
+        onChangePlan={() => navigate('/settings/payment-plan')}
       />
 
       <div className="bg-[#1A4D2E] p-8 rounded-[32px] text-white shadow-xl shadow-green-900/20 flex flex-col w-full">

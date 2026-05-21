@@ -11,7 +11,11 @@ const mongoose = require("mongoose");
 const User = require("../models/User.model");
 const Settings = require("../models/Settings.model");
 const Coupon = require("../models/Coupon.model");
-const { recordOrderBilling, reverseOrderBilling } = require("../services/billing.service");
+const {
+  recordOrderBilling,
+  reverseOrderBilling,
+} = require("../modules/billing");
+const { assertCanPlaceOrder } = require("../modules/billing/services/enforcement.service");
 const {
   isValidIndianPincodeFormat,
   lookupIndianPincode,
@@ -135,6 +139,16 @@ exports.placeCustomerOrder = async (req, res) => {
 
     const userId = req.user.userId;
     const tenantId = req.user.tenantId;
+
+    try {
+      await assertCanPlaceOrder(tenantId);
+    } catch (billingBlock) {
+      return res.status(billingBlock.status || 403).json({
+        success: false,
+        message: billingBlock.message,
+        code: billingBlock.code,
+      });
+    }
 
     const placingUser = await User.findById(userId).select("name phoneNumber").lean();
     const customerName = placingUser?.name || "";
