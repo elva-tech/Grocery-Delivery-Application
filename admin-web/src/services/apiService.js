@@ -358,6 +358,35 @@ deleteBanner: async (id) => {
     return res.data;
   },
 
+  getInvoiceHistory: async () => {
+    const res = await api.get("/api/billing/invoices");
+    return res.data;
+  },
+
+  downloadBillingInvoicePdf: async (invoiceId) => {
+    const res = await api.get(`/api/billing/invoices/${invoiceId}/download`, {
+      responseType: "blob",
+    });
+    return res.data;
+  },
+
+  exportBillingInvoicesCsv: async () => {
+    const res = await api.get("/api/billing/invoices/export", {
+      responseType: "blob",
+    });
+    return res.data;
+  },
+
+  getBillingNotifications: async () => {
+    const res = await api.get("/api/billing/notifications");
+    return res.data;
+  },
+
+  markBillingNotificationRead: async (id) => {
+    const res = await api.patch(`/api/billing/notifications/${id}/read`);
+    return res.data;
+  },
+
   /* -------- STORE PROFILE -------- */
 
   getStoreProfile: async () => {

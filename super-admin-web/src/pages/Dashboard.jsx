@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchTenants, updateTenantPlan, updateTenantStatus, fetchBillingOverview, markTenantInvoicePaid } from '../api/superApi';
 import EditStoreModal from '../components/EditStoreModal';
+import EnterprisePricingModal from '../components/EnterprisePricingModal';
 
 const PLANS    = ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'];
 const STATUSES = ['ACTIVE', 'SUSPENDED', 'INACTIVE'];
@@ -26,6 +27,8 @@ export default function Dashboard() {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState('');
   const [editingTenant, setEditingTenant] = useState(null);
+  const [enterpriseTenant, setEnterpriseTenant] = useState(null);
+  const [enterpriseRates, setEnterpriseRates] = useState({});
   const [successMsg, setSuccessMsg]       = useState('');
 
   // per-row editing state
@@ -91,6 +94,11 @@ export default function Dashboard() {
     const plan = selectedPlans[id];
     if (plan === tenant.plan) return;
 
+    if (plan === 'ENTERPRISE') {
+      setEnterpriseTenant(tenant);
+      return;
+    }
+
     setPlanSaving((s) => ({ ...s, [id]: true }));
     setRowError((e) => ({ ...e, [id]: '' }));
     try {
@@ -101,6 +109,27 @@ export default function Dashboard() {
     } finally {
       setPlanSaving((s) => ({ ...s, [id]: false }));
     }
+  };
+
+  const handleEnterpriseSaved = (result) => {
+    const tenant = enterpriseTenant;
+    if (!tenant) return;
+    setTenants((ts) =>
+      ts.map((t) => (t._id === tenant._id ? { ...t, plan: 'ENTERPRISE' } : t))
+    );
+    setSelectedPlans((s) => ({ ...s, [tenant._id]: 'ENTERPRISE' }));
+    if (result?.plan) {
+      const p = result.plan;
+      const summary =
+        Number(p.price_per_order) > 0
+          ? `₹${p.price_per_order}/order`
+          : Number(p.monthly_price) > 0
+            ? `₹${p.monthly_price}/mo`
+            : 'configured';
+      setEnterpriseRates((r) => ({ ...r, [tenant.tenantId]: summary }));
+    }
+    setSuccessMsg(`Enterprise pricing saved for ${tenant.name}`);
+    setEnterpriseTenant(null);
   };
 
   const handleStatusToggle = async (tenant) => {
@@ -124,18 +153,30 @@ export default function Dashboard() {
   const handleMarkPaid = async (tenant) => {
     const id = tenant._id;
     setMarkingPaid((s) => ({ ...s, [tenant.tenantId]: true }));
+    setRowError((e) => ({ ...e, [id]: '' }));
     try {
-      await markTenantInvoicePaid(id);
-      // Refresh billing row for this tenant
+      const invBefore = billingMap[tenant.tenantId]?.invoice;
+      const paidInvoice = await markTenantInvoicePaid(id, invBefore?._id);
+      const normalized = paidInvoice
+        ? {
+            ...paidInvoice,
+            status: 'PAID',
+            invoice_status: 'PAID',
+            payment_status: 'PAID',
+            totalAmount: paidInvoice.totalAmount ?? paidInvoice.total_amount ?? 0,
+          }
+        : null;
       setBillingMap((prev) => ({
         ...prev,
         [tenant.tenantId]: {
-          ...prev[tenant.tenantId],
-          invoice: prev[tenant.tenantId]?.invoice
-            ? { ...prev[tenant.tenantId].invoice, status: 'PAID', paidAt: new Date().toISOString() }
-            : null,
+          tenantId: tenant.tenantId,
+          invoice: normalized,
+          revenue:
+            (prev[tenant.tenantId]?.revenue || 0) +
+            (normalized?.totalAmount || 0),
         },
       }));
+      await loadBilling(revenueDays);
       setSuccessMsg(`Invoice for "${tenant.name}" marked as paid`);
     } catch (err) {
       setRowError((e) => ({ ...e, [id]: err.message }));
@@ -156,6 +197,13 @@ export default function Dashboard() {
           <p className="text-xs text-gray-400">Tenant Management</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/plans')}
+            className="text-sm bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded transition-colors"
+          >
+            Payment plans
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -302,6 +350,11 @@ export default function Dashboard() {
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${PLAN_BADGE[tenant.plan] || 'bg-gray-100 text-gray-600'}`}>
                           {tenant.plan}
                         </span>
+                        {tenant.plan === 'ENTERPRISE' && enterpriseRates[tenant.tenantId] && (
+                          <span className="text-[10px] text-indigo-600 block mt-0.5">
+                            {enterpriseRates[tenant.tenantId]}
+                          </span>
+                        )}
                       </td>
 
                       {/* Status badge */}
@@ -373,37 +426,80 @@ export default function Dashboard() {
                       {/* Current Bill */}
                       <td className="px-4 py-3 text-right text-gray-700 text-xs font-semibold">
                         {billingMap[tenant.tenantId]?.invoice
-                          ? `₹${(billingMap[tenant.tenantId].invoice.totalAmount || 0).toLocaleString('en-IN')}`
+                          ? `₹${(billingMap[tenant.tenantId].invoice.totalAmount ?? billingMap[tenant.tenantId].invoice.total_amount ?? 0).toLocaleString('en-IN')}`
                           : '—'}
                       </td>
 
                       {/* Payment status + Mark Paid */}
-                      <td className="px-4 py-3">
-                        {billingMap[tenant.tenantId]?.invoice ? (
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                              billingMap[tenant.tenantId].invoice.status === 'PAID'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-orange-100 text-orange-700'
-                            }`}>
-                              {billingMap[tenant.tenantId].invoice.status}
-                            </span>
-                            {billingMap[tenant.tenantId].invoice.status !== 'PAID' && (
-                              <button
-                                onClick={() => handleMarkPaid(tenant)}
-                                disabled={markingPaid[tenant.tenantId]}
-                                className="px-2 py-0.5 text-xs rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 transition-colors"
-                              >
-                                {markingPaid[tenant.tenantId] ? '…' : 'Mark Paid'}
-                              </button>
-                            )}
-                            {billingMap[tenant.tenantId].invoice.status === 'PAID' && billingMap[tenant.tenantId].invoice.paidAt && (
-                              <span className="text-xs text-gray-400">{fmt(billingMap[tenant.tenantId].invoice.paidAt)}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">No invoice</span>
-                        )}
+                      <td className="px-4 py-3 min-w-[200px]">
+                        {(() => {
+                          const inv = billingMap[tenant.tenantId]?.invoice;
+                          if (!inv) {
+                            return (
+                              <span className="text-xs text-gray-400" title="No billing invoice for this store yet">
+                                No invoice
+                              </span>
+                            );
+                          }
+                          const isPaid =
+                            inv.status === 'PAID' ||
+                            inv.payment_status === 'PAID' ||
+                            inv.invoice_status === 'PAID';
+                          const statusLabel = isPaid
+                            ? 'PAID'
+                            : inv.invoice_status || inv.status || 'PENDING';
+                          const amount = Number(inv.totalAmount ?? inv.total_amount ?? 0);
+                          const canMarkPaid = !isPaid && amount > 0;
+                          const period =
+                            inv.period_label ||
+                            (inv.billing_month && inv.billing_year
+                              ? `${String(inv.billing_month).padStart(2, '0')}/${inv.billing_year}`
+                              : '—');
+                          const dueStr = inv.due_date ? fmt(inv.due_date) : '—';
+                          return (
+                            <div className="flex flex-col gap-1.5 text-xs">
+                              <div className="text-gray-500 font-mono truncate max-w-[180px]" title={inv.invoice_number}>
+                                {inv.invoice_number || '—'}
+                              </div>
+                              <div className="text-gray-600">
+                                Period: <span className="font-semibold text-gray-800">{period}</span>
+                                {inv.is_current_cycle ? ' · current' : ' · closed'}
+                              </div>
+                              <div className="text-gray-600">
+                                Due: <span className="font-medium">{dueStr}</span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                    isPaid
+                                      ? 'bg-green-100 text-green-700'
+                                      : statusLabel === 'OVERDUE'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-orange-100 text-orange-700'
+                                  }`}
+                                >
+                                  {statusLabel}
+                                </span>
+                                <span className="font-bold text-gray-900">
+                                  ₹{amount.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              {canMarkPaid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkPaid(tenant)}
+                                  disabled={markingPaid[tenant.tenantId]}
+                                  className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 transition-colors w-fit font-semibold"
+                                >
+                                  {markingPaid[tenant.tenantId] ? 'Saving…' : 'Mark Paid'}
+                                </button>
+                              )}
+                              {isPaid && inv.paidAt && (
+                                <span className="text-[10px] text-green-700">Paid {fmt(inv.paidAt)}</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Change plan */}
@@ -430,6 +526,16 @@ export default function Dashboard() {
                           >
                             {planSaving[tenant._id] ? '…' : 'Save'}
                           </button>
+                          {(tenant.plan === 'ENTERPRISE' ||
+                            selectedPlans[tenant._id] === 'ENTERPRISE') && (
+                            <button
+                              type="button"
+                              onClick={() => setEnterpriseTenant(tenant)}
+                              className="px-2 py-1 text-xs border border-indigo-300 text-indigo-700 rounded hover:bg-indigo-50"
+                            >
+                              Rates
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -492,6 +598,14 @@ export default function Dashboard() {
             setSuccessMsg(`Store "${updated.name}" updated successfully`);
             setEditingTenant(null);
           }}
+        />
+      )}
+
+      {enterpriseTenant && (
+        <EnterprisePricingModal
+          tenant={enterpriseTenant}
+          onClose={() => setEnterpriseTenant(null)}
+          onSaved={handleEnterpriseSaved}
         />
       )}
 

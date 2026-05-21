@@ -1,34 +1,23 @@
 const express = require("express");
 const router = express.Router();
 const { authMiddleware } = require("../middleware/auth.middleware");
-const { resolveTenant } = require("../middleware/tenant.middleware");
-const {
-  getPlans,
-  getSubscription,
-  getUsage,
-  getCurrentInvoice,
-  triggerBillingGeneration,
-  changePlan,
-  createInvoicePayment,
-  verifyInvoicePayment,
-  initiatePlanPayment,
-  activatePlanNow,
-} = require("../controllers/billing.controller");
+const { generateMonthlyBilling } = require("../modules/billing").billingService;
+const tenantBillingRoutes = require("../modules/billing/routes/tenantBilling.routes");
 
-router.use(resolveTenant);
+router.use(tenantBillingRoutes);
 
-// All billing routes require authentication
-router.use(authMiddleware);
-
-router.get("/plans",                    getPlans);
-router.get("/subscription",             getSubscription);
-router.get("/usage",                    getUsage);
-router.get("/invoice/current",          getCurrentInvoice);
-router.post("/generate",                triggerBillingGeneration);
-router.put("/subscription/plan",        changePlan);
-router.post("/invoice/:id/pay",         createInvoicePayment);
-router.post("/invoice/:id/verify",      verifyInvoicePayment);
-router.post("/plan/initiate-payment",   initiatePlanPayment);
-router.post("/plan/activate",           activatePlanNow);
+// Admin-triggered monthly generation (legacy path)
+router.post("/generate", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "ADMIN" && req.user.role !== "SUPER_ADMIN") {
+      return res.status(403).json({ success: false, message: "Admin only" });
+    }
+    const targetTenant = req.body.tenantId || req.user.tenantId || null;
+    const result = await generateMonthlyBilling(targetTenant);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 module.exports = router;

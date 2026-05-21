@@ -4,7 +4,11 @@ const Store    = require("../models/Store.model");
 const Settings = require("../models/Settings.model");
 const bcrypt   = require("bcryptjs");
 const QRCode   = require("qrcode");
-const { seedPlans, getOrCreateSubscription } = require("../services/billing.service");
+const { billingService } = require("../modules/billing");
+const { seedDefaultPlansIfEmpty } = require("../modules/billing/services/seed.service");
+const getOrCreateSubscription = (tenantId, userId) =>
+  billingService.getOrCreateSubscription(tenantId, userId);
+const seedPlans = seedDefaultPlansIfEmpty;
 
 /* ─────────────────────────────────────────────
    CONSTANTS
@@ -150,8 +154,9 @@ exports.getTenantDetails = async (req, res) => {
   // Fetch the real active billing subscription plan
   let activePlan = tenant.plan || "FREE";
   try {
-    const sub = await getOrCreateSubscription(tenantId);
-    if (sub?.planId?.name) activePlan = sub.planId.name;
+    const { plan } = await getOrCreateSubscription(tenantId);
+    if (plan?.plan_code) activePlan = plan.plan_code;
+    else if (plan?.name) activePlan = plan.name;
   } catch (_) { /* fall back to Tenant.plan */ }
 
   return res.json({
