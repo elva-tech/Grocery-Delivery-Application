@@ -1,10 +1,9 @@
-const Razorpay = require("razorpay");
 const Order = require("../models/Order.model");
-
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+const Vendor = require("../models/Vendor.model");
+const {
+  getVendorRazorpayClient,
+  assertVendorPaymentReady,
+} = require("../utils/getVendorRazorpayClient");
 
 function isRefundableOrder(order) {
   if (!order || order.paymentMode !== "ONLINE") return false;
@@ -13,48 +12,67 @@ function isRefundableOrder(order) {
   return order.paymentStatus === "PAID" || order.paymentStatus === "REFUND_PENDING";
 }
 
+async function getVendorRazorpayForOrder(order) {
+  const vendor = await Vendor.findOne({ tenantId: order.tenantId });
+  assertVendorPaymentReady(vendor, order.tenantId);
+  return getVendorRazorpayClient(vendor);
+}
+
 async function resolveRazorpayPaymentId(order) {
   if (order.razorpayPaymentId) return order.razorpayPaymentId;
   if (!order.razorpayOrderId || order.razorpayOrderId === "LOCKED") return null;
 
   try {
+    const razorpay = await getVendorRazorpayForOrder(order);
     const payments = await razorpay.orders.fetchPayments(order.razorpayOrderId);
     const captured = (payments.items || []).find((p) => p.status === "captured");
     return captured?.id || null;
   } catch (err) {
     console.error("resolveRazorpayPaymentId failed", {
       orderId: order._id,
+      tenantId: order.tenantId,
       message: err.message,
     });
     return null;
   }
 }
 
-function mapRefundToOrderFields(refund, order) {
+function mapRefundToOrderFields(refund, order, requestedAmount) {
   const processed =
     refund.status === "processed" || refund.status === "completed";
+  const refundedRupees =
+    (refund.amount || Math.round((requestedAmount ?? order.totalAmount) * 100)) / 100;
+  const isFullRefund = refundedRupees >= order.totalAmount - 0.01;
   return {
     razorpayRefundId: refund.id,
     razorpayPaymentId: refund.payment_id || order.razorpayPaymentId,
-    refundStatus: processed ? "FULL" : "PENDING",
+    refundStatus: processed ? (isFullRefund ? "FULL" : "PARTIAL") : "PENDING",
     paymentStatus: processed ? "REFUNDED" : "REFUND_PENDING",
-    refundAmount: (refund.amount || Math.round(order.totalAmount * 100)) / 100,
+    refundAmount: refundedRupees,
     refundedAt: processed ? new Date() : null,
     refundFailureReason: "",
   };
 }
 
-/**
- * Initiate a full Razorpay refund for a paid online order.
- * Idempotent when refund is already FULL / REFUNDED.
- */
-async function initiateOrderRefund(order, { reason = "order_cancelled" } = {}) {
+async function initiateOrderRefund(order, { reason = "order_cancelled", amount } = {}) {
   if (!isRefundableOrder(order)) {
     return {
       success: true,
       skipped: true,
       reason: "not_refundable",
     };
+  }
+
+  const refundRupees = Number(amount ?? order.totalAmount);
+  if (!Number.isFinite(refundRupees) || refundRupees <= 0) {
+    const err = new Error("Refund amount must be greater than zero");
+    err.status = 400;
+    throw err;
+  }
+  if (refundRupees > order.totalAmount + 0.01) {
+    const err = new Error("Refund amount cannot exceed order total");
+    err.status = 400;
+    throw err;
   }
 
   const paymentId = await resolveRazorpayPaymentId(order);
@@ -68,28 +86,31 @@ async function initiateOrderRefund(order, { reason = "order_cancelled" } = {}) {
     throw err;
   }
 
-  const amountInPaise = Math.round(order.totalAmount * 100);
+  const amountInPaise = Math.round(refundRupees * 100);
 
   try {
+    const razorpay = await getVendorRazorpayForOrder(order);
     const refund = await razorpay.payments.refund(paymentId, {
       amount: amountInPaise,
       notes: {
-        order_id: order._id.toString(),
+        tenantId: order.tenantId,
+        orderId: order._id.toString(),
         reason,
       },
       speed: "normal",
     });
 
-    const updates = mapRefundToOrderFields(refund, order);
+    const updates = mapRefundToOrderFields(refund, order, refundRupees);
     await Order.findByIdAndUpdate(order._id, {
       ...updates,
       razorpayPaymentId: paymentId,
     });
 
-    console.log("initiateOrderRefund: success", {
-      orderId: order._id,
-      refundId: refund.id,
-      refundStatus: refund.status,
+    console.log({
+      tenantId: order.tenantId,
+      orderId: order._id.toString(),
+      razorpayOrderId: order.razorpayOrderId,
+      paymentStatus: updates.paymentStatus,
     });
 
     return {
@@ -126,7 +147,8 @@ async function initiateOrderRefund(order, { reason = "order_cancelled" } = {}) {
     });
 
     console.error("initiateOrderRefund: failed", {
-      orderId: order._id,
+      tenantId: order.tenantId,
+      orderId: order._id.toString(),
       message: err.message,
       description: err.error?.description,
     });
@@ -135,13 +157,14 @@ async function initiateOrderRefund(order, { reason = "order_cancelled" } = {}) {
   }
 }
 
-/** Apply Razorpay webhook refund entity to our order record. */
 async function applyRefundWebhook(refundEntity) {
   if (!refundEntity?.id) return { matched: false };
 
+  const internalOrderId =
+    refundEntity.notes?.orderId || refundEntity.notes?.order_id;
+
   let order =
-    (refundEntity.notes?.order_id &&
-      (await Order.findById(refundEntity.notes.order_id))) ||
+    (internalOrderId && (await Order.findById(internalOrderId))) ||
     (refundEntity.payment_id &&
       (await Order.findOne({ razorpayPaymentId: refundEntity.payment_id }))) ||
     (await Order.findOne({ razorpayRefundId: refundEntity.id }));
@@ -179,6 +202,14 @@ async function applyRefundWebhook(refundEntity) {
   }
 
   await Order.findByIdAndUpdate(order._id, updates);
+
+  console.log({
+    tenantId: order.tenantId,
+    orderId: order._id.toString(),
+    razorpayOrderId: order.razorpayOrderId,
+    paymentStatus: updates.paymentStatus,
+  });
+
   return { matched: true, orderId: order._id, updates };
 }
 

@@ -88,15 +88,11 @@ const OrderList = () => {
   const handleSelectRider = async (riderId, riderName) => {
     setAssigningLoading(true);
     try {
-      // Step 1: Assign the rider to the order
       await assignRider(selectedOrderId, riderId, riderName);
-      
-      // Step 2: Update order status to OUT_FOR_DELIVERY
-      await updateOrderStatus(selectedOrderId, 'OUT_FOR_DELIVERY');
-      
+      showToast('success', `Rider assigned — order is now out for delivery.`);
     } catch (error) {
       console.error("Failed to assign rider:", error);
-      showToast('error', 'Failed to assign rider. Please try again.');
+      showToast('error', error?.response?.data?.message || 'Failed to assign rider. Please try again.');
     } finally {
       // Close modal regardless of success or error
       setSelectedOrderId(null);

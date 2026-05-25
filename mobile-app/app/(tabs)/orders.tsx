@@ -17,15 +17,28 @@ import { addToCart } from '@/store/slices/cartSlice';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getUserOrders, cancelOrderApi, rateOrderApi, reportOrderIssueApi } from '@/api/ordersApi';
+import {
+  getUserOrders,
+  cancelOrderApi,
+  rateOrderApi,
+  reportOrderIssueApi,
+  uploadReturnEvidenceApi,
+  downloadOrderSummaryPdfApi,
+} from '@/api/ordersApi';
 import { RootState } from '@/store/store';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 // INTEGRATED: Import settings hook
 import { useGetAppSettingsQuery } from '@/api/apiSlice';
-import { API_BASE_URL } from '@/src/config/constants';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 import { getCustomerOrderStatusTheme, getOnlineRefundSubtitle } from '@/src/utils/orderStatusDisplay';
+import {
+  filterAndSortCustomerOrders,
+  ORDER_STATUS_FILTERS,
+  ORDER_SORT_OPTIONS,
+  type OrderSortBy,
+  type OrderStatusFilter,
+} from '@/src/utils/customerOrderList';
 
 const REPORT_REASONS = [
   "Item damaged",
@@ -65,6 +78,7 @@ export default function OrdersScreen() {
   /** Cloudinary URL from POST /api/upload — sent as evidenceUrl on submit. */
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
   const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
+  const [evidenceUploadError, setEvidenceUploadError] = useState<string | null>(null);
   const evidenceUploadSeq = useRef(0);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
@@ -76,6 +90,10 @@ export default function OrdersScreen() {
   const [starValue, setStarValue] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [isDownloadingSummary, setIsDownloadingSummary] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>('all');
+  const [sortBy, setSortBy] = useState<OrderSortBy>('newest');
 
   const fetchOrders = useCallback(async (isQuiet = false) => {
     if (!isQuiet) setLoading(true);
@@ -117,7 +135,39 @@ export default function OrdersScreen() {
     setIssueComment('');
     evidenceUploadSeq.current += 1;
     setIsUploadingEvidence(false);
+    setEvidenceUploadError(null);
   }, []);
+
+  const uploadEvidenceFromAsset = async (
+    localUri: string,
+    asset: { fileName?: string | null; mimeType?: string | null },
+  ) => {
+    const seq = ++evidenceUploadSeq.current;
+    setIsUploadingEvidence(true);
+    setEvidenceUploadError(null);
+    setEvidenceUrl(null);
+
+    const name =
+      asset.fileName ??
+      `evidence_${Date.now()}.${localUri.split('.').pop()?.split('?')[0] || 'jpg'}`;
+    const mime = asset.mimeType ?? 'image/jpeg';
+
+    try {
+      const { url } = await uploadReturnEvidenceApi(localUri, name, mime);
+      if (seq !== evidenceUploadSeq.current) return;
+      setEvidenceUrl(url);
+      setEvidenceUploadError(null);
+      showToast('success', 'Photo uploaded', 'Evidence is ready to submit.');
+    } catch (e: any) {
+      if (seq !== evidenceUploadSeq.current) return;
+      setEvidenceUrl(null);
+      const msg = e?.message || 'Could not upload evidence. Try again.';
+      setEvidenceUploadError(msg);
+      showToast('error', 'Upload failed', msg);
+    } finally {
+      if (seq === evidenceUploadSeq.current) setIsUploadingEvidence(false);
+    }
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -136,41 +186,34 @@ export default function OrdersScreen() {
     if (result.canceled) return;
 
     const asset = result.assets[0];
-    const localUri = asset.uri;
-    setIssueImage(localUri);
-    setEvidenceUrl(null);
-
-    const seq = ++evidenceUploadSeq.current;
-    setIsUploadingEvidence(true);
-
-    const formData = new FormData();
-    const name =
-      asset.fileName ??
-      `evidence_${Date.now()}.${localUri.split('.').pop()?.split('?')[0] || 'jpg'}`;
-    const mime = asset.mimeType ?? 'image/jpeg';
-    // @ts-ignore React Native FormData file part
-    formData.append('file', { uri: localUri, name, type: mime });
-
-    try {
-      const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (seq !== evidenceUploadSeq.current) return;
-      if (!res.ok || !data?.url) {
-        throw new Error(data?.message || 'Upload failed');
-      }
-      setEvidenceUrl(String(data.url));
-      showToast('success', 'Photo uploaded', 'Evidence is ready to submit.');
-    } catch (e: any) {
-      if (seq !== evidenceUploadSeq.current) return;
-      setEvidenceUrl(null);
-      showToast('error', 'Upload failed', e?.message || 'Could not upload evidence. Try again.');
-    } finally {
-      if (seq === evidenceUploadSeq.current) setIsUploadingEvidence(false);
-    }
+    setIssueImage(asset.uri);
+    await uploadEvidenceFromAsset(asset.uri, asset);
   };
+
+  const canSubmitIssue =
+    Boolean(selectedReason && evidenceUrl && !isUploadingEvidence && !isSubmittingReport);
+
+  const submitIssueHint = useMemo(() => {
+    if (canSubmitIssue) return null;
+    const parts: string[] = [];
+    if (!selectedReason) parts.push('select a reason');
+    if (isUploadingEvidence) parts.push('wait for photo upload');
+    else if (!evidenceUrl) {
+      parts.push(
+        evidenceUploadError
+          ? 'photo upload failed — tap the image to try again'
+          : 'upload a photo',
+      );
+    }
+    if (!parts.length) return null;
+    return `To submit: ${parts.join(', ')}.`;
+  }, [
+    canSubmitIssue,
+    selectedReason,
+    evidenceUrl,
+    isUploadingEvidence,
+    evidenceUploadError,
+  ]);
 
   const handleCancelOrder = (orderToCancel: any) => {
     setConfirmConfig({
@@ -274,28 +317,10 @@ export default function OrdersScreen() {
     fetchOrders(true);
   }, [fetchOrders]);
 
-  const groupedList = useMemo(() => {
-    const awaiting = orders.filter(o => o.status === 'PLACED');
-    const active = orders.filter(o => ['CONFIRMED', 'OUT_FOR_DELIVERY'].includes(o.status));
-    const delivered = orders.filter(o => o.status === 'DELIVERED');
-    const past = orders.filter(
-      o => !['PLACED', 'CONFIRMED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(o.status),
-    );
-    const result: any[] = [];
-    if (awaiting.length) {
-      result.push({ _sectionHeader: true, label: '⏳  Waiting for confirmation', count: awaiting.length }, ...awaiting);
-    }
-    if (active.length) {
-      result.push({ _sectionHeader: true, label: '🚚  Active orders', count: active.length }, ...active);
-    }
-    if (delivered.length) {
-      result.push({ _sectionHeader: true, label: '✅  Delivered', count: delivered.length }, ...delivered);
-    }
-    if (past.length) {
-      result.push({ _sectionHeader: true, label: '📋  Past orders', count: past.length }, ...past);
-    }
-    return result;
-  }, [orders]);
+  const displayOrders = useMemo(
+    () => filterAndSortCustomerOrders(orders, searchQuery, statusFilter, sortBy),
+    [orders, searchQuery, statusFilter, sortBy],
+  );
 
   const handleReorder = (items: any[]) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -304,16 +329,82 @@ export default function OrdersScreen() {
     router.push('/(tabs)/cart');
   };
 
-  const renderItem = ({ item }: { item: any }) => {
-    // Section header
-    if (item._sectionHeader) {
-      return (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeaderText}>{item.label}</Text>
-          <View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{item.count}</Text></View>
-        </View>
+  const handleDownloadOrderSummary = async () => {
+    const orderId = selectedOrder?._id ?? selectedOrder?.id;
+    if (!orderId) return;
+    setIsDownloadingSummary(true);
+    try {
+      await downloadOrderSummaryPdfApi(String(orderId));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('success', 'Order summary', 'Use the share menu to save or open the PDF.');
+    } catch (err: any) {
+      showToast(
+        'error',
+        'Download failed',
+        err?.message || 'Could not download order summary.',
       );
+    } finally {
+      setIsDownloadingSummary(false);
     }
+  };
+
+  const renderListToolbar = () => (
+    <View style={styles.toolbar}>
+      <View style={styles.searchRow}>
+        <Ionicons name="search" size={18} color="#94a3b8" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search order ID, items, date…"
+          placeholderTextColor="#94a3b8"
+          clearButtonMode="while-editing"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={20} color="#94a3b8" />
+          </TouchableOpacity>
+        )}
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        {ORDER_STATUS_FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.id}
+            style={[styles.filterChip, statusFilter === f.id && styles.filterChipActive]}
+            onPress={() => setStatusFilter(f.id)}
+          >
+            <Text style={[styles.filterChipText, statusFilter === f.id && styles.filterChipTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <View style={styles.sortRow}>
+        <Text style={styles.resultCount}>
+          {displayOrders.length} of {orders.length} orders
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {ORDER_SORT_OPTIONS.map((o) => (
+            <TouchableOpacity
+              key={o.id}
+              style={[styles.sortChip, sortBy === o.id && styles.sortChipActive]}
+              onPress={() => setSortBy(o.id)}
+            >
+              <Text style={[styles.sortChipText, sortBy === o.id && styles.sortChipTextActive]}>
+                {o.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  const renderItem = ({ item }: { item: any }) => {
     const theme = getCustomerOrderStatusTheme(item.status);
     return (
       <View style={styles.card}>
@@ -387,12 +478,13 @@ export default function OrdersScreen() {
 
       <FlatList
         style={styles.listView}
-        data={groupedList}
+        data={displayOrders}
         renderItem={renderItem}
-        keyExtractor={(item, idx) => item._sectionHeader ? `header-${idx}` : item.id}
+        keyExtractor={(item) => String(item.id ?? item._id)}
+        ListHeaderComponent={orders.length > 0 ? renderListToolbar : null}
         contentContainerStyle={[
           styles.list,
-          groupedList.length === 0 && { flexGrow: 1 },
+          displayOrders.length === 0 && { flexGrow: 1 },
         ]}
         scrollEnabled
         nestedScrollEnabled
@@ -403,8 +495,14 @@ export default function OrdersScreen() {
           !loading ? (
             <View style={styles.emptyState}>
               <Ionicons name="receipt-outline" size={56} color="#cbd5e1" />
-              <Text style={styles.emptyTitle}>No orders yet</Text>
-              <Text style={styles.emptySubtitle}>Your orders will appear here after you place one.</Text>
+              <Text style={styles.emptyTitle}>
+                {orders.length === 0 ? 'No orders yet' : 'No matching orders'}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {orders.length === 0
+                  ? 'Your orders will appear here after you place one.'
+                  : 'Try a different search or filter.'}
+              </Text>
             </View>
           ) : null
         }
@@ -542,8 +640,27 @@ export default function OrdersScreen() {
                 </TouchableOpacity>
               )}
 
+              {selectedOrder?.status === 'DELIVERED' && (
+                <TouchableOpacity
+                  style={styles.downloadSummaryBtn}
+                  onPress={handleDownloadOrderSummary}
+                  disabled={isDownloadingSummary}
+                >
+                  {isDownloadingSummary ? (
+                    <ActivityIndicator color="#059669" size="small" />
+                  ) : (
+                    <Ionicons name="download-outline" size={18} color="#059669" />
+                  )}
+                  <Text style={styles.downloadSummaryBtnText}>
+                    {isDownloadingSummary ? 'Preparing PDF…' : 'Download Order Summary'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
-              {selectedOrder?.status === 'DELIVERED' && settings?.allowReportIssue && (
+              {selectedOrder?.status === 'DELIVERED' &&
+                (settings?.allowReportIssue || settings?.allowRefunds) &&
+                !['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder?.status) && (
                 <TouchableOpacity
                   style={styles.reportBtn}
                   onPress={() => {
@@ -599,7 +716,11 @@ export default function OrdersScreen() {
               <TextInput style={styles.inputArea} placeholder="Details..." multiline value={issueComment} onChangeText={setIssueComment} />
 
               <Text style={styles.label}>Upload Evidence</Text>
-              <TouchableOpacity style={styles.pickerBox} onPress={pickImage}>
+              <TouchableOpacity
+                style={styles.pickerBox}
+                onPress={pickImage}
+                disabled={isUploadingEvidence}
+              >
                 {issueImage ? (
                   <View style={styles.previewWrap}>
                     <Image source={{ uri: issueImage }} style={styles.previewImg} />
@@ -619,15 +740,28 @@ export default function OrdersScreen() {
               {issueImage && evidenceUrl && !isUploadingEvidence && (
                 <Text style={styles.uploadHintReady}>Evidence uploaded — you can submit.</Text>
               )}
+              {issueImage && evidenceUploadError && !isUploadingEvidence && (
+                <Text style={styles.uploadHintError}>{evidenceUploadError}</Text>
+              )}
+
+              {submitIssueHint ? (
+                <Text style={styles.submitHint}>{submitIssueHint}</Text>
+              ) : null}
 
               <TouchableOpacity
                 style={[
                   styles.primaryBtn,
                   { marginTop: 30 },
-                  (isSubmittingReport || isUploadingEvidence || !evidenceUrl || !selectedReason) && { opacity: 0.6 },
+                  !canSubmitIssue && { opacity: 0.6 },
                 ]}
-                onPress={submitFinalReport}
-                disabled={isSubmittingReport || isUploadingEvidence || !evidenceUrl || !selectedReason}
+                onPress={() => {
+                  if (!canSubmitIssue) {
+                    Alert.alert('Cannot submit yet', submitIssueHint || 'Complete all required fields.');
+                    return;
+                  }
+                  submitFinalReport();
+                }}
+                disabled={isSubmittingReport || isUploadingEvidence}
               >
                 {isSubmittingReport ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Submit the issue</Text>}
               </TouchableOpacity>
@@ -719,6 +853,43 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b' },
   listView: { flex: 1 },
   list: { padding: 16, paddingBottom: 120 },
+  toolbar: { marginBottom: 12, gap: 10 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    minHeight: 46,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1e293b', paddingVertical: 10 },
+  filterRow: { gap: 8, paddingVertical: 2 },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  filterChipActive: { backgroundColor: '#4b6f9e', borderColor: '#4b6f9e' },
+  filterChipText: { fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase' },
+  filterChipTextActive: { color: '#fff' },
+  sortRow: { gap: 8 },
+  resultCount: { fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    marginRight: 8,
+  },
+  sortChipActive: { backgroundColor: '#e0e7ff' },
+  sortChipText: { fontSize: 11, fontWeight: '700', color: '#64748b' },
+  sortChipTextActive: { color: '#4b6f9e' },
   
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -771,7 +942,20 @@ const styles = StyleSheet.create({
   billValue: { fontSize: 24, fontWeight: '900', color: '#4b6f9e' },
   cancelBtn: { marginTop: 20, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#ef4444', justifyContent: 'center', alignItems: 'center' },
   cancelBtnText: { color: '#ef4444', fontWeight: '800', fontSize: 16 },
-  reportBtn: { marginTop: 20, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  downloadSummaryBtn: {
+    marginTop: 16,
+    backgroundColor: '#fff',
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#6ee7b7',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  downloadSummaryBtnText: { color: '#059669', fontWeight: '800', fontSize: 15 },
+  reportBtn: { marginTop: 12, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   reportBtnText: { color: '#f59e0b', fontWeight: '800', fontSize: 15 },
   
   label: { fontSize: 14, fontWeight: '800', color: '#64748b', marginTop: 20, marginBottom: 12 },
@@ -792,6 +976,8 @@ const styles = StyleSheet.create({
   },
   uploadHint: { marginTop: 8, fontSize: 13, color: '#64748b', fontWeight: '600' },
   uploadHintReady: { marginTop: 8, fontSize: 13, color: '#059669', fontWeight: '600' },
+  uploadHintError: { marginTop: 8, fontSize: 13, color: '#dc2626', fontWeight: '600' },
+  submitHint: { marginTop: 12, fontSize: 13, color: '#64748b', fontWeight: '600', textAlign: 'center' },
 
   alertOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   alertBox: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', alignItems: 'center' },

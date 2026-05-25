@@ -1,4 +1,8 @@
 const Order = require("../models/Order.model");
+const {
+  revenueMatchFilter,
+  netRevenueAddFieldsStage,
+} = require("../utils/orderRevenue");
 
 // ─── GET /api/analytics/top-products?limit=5 ─────────────────────────────────
 exports.getTopProducts = async (req, res) => {
@@ -7,7 +11,7 @@ exports.getTopProducts = async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 5, 20);
 
     const results = await Order.aggregate([
-      { $match: { tenantId, orderStatus: "DELIVERED" } },
+      { $match: revenueMatchFilter(tenantId) },
       { $unwind: "$items" },
       {
         $group: {
@@ -45,7 +49,7 @@ exports.getDailySales = async (req, res) => {
     const tenantId = req.user.tenantId;
     const { startDate, endDate, days } = req.query;
 
-    const matchStage = { tenantId, orderStatus: "DELIVERED" };
+    const matchStage = revenueMatchFilter(tenantId);
 
     if (startDate || endDate) {
       matchStage.createdAt = {};
@@ -70,12 +74,13 @@ exports.getDailySales = async (req, res) => {
 
     const results = await Order.aggregate([
       { $match: matchStage },
+      netRevenueAddFieldsStage,
       {
         $group: {
           _id: {
             $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
           },
-          totalSales: { $sum: "$totalAmount" },
+          totalSales: { $sum: "$netRevenue" },
           orderCount: { $sum: 1 },
         },
       },

@@ -1,6 +1,8 @@
 import { API_BASE_URL } from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
 import { store } from '@/store/store';
+import { File as ExpoFile, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 const BASE = API_BASE_URL.DEVELOPMENT;
 
@@ -185,6 +187,73 @@ export const rateOrderApi = async (
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || 'Failed to submit rating');
   return data; // { success: true, message }
+};
+
+/** Upload return evidence to Cloudinary via POST /api/upload/returns */
+export const uploadReturnEvidenceApi = async (
+  localUri: string,
+  fileName: string,
+  mimeType: string,
+) => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const formData = new FormData();
+  // @ts-expect-error React Native file part
+  formData.append('file', { uri: localUri, name: fileName, type: mimeType });
+
+  const res = await fetch(`${BASE}/api/upload/returns`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-tenant-id': await getActiveTenantId(),
+    },
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.url) {
+    throw new Error(data?.message || 'Upload failed');
+  }
+  return { url: String(data.url), public_id: data.public_id as string | undefined };
+};
+
+/** Download order summary PDF (same endpoint as customer website). Opens native share sheet to save/open. */
+export const downloadOrderSummaryPdfApi = async (orderId: string): Promise<void> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const tenantId = await getActiveTenantId();
+  const url = `${BASE}/api/orders/${orderId}/order-summary/download`;
+  const destination = new ExpoFile(Paths.cache, `order-summary-${orderId}.pdf`);
+
+  let pdfUri: string;
+  try {
+    const downloaded = await ExpoFile.downloadFileAsync(url, destination, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-tenant-id': tenantId,
+      },
+      idempotent: true,
+    });
+    pdfUri = downloaded.uri;
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : 'Failed to download order summary';
+    throw new Error(message);
+  }
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (!canShare) {
+    throw new Error('File sharing is not available on this device');
+  }
+
+  await Sharing.shareAsync(pdfUri, {
+    mimeType: 'application/pdf',
+    dialogTitle: 'Order summary',
+    UTI: 'com.adobe.pdf',
+  });
 };
 
 /** Submit an issue/return request for a delivered order. Uses POST /api/returns/create. */

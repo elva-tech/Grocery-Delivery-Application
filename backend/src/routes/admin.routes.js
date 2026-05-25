@@ -8,6 +8,7 @@ const {
   blockOrUnblockUser,
   getActiveOrders,
   getRevenue,
+  getRevenueReport,
   getPendingOrders,
   markCODPaid,
   retryOrderRefund,
@@ -43,6 +44,13 @@ router.get(
   authMiddleware,
   adminOnly,
   getRevenue
+);
+
+router.get(
+  "/revenue/report",
+  authMiddleware,
+  adminOnly,
+  getRevenueReport
 );
 
 //////////////////////////////////////////////////////

@@ -33,6 +33,9 @@ const settingsSchema = new mongoose.Schema(
       default: 10,
       min: 0,
     },
+    allowRefunds: { type: Boolean, default: true },
+    allowReportIssue: { type: Boolean, default: true },
+    allowOrderCancellation: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

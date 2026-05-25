@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { useAppState } from '../../context/AppStateContext';
+import { useAppState, isPendingReturnRequest } from '../../context/AppStateContext';
 import {
   LayoutDashboard,
   ShoppingBasket,
@@ -22,8 +22,11 @@ import { DollarSign } from 'lucide-react';
 
 const Sidebar = () => {
   const { storeName, logo } = useTenantBranding();
-  const { appSettings } = useAppState();
+  const { appSettings, returns } = useAppState();
   const location = useLocation();
+  const pendingRefundCount = appSettings.allowRefunds
+    ? returns.filter(isPendingReturnRequest).length
+    : 0;
 
   const menuSections = [
     {
@@ -122,9 +125,13 @@ const Sidebar = () => {
                             className={`${isActive ? 'text-white' : `${item.color} group-hover:scale-110 transition-transform`}`}
                           />
                           <span>{item.name}</span>
-                          {isActive && (
+                          {item.path === '/returns' && pendingRefundCount > 0 ? (
+                            <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-pulse">
+                              {pendingRefundCount}
+                            </span>
+                          ) : isActive ? (
                             <div className="ml-auto w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                          )}
+                          ) : null}
                         </>
                       )}
                     </NavLink>

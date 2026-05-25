@@ -114,8 +114,11 @@ updateProduct: async (productId, payload) => {
     return res.data;
   },
 
-  approveReturn: async (id, resolutionNote) => {
-    const res = await api.put(`/api/returns/approve/${id}`, { resolutionNote });
+  approveReturn: async (id, resolutionNote, refundAmount) => {
+    const res = await api.put(`/api/returns/approve/${id}`, {
+      resolutionNote,
+      refundAmount,
+    });
     return res.data;
   },
 
@@ -138,6 +141,11 @@ updateProduct: async (productId, payload) => {
 
   getOrders: async () => {
     const res = await api.get("/api/admin/orders?page=1&limit=100");
+    return res.data;
+  },
+
+  getRevenueReport: async () => {
+    const res = await api.get("/api/admin/revenue/report");
     return res.data;
   },
 

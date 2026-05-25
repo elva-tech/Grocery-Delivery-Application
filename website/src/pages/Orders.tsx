@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2, Star } from 'lucide-react';
+import { Package, Clock, AlertCircle, RotateCcw, X, Loader2, PartyPopper, AlertTriangle, CheckCircle2, Star, Search } from 'lucide-react';
 import type { RootState } from '../store/store';
 import { getUserOrders, cancelOrderApi, rateOrderApi, downloadOrderSummaryPdfApi } from '../api/ordersApi';
 import { addToCart } from '../store/slices/cartSlice';
@@ -10,6 +10,13 @@ import { useGetAppSettingsQuery } from '../api/apiSlice';
 import { resolveImageUrl } from '../utils/resolveImageUrl';
 import { useToast } from '../context/ToastContext';
 import { getCustomerOrderStatusTheme, getOnlineRefundSubtitle } from '../utils/orderStatusDisplay';
+import {
+  filterAndSortCustomerOrders,
+  ORDER_STATUS_FILTERS,
+  ORDER_SORT_OPTIONS,
+  type OrderSortBy,
+  type OrderStatusFilter,
+} from '../utils/customerOrderList';
 import { cartLineId } from '../utils/productVariants';
 
 const Orders = ({ openCart }: { openCart: () => void }) => {
@@ -37,6 +44,9 @@ const Orders = ({ openCart }: { openCart: () => void }) => {
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [ratingError, setRatingError] = useState('');
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>('all');
+  const [sortBy, setSortBy] = useState<OrderSortBy>('newest');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -162,17 +172,79 @@ const loadOrders = async () => {
     }
   };
 
-  const sections = [
-    { title: 'Waiting for confirmation', data: orders.filter(o => o.status === 'PLACED') },
-    { title: 'Order confirmed', data: orders.filter(o => o.status === 'CONFIRMED') },
-    { title: 'On its way', data: orders.filter(o => o.status === 'OUT_FOR_DELIVERY') },
-    {
-      title: 'Delivered & others',
-      data: orders.filter(o =>
-        ['DELIVERED', 'ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED', 'CANCELLED'].includes(o.status),
-      ),
-    },
-  ];
+  const displayOrders = useMemo(
+    () => filterAndSortCustomerOrders(orders, searchQuery, statusFilter, sortBy),
+    [orders, searchQuery, statusFilter, sortBy],
+  );
+
+  const renderOrderCard = (order: any) => {
+    const statusTheme = getCustomerOrderStatusTheme(order.status);
+    return (
+      <div
+        key={order.id}
+        onClick={() => setSelectedOrder(order)}
+        className={`group cursor-pointer p-6 rounded-[2rem] border-2 transition-all ${
+          selectedOrder?.id === order.id
+            ? 'border-[#4b6f9e] bg-white shadow-xl translate-x-2'
+            : 'border-transparent bg-white hover:border-slate-100 shadow-sm'
+        }`}
+      >
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              #{String(order.id).slice(-8)}
+            </span>
+            <h3 className="font-black text-slate-800">
+              {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </h3>
+          </div>
+          <div
+            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${statusTheme?.bg} ${statusTheme?.color}`}
+          >
+            {statusTheme?.label}
+          </div>
+        </div>
+        {order.status === 'PLACED' && statusTheme.subtitle && (
+          <p className="text-[11px] font-semibold text-amber-700 mb-3 -mt-1">{statusTheme.subtitle}</p>
+        )}
+        {getOnlineRefundSubtitle(order) && (
+          <p className="text-[11px] font-semibold text-slate-600 mb-3 -mt-1">
+            {getOnlineRefundSubtitle(order)}
+          </p>
+        )}
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            {order.items.length} Items
+          </p>
+          <p className="font-black text-slate-900">₹{order.totalAmount}</p>
+        </div>
+        {order.rating?.value && (
+          <div className="mt-3 flex items-center gap-1.5">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <Star
+                key={s}
+                size={12}
+                className={
+                  s <= order.rating.value
+                    ? 'fill-amber-400 text-amber-400'
+                    : 'fill-gray-200 text-gray-200'
+                }
+              />
+            ))}
+            {order.rating.comment && (
+              <span className="text-[10px] text-slate-400 font-semibold italic truncate max-w-[140px]">
+                {order.rating.comment}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -202,60 +274,66 @@ const loadOrders = async () => {
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
         <div className="md:col-span-5 space-y-8">
-          <h1 className="text-3xl font-black text-slate-900 mb-6 px-2 italic uppercase tracking-tighter">Order History.</h1>
-          
-          {sections.map((section) => section.data.length > 0 && (
-            <div key={section.title} className="space-y-4">
-              <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{section.title}</h2>
-              {section.data.map((order) => {
-                const statusTheme = getCustomerOrderStatusTheme(order.status);
-                return (
-                <div
-                  key={order.id}
-                  onClick={() => setSelectedOrder(order)}
-                  className={`group cursor-pointer p-6 rounded-[2rem] border-2 transition-all ${
-                    selectedOrder?.id === order.id ? 'border-[#4b6f9e] bg-white shadow-xl translate-x-2' : 'border-transparent bg-white hover:border-slate-100 shadow-sm'
+          <h1 className="text-3xl font-black text-slate-900 mb-4 px-2 italic uppercase tracking-tighter">
+            Order History.
+          </h1>
+
+          <div className="space-y-3 mb-6 px-2">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by order ID, item, date, amount…"
+                className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 outline-none focus:border-[#4b6f9e]"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ORDER_STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStatusFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wide transition-all ${
+                    statusFilter === f.id
+                      ? 'bg-[#4b6f9e] text-white shadow-md'
+                      : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">#{order.id}</span>
-                      <h3 className="font-black text-slate-800">
-                        {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
-                      </h3>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${statusTheme?.bg} ${statusTheme?.color}`}>
-                      {statusTheme?.label}
-                    </div>
-                  </div>
-                  {order.status === 'PLACED' && statusTheme.subtitle && (
-                    <p className="text-[11px] font-semibold text-amber-700 mb-3 -mt-1">{statusTheme.subtitle}</p>
-                  )}
-                  {getOnlineRefundSubtitle(order) && (
-                    <p className="text-[11px] font-semibold text-slate-600 mb-3 -mt-1">{getOnlineRefundSubtitle(order)}</p>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{order.items.length} Items</p>
-                    <p className="font-black text-slate-900">₹{order.totalAmount}</p>
-                  </div>
-                  {/* Inline rating badge on card */}
-                  {order.rating?.value && (
-                    <div className="mt-3 flex items-center gap-1.5">
-                      {[1,2,3,4,5].map(s => (
-                        <Star key={s} size={12}
-                          className={s <= order.rating.value ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}
-                        />
-                      ))}
-                      {order.rating.comment && (
-                        <span className="text-[10px] text-slate-400 font-semibold italic truncate max-w-[140px]">{order.rating.comment}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                );
-              })}
+                  {f.label}
+                </button>
+              ))}
             </div>
-          ))}
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                {displayOrders.length} of {orders.length} orders
+              </p>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as OrderSortBy)}
+                className="text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-[#4b6f9e] text-slate-700"
+              >
+                {ORDER_SORT_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {orders.length === 0 ? (
+              <p className="text-center text-slate-400 font-bold py-12">No orders yet.</p>
+            ) : displayOrders.length === 0 ? (
+              <p className="text-center text-slate-400 font-bold py-12">
+                No orders match your search or filter.
+              </p>
+            ) : (
+              displayOrders.map((order) => renderOrderCard(order))
+            )}
+          </div>
         </div>
 
         <div className="md:col-span-7">
@@ -346,9 +424,10 @@ const loadOrders = async () => {
                       )}
 
                       {/* REPORT ISSUE TOGGLE */}
-                      {settings?.allowReportIssue && (
+                      {(settings?.allowReportIssue || settings?.allowRefunds) &&
+                        !['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder.status) && (
                         <button onClick={() => setIsReportModalOpen(true)} className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all">
-                          <AlertCircle size={14} /> Report Issue
+                          <AlertCircle size={14} /> Return / Report Issue
                         </button>
                       )}
                     </>
@@ -415,6 +494,17 @@ const loadOrders = async () => {
                         </div>
                       </div>
 
+                      {selectedOrder.returnReason && (
+                        <div className="bg-white/80 p-3 rounded-2xl border border-black/5 shadow-sm">
+                          <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">Your return reason:</p>
+                          <p className="text-xs font-bold text-slate-700">{selectedOrder.returnReason}</p>
+                        </div>
+                      )}
+                      {selectedOrder.returnEvidence && (
+                        <a href={selectedOrder.returnEvidence} target="_blank" rel="noreferrer" className="block rounded-2xl overflow-hidden border border-black/5">
+                          <img src={selectedOrder.returnEvidence} alt="Return evidence" className="w-full max-h-40 object-cover" />
+                        </a>
+                      )}
                       {selectedOrder.adminNote && (
                         <div className="bg-white/80 p-3 rounded-2xl border border-black/5 shadow-sm">
                           <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">Support Message:</p>

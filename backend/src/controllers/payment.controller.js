@@ -11,11 +11,14 @@ exports.initiatePayment = async (req, res) => {
     const result = await createPayment(order_id, req.user.userId);
     return res.status(200).json(result);
   } catch (err) {
-    console.error("initiatePayment error:", err);
+    console.error("initiatePayment error:", err.message, err.cause?.message || "");
     const status = err.status || 500;
-    return res
-      .status(status)
-      .json({ message: err.message || "Payment initiation failed" });
+    let message = err.message || "Payment initiation failed";
+    if (message.includes("decrypt vendor")) {
+      message =
+        "Store payment setup is invalid. Re-save Razorpay credentials in admin or contact support.";
+    }
+    return res.status(status).json({ message });
   }
 };
 

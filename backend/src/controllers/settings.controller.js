@@ -22,7 +22,16 @@ exports.getSettings = async (req, res) => {
 exports.updateSettings = async (req, res) => {
   try {
     const tenantId = req.user?.tenantId;
-    const { deliveryCharge, freeDeliveryAbove, discountType, discountValue, thresholdDistance } = req.body;
+    const {
+      deliveryCharge,
+      freeDeliveryAbove,
+      discountType,
+      discountValue,
+      thresholdDistance,
+      allowRefunds,
+      allowReportIssue,
+      allowOrderCancellation,
+    } = req.body;
 
     if (deliveryCharge !== undefined && deliveryCharge < 0) {
       return res.status(400).json({ message: "deliveryCharge must be >= 0" });
@@ -39,7 +48,18 @@ exports.updateSettings = async (req, res) => {
 
     const settings = await Settings.findOneAndUpdate(
       { tenantId },
-      { $set: { deliveryCharge, freeDeliveryAbove, discountType, discountValue, thresholdDistance } },
+      {
+        $set: {
+          deliveryCharge,
+          freeDeliveryAbove,
+          discountType,
+          discountValue,
+          thresholdDistance,
+          allowRefunds,
+          allowReportIssue,
+          allowOrderCancellation,
+        },
+      },
       { new: true, upsert: true, runValidators: true }
     );
 

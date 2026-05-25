@@ -1,4 +1,5 @@
 const Order = require("../models/Order.model");
+const ReturnRequest = require("../models/ReturnRequest.model");
 const Tenant = require("../models/Tenant.model");
 const CustomerInvoice = require("../models/CustomerInvoice.model");
 const Address = require("../models/Address.model");
@@ -18,7 +19,8 @@ const {
 const { assertCanPlaceOrder } = require("../modules/billing/services/enforcement.service");
 const {
   isValidIndianPincodeFormat,
-  lookupIndianPincode,
+  extractPinFromAddressFields,
+  resolveDeliveryPinLocation,
 } = require("../services/pincodeLookup.service");
 const {
   generateAndUploadInvoicePdf,
@@ -174,14 +176,16 @@ exports.placeCustomerOrder = async (req, res) => {
       return res.status(400).json({ message: "Valid delivery address required" });
     }
 
-    const pinDigits = String(deliveryAddress?.pincode || "")
-      .replace(/\D/g, "")
-      .slice(0, 6);
+    const pinDigits = extractPinFromAddressFields(deliveryAddress);
     if (!isValidIndianPincodeFormat(pinDigits)) {
       return res.status(400).json({ message: "Enter a valid 6-digit Indian PIN code" });
     }
 
-    const pinLookup = await lookupIndianPincode(pinDigits);
+    const pinLookup = await resolveDeliveryPinLocation(
+      pinDigits,
+      deliveryAddress,
+      { lat, lng }
+    );
     if (!pinLookup.ok) {
       return res.status(400).json({
         message: "PIN code not found. Enter a valid Indian PIN code.",
@@ -449,9 +453,19 @@ exports.getCustomerOrderHistory = async (req, res) => {
       .populate("riderId", "name phoneNumber")
       .lean();
 
-    const formattedOrders = orders.map(order => ({
-      id: order._id,                          // ✅ IMPORTANT (frontend expects id)
-      status: order.orderStatus,              // ✅ rename
+    const orderIds = orders.map((o) => o._id);
+    const returnRows = await ReturnRequest.find({ orderId: { $in: orderIds } })
+      .select("orderId reason customerComment evidenceImage status resolutionNote refundAmount createdAt")
+      .lean();
+    const returnByOrderId = new Map(
+      returnRows.map((r) => [String(r.orderId), r])
+    );
+
+    const formattedOrders = orders.map(order => {
+      const returnReq = returnByOrderId.get(String(order._id));
+      return {
+      id: order._id,
+      status: order.orderStatus,
       totalAmount: order.totalAmount,
       paymentStatus: order.paymentStatus,
       paymentMode: order.paymentMode,
@@ -459,6 +473,10 @@ exports.getCustomerOrderHistory = async (req, res) => {
       refundedAt: order.refundedAt,
       refundAmount: order.refundAmount,
       createdAt: order.createdAt,
+      returnReason: returnReq?.reason || null,
+      returnEvidence: returnReq?.evidenceImage || null,
+      returnStatus: returnReq?.status || null,
+      adminNote: returnReq?.resolutionNote || null,
 
       // ✅ ADD THESE (you already store them)
       address: formatDeliveryAddressForCustomer(order.deliveryAddress),
@@ -489,7 +507,8 @@ exports.getCustomerOrderHistory = async (req, res) => {
           image: imageUrl,
         };
       }),
-    }));
+    };
+    });
 
     res.status(200).json({
       message: "Orders fetched successfully",
@@ -860,29 +879,26 @@ exports.getAllOrders = async (req, res) => {
  */
 exports.getRevenue = async (req, res) => {
   try {
-
     const tenantId = req.user.tenantId;
+    const { getOrderNetRevenue, revenueMatchFilter } = require("../utils/orderRevenue");
 
-    const orders = await Order.find({
-      tenantId,
-      orderStatus: { $ne: "CANCELLED" }
-    });
+    const orders = await Order.find(revenueMatchFilter(tenantId)).select(
+      "totalAmount orderStatus paymentStatus refundAmount refundStatus"
+    );
 
-    const totalRevenue = orders.reduce(
-      (sum, order) => sum + order.totalAmount,
-      0
+    const totalRevenue = Number(
+      orders.reduce((sum, order) => sum + getOrderNetRevenue(order), 0).toFixed(2)
     );
 
     res.status(200).json({
       message: "Revenue calculated successfully",
       totalRevenue,
-      totalOrders: orders.length
+      totalOrders: orders.length,
     });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({
-      message: "Something went wrong"
+      message: "Something went wrong",
     });
   }
 };
