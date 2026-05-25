@@ -14,3 +14,6 @@ export function getTenantId(): string {
 
   return "puma";
 }
+
+/** @deprecated Import from `@/src/utils/tenantStorage` — async tenant for API headers */
+export { getActiveTenantId } from './tenantStorage';

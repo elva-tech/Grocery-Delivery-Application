@@ -105,12 +105,20 @@ export const getUserOrders = async () => {
       id: order.id,
       status: order.status,
       totalAmount: order.totalAmount,
+      paymentStatus: order.paymentStatus,
+      paymentMode: order.paymentMode,
+      refundStatus: order.refundStatus,
+      refundAmount: order.refundAmount,
       createdAt: order.createdAt,
       address: order.address,
       deliverySlot: order.deliverySlot,
       invoiceAvailable: Boolean(order.invoiceAvailable),
       deliveryPartner: order.deliveryPartner || null,
-      items: order.items || []
+      adminNote: order.adminNote,
+      returnReason: order.returnReason,
+      returnEvidence: order.returnEvidence,
+      items: order.items || [],
+      rating: order.rating,
     }));
 
   } catch (error) {

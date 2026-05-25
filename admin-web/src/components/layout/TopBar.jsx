@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom'; // Added for navigation
-import { Bell, AlertTriangle, Package, X } from 'lucide-react';
-import { useAppState } from '../../context/AppStateContext';
+import { Bell, AlertTriangle, Package, X, RotateCcw } from 'lucide-react';
+import { useAppState, isPendingReturnRequest } from '../../context/AppStateContext';
 import { useTenantBranding } from '../../context/TenantBrandingContext';
 
 const GlobalNotification = () => {
   const { logisticsLabel } = useTenantBranding();
-  const { products, orders } = useAppState();
+  const { products, orders, returns, appSettings } = useAppState();
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
 
   const lowStockItems = products.filter(p => p.stock < 10);
   const newOrders = orders.filter(o => o.status === 'Placed');
-  const totalCount = lowStockItems.length + newOrders.length;
+  const pendingRefunds = appSettings.allowRefunds
+    ? returns.filter(isPendingReturnRequest)
+    : [];
+  const totalCount =
+    lowStockItems.length + newOrders.length + pendingRefunds.length;
 
   // Function to handle clicking an alert
   const handleAlertClick = (path) => {
@@ -56,6 +60,27 @@ const GlobalNotification = () => {
                 </div>
               ) : (
                 <div className="space-y-1">
+                  {pendingRefunds.map((req) => (
+                    <div
+                      key={req.id}
+                      onClick={() => handleAlertClick('/returns')}
+                      className="flex items-center gap-3 p-3 hover:bg-amber-50 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <div className="w-8 h-8 bg-amber-100 text-amber-700 rounded-lg flex items-center justify-center shrink-0">
+                        <RotateCcw size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800">
+                          Refund request
+                          {req.orderId ? ` · #${String(req.orderId).slice(-6)}` : ''}
+                        </p>
+                        <p className="text-[10px] text-amber-700 font-bold uppercase">
+                          {req.customerName || 'Customer'} — awaiting review
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
                   {newOrders.map(order => (
                     <div 
                       key={order.id} 

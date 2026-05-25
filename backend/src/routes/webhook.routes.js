@@ -2,20 +2,84 @@ const express = require("express");
 const router = express.Router();
 const crypto = require("crypto");
 const Order = require("../models/Order.model");
+const Vendor = require("../models/Vendor.model");
 const { applyRefundWebhook } = require("../services/orderRefund.service");
+const { getVendorWebhookSecret } = require("../utils/getVendorRazorpayClient");
 
-// Must be registered BEFORE express.json() in app.js
-// Uses express.raw() to preserve the raw body for signature verification
+async function resolveTenantIdFromEvent(event) {
+  const paymentEntity = event?.payload?.payment?.entity;
+  const refundEntity = event?.payload?.refund?.entity;
+
+  if (paymentEntity?.notes?.tenantId) {
+    return paymentEntity.notes.tenantId;
+  }
+
+  if (refundEntity?.notes?.tenantId) {
+    return refundEntity.notes.tenantId;
+  }
+
+  const orderId =
+    paymentEntity?.notes?.orderId ||
+    paymentEntity?.notes?.order_id ||
+    refundEntity?.notes?.orderId ||
+    refundEntity?.notes?.order_id;
+
+  if (orderId) {
+    const order = await Order.findById(orderId).select("tenantId").lean();
+    return order?.tenantId || null;
+  }
+
+  const razorpayOrderId = paymentEntity?.order_id;
+  if (razorpayOrderId) {
+    const order = await Order.findOne({ razorpayOrderId })
+      .select("tenantId")
+      .lean();
+    return order?.tenantId || null;
+  }
+
+  return null;
+}
+
+function resolveInternalOrderId(paymentEntity) {
+  return (
+    paymentEntity?.notes?.orderId || paymentEntity?.notes?.order_id || null
+  );
+}
+
 router.post(
   "/razorpay",
   express.raw({ type: "application/json" }),
   async (req, res) => {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers["x-razorpay-signature"];
 
-    if (!webhookSecret) {
-      console.error("RAZORPAY_WEBHOOK_SECRET is not set");
-      return res.status(500).json({ message: "Webhook secret not configured" });
+    let event;
+    try {
+      event = JSON.parse(req.body.toString());
+    } catch {
+      return res.status(400).json({ message: "Invalid JSON payload" });
+    }
+
+    const tenantId = await resolveTenantIdFromEvent(event);
+    if (!tenantId) {
+      console.error("Webhook: missing tenantId in notes or order mapping");
+      return res.status(400).json({ message: "Missing tenantId in webhook payload" });
+    }
+
+    const vendor = await Vendor.findOne({ tenantId });
+    if (!vendor) {
+      console.error("Webhook: vendor not found", { tenantId });
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+
+    let webhookSecret;
+    try {
+      webhookSecret = getVendorWebhookSecret(vendor);
+    } catch (err) {
+      console.error("Webhook: vendor secret unavailable", {
+        tenantId,
+        message: err.message,
+      });
+      return res.status(500).json({ message: "Vendor webhook secret not configured" });
     }
 
     const expectedSignature = crypto
@@ -27,22 +91,17 @@ router.post(
       return res.status(400).json({ message: "Invalid webhook signature" });
     }
 
-    let event;
-    try {
-      event = JSON.parse(req.body.toString());
-    } catch {
-      return res.status(400).json({ message: "Invalid JSON payload" });
-    }
-
     const eventName = event?.event;
 
-    // Refund lifecycle (order cancellation refunds)
     if (eventName && eventName.startsWith("refund.")) {
       const refundEntity = event?.payload?.refund?.entity;
       try {
         await applyRefundWebhook(refundEntity);
       } catch (err) {
-        console.error("Webhook: refund handler failed", err);
+        console.error("Webhook: refund handler failed", {
+          tenantId,
+          message: err.message,
+        });
         return res.status(500).json({ message: "Internal error" });
       }
       return res.status(200).json({ received: true });
@@ -56,23 +115,29 @@ router.post(
 
     const razorpayPaymentId = paymentEntity.id;
     const razorpayOrderId = paymentEntity.order_id;
+    const internalOrderId = resolveInternalOrderId(paymentEntity);
 
-    const internalOrderId = paymentEntity.notes?.order_id;
     const order = internalOrderId
       ? await Order.findById(internalOrderId)
       : await Order.findOne({ razorpayOrderId });
 
     if (!order) {
-      console.error("Webhook: order not found", { internalOrderId, razorpayOrderId });
+      console.error("Webhook: order not found", {
+        tenantId,
+        internalOrderId,
+        razorpayOrderId,
+      });
       return res.status(200).json({ received: true });
     }
 
     try {
       if (eventName === "payment.captured") {
         if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
-          console.log("Webhook: already PAID/REFUNDED, skipping", {
-            orderId: order._id,
-            event: eventName,
+          console.log({
+            tenantId: order.tenantId,
+            orderId: order._id.toString(),
+            razorpayOrderId,
+            paymentStatus: order.paymentStatus,
           });
           return res.status(200).json({ received: true });
         }
@@ -80,30 +145,38 @@ router.post(
           paymentStatus: "PAID",
           razorpayPaymentId,
         });
-        console.log("Webhook: order marked PAID", {
-          orderId: order._id,
+        console.log({
+          tenantId: order.tenantId,
+          orderId: order._id.toString(),
           razorpayOrderId,
-          razorpayPaymentId,
-          event: eventName,
+          paymentStatus: "PAID",
         });
       } else if (eventName === "payment.failed") {
         if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
-          console.log("Webhook: already PAID/REFUNDED, ignoring failed event", {
-            orderId: order._id,
+          console.log({
+            tenantId: order.tenantId,
+            orderId: order._id.toString(),
+            razorpayOrderId,
+            paymentStatus: order.paymentStatus,
           });
           return res.status(200).json({ received: true });
         }
         await Order.findByIdAndUpdate(order._id, {
           paymentStatus: "FAILED",
         });
-        console.log("Webhook: order marked FAILED", {
-          orderId: order._id,
+        console.log({
+          tenantId: order.tenantId,
+          orderId: order._id.toString(),
           razorpayOrderId,
-          event: eventName,
+          paymentStatus: "FAILED",
         });
       }
     } catch (err) {
-      console.error("Webhook: DB update failed", err);
+      console.error("Webhook: DB update failed", {
+        tenantId,
+        orderId: order._id.toString(),
+        message: err.message,
+      });
       return res.status(500).json({ message: "Internal error" });
     }
 

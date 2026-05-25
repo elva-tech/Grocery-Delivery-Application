@@ -119,6 +119,29 @@ function normalizeAdminOrderRow(o) {
   };
 }
 
+export function isPendingReturnRequest(r) {
+  return String(r?.status || '').toLowerCase() === 'pending';
+}
+
+function normalizeReturnRow(r) {
+  const evidence = r.evidenceImage || r.evidence || '';
+  return {
+    id: r._id,
+    orderId: r.orderId?._id || r.orderId,
+    orderTotal: r.orderId?.totalAmount,
+    orderItems: r.orderId?.items || [],
+    paymentMode: r.orderId?.paymentMode,
+    customerName: r.userId?.name || 'Unknown',
+    date: r.createdAt,
+    status: String(r.status || '').toUpperCase(),
+    reason: r.reason,
+    amount: r.refundAmount,
+    comment: r.customerComment,
+    adminComment: r.resolutionNote,
+    evidence,
+  };
+}
+
 export const AppStateProvider = ({ children }) => {
   const { showToast } = useToast();
 
@@ -184,101 +207,95 @@ export const AppStateProvider = ({ children }) => {
 
   useEffect(() => { fetchProductsFromAPI(); }, [fetchProductsFromAPI]);
 
-  // Fetch returns from backend
-  useEffect(() => {
-    const fetchReturns = async () => {
-      try {
-        const token = localStorage.getItem('jwtToken');
-        if (!token) return;
-        const data = await apiService.getAllReturns();
-        // Normalize for frontend usage
-        const normalized = (data.data || []).map(r => ({
-          id: r._id,
-          orderId: r.orderId?._id || r.orderId,
-          customerName: r.userId?.name || 'Unknown',
-          date: r.createdAt,
-          status: (r.status || '').toUpperCase(),
-          reason: r.reason,
-          amount: r.refundAmount,
-          comment: r.customerComment,
-          adminComment: r.resolutionNote,
-          evidence: r.evidence || '',
-        }));
-        setReturns(normalized);
-      } catch (err) {
-        setReturns([]);
-      }
-    };
-    fetchReturns();
+  const fetchReturns = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('jwtToken');
+      if (!token) return;
+      const data = await apiService.getAllReturns();
+      setReturns((data.data || []).map(normalizeReturnRow));
+    } catch (err) {
+      console.error('fetchReturns failed:', err);
+      setReturns([]);
+    }
   }, []);
-  // Process return request (approve/reject)
-  const processReturnRequest = async (id, decision, resolutionNote) => {
+
+  useEffect(() => {
+    fetchReturns();
+  }, [fetchReturns]);
+
+  /* Poll returns so new refund requests show in alerts without manual refresh */
+  useEffect(() => {
+    const token = localStorage.getItem('jwtToken');
+    if (!token) return undefined;
+    const id = setInterval(() => {
+      fetchReturns();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [fetchReturns]);
+
+  const processReturnRequest = async (id, decision, resolutionNote, refundAmount) => {
     try {
       if (decision === 'APPROVE') {
-        await apiService.approveReturn(id, resolutionNote);
+        await apiService.approveReturn(id, resolutionNote, refundAmount);
+        showToast('success', 'Refund initiated — amount will return to customer’s payment method.');
       } else if (decision === 'REJECT') {
         await apiService.rejectReturn(id, resolutionNote);
+        showToast('success', 'Return request rejected.');
       }
-      // Refresh returns after action
-      const data = await apiService.getAllReturns();
-      const normalized = (data.data || []).map(r => ({
-        id: r._id,
-        orderId: r.orderId?._id || r.orderId,
-        customerName: r.userId?.name || 'Unknown',
-        date: r.createdAt,
-        status: (r.status || '').toUpperCase(),
-        reason: r.reason,
-        amount: r.refundAmount,
-        comment: r.customerComment,
-        adminComment: r.resolutionNote,
-        evidence: r.evidence || '',
-      }));
-      setReturns(normalized);
+      await fetchReturns();
+      return true;
     } catch (err) {
-      showToast('error', 'Failed to process return request.');
+      const msg =
+        err?.response?.data?.message || err?.message || 'Failed to process return request.';
+      showToast('error', msg);
+      throw err;
     }
   };
 
   /* ---------- FETCH ORDERS ---------- */
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (opts = {}) => {
+    const silent = Boolean(opts.silent);
 
-    // Only fetch if user has a token
     const token = localStorage.getItem('jwtToken');
     if (!token) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
-
       const data = await apiService.getOrders();
-
       const normalized = (data.orders || []).map(normalizeAdminOrderRow);
-
       setOrders(normalized);
-
     } catch (err) {
-
-      // Handle 401 - redirect to login
       if (err.response?.status === 401) {
         localStorage.removeItem('jwtToken');
         localStorage.removeItem('freshroot_user');
         window.location.href = '/login';
         return;
       }
-
-      console.error("Failed to fetch orders:", err);
-      setError("Failed to load orders");
-
+      console.error('Failed to fetch orders:', err);
+      if (!silent) setError('Failed to load orders');
     } finally {
-
-      setLoading(false);
-
+      if (!silent) setLoading(false);
     }
-
   }, []);
+
+  useEffect(() => {
+    fetchOrders({ silent: true });
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('jwtToken');
+    if (!token) return undefined;
+    const id = setInterval(() => {
+      fetchOrders({ silent: true });
+    }, 30000);
+    return () => clearInterval(id);
+  }, [fetchOrders]);
 
   /* ---------- FETCH RIDERS ---------- */
   useEffect(() => {
@@ -447,6 +464,7 @@ export const AppStateProvider = ({ children }) => {
       banners,
       returns,
       processReturnRequest,
+      refreshReturns: fetchReturns,
 
       // Product CRUD — all trigger a backend refetch so the list stays in sync
       addProduct:    async () => { await fetchProductsFromAPI(); },

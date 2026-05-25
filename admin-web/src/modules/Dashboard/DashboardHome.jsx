@@ -253,7 +253,7 @@ const DashboardHome = () => {
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-black text-[#1A4D2E]">System Overview</h1>
+          <h1 className="text-3xl font-black text-[#1A4D2E]">Store Performance</h1>
           <p className="text-slate-500 font-medium italic flex items-center gap-2">
             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
             Time: {lastUpdated}
@@ -271,7 +271,12 @@ const DashboardHome = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div onClick={() => navigate('/reports')} className="cursor-pointer">
-          <StatCard title="Net Revenue" value={`₹${dashboardMetrics.netRevenue.toLocaleString('en-IN')}`} icon={<IndianRupee />} color="emerald" />
+          <StatCard
+            title={`Net Revenue (${timeFilter === '7' ? '7 days' : `${timeFilter} days`})`}
+            value={`₹${dashboardMetrics.netRevenue.toLocaleString('en-IN')}`}
+            icon={<IndianRupee />}
+            color="emerald"
+          />
         </div>
         <div onClick={() => navigate('/products')} className="cursor-pointer">
           <StatCard title="Stock Value" value={`₹${dashboardMetrics.stockValue.toLocaleString('en-IN')}`} icon={<ShoppingBag />} color="blue" />
@@ -290,7 +295,9 @@ const DashboardHome = () => {
             <h3 className="font-bold text-slate-800 flex items-center gap-2">
               <TrendingUp size={18} className="text-emerald-500" /> Revenue Flow
             </h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Financial Performance</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+              Delivered net revenue (refunds deducted)
+            </p>
           </div>
           <select 
             value={timeFilter}

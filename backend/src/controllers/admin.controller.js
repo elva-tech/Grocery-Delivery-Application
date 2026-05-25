@@ -10,6 +10,11 @@ const Product = require("../models/Product.model");
 const User = require("../models/User.model");
 const Rider = require("../models/Rider.model");
 const mongoose = require("mongoose");
+const {
+  revenueMatchFilter,
+  netRevenueAddFieldsStage,
+  getOrderNetRevenue,
+} = require("../utils/orderRevenue");
 
 const allowedStatuses = [
   "PLACED",
@@ -119,10 +124,18 @@ exports.updateOrderStatus = async (req, res) => {
 
     const currentStatus = order.orderStatus;
 
-    if (!allowedTransitions[currentStatus].includes(status)) {
+    if (currentStatus === status) {
+      return res.status(200).json({
+        success: true,
+        message: "Order status unchanged",
+        order: await Order.findById(id),
+      });
+    }
+
+    if (!allowedTransitions[currentStatus]?.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status transition"
+        message: "Invalid status transition",
       });
     }
 
@@ -399,22 +412,17 @@ exports.getRevenue = async (req, res) => {
     const today = new Date();
     const dateMap = {};
     
-    // Step 1: Aggregate revenue
+    // Delivered net revenue (minus refunds) per day
     const revenueData = await Order.aggregate([
       {
-        $match: {
-          tenantId,
-          $or: [
-            { paymentStatus: "PAID" },
-            { orderStatus: "DELIVERED" }
-          ],
-          orderStatus: { $ne: "CANCELLED" },
+        $match: revenueMatchFilter(tenantId, {
           createdAt: {
             $gte: fromDate,
-            $lte: toDate
-          }
-        }
+            $lte: toDate,
+          },
+        }),
       },
+      netRevenueAddFieldsStage,
       {
         $group: {
            _id: {
@@ -424,7 +432,7 @@ exports.getRevenue = async (req, res) => {
               timezone: "Asia/Kolkata"
             }
           },
-          totalRevenue: { $sum: "$totalAmount" }
+          totalRevenue: { $sum: "$netRevenue" }
         }
       },
       {
@@ -479,6 +487,56 @@ exports.getRevenue = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch revenue"
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// ADMIN - REVENUE REPORT (ALL-TIME, DELIVERED − REFUNDS)
+//////////////////////////////////////////////////////////////
+
+exports.getRevenueReport = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    const orders = await Order.find(revenueMatchFilter(tenantId))
+      .sort({ createdAt: -1 })
+      .select(
+        "totalAmount orderStatus paymentStatus refundAmount refundStatus createdAt customerName"
+      )
+      .populate("userId", "name")
+      .lean();
+
+    const rows = orders.map((o) => {
+      const net = getOrderNetRevenue(o);
+      return {
+        orderId: o._id,
+        date: o.createdAt,
+        customer: o.customerName || o.userId?.name || "Unknown",
+        grossAmount: o.totalAmount,
+        amount: net,
+        orderStatus: o.orderStatus,
+        paymentStatus: o.paymentStatus,
+        refundStatus: o.refundStatus,
+        refundAmount: o.refundAmount,
+      };
+    });
+
+    const totalRevenue = Number(
+      rows.reduce((sum, r) => sum + r.amount, 0).toFixed(2)
+    );
+
+    return res.status(200).json({
+      success: true,
+      totalRevenue,
+      orderCount: rows.length,
+      rows,
+    });
+  } catch (error) {
+    console.error("Revenue report error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch revenue report",
     });
   }
 };

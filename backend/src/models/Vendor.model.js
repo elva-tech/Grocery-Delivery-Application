@@ -8,13 +8,20 @@ const vendorSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
-    razorpayAccountId: {
-      type: String,
-      default: null,
-    },
-    commissionPercent: {
-      type: Number,
-      default: null,
+    razorpay: {
+      keyId: { type: String, default: null },
+      encryptedKeySecret: { type: String, default: null },
+      encryptedWebhookSecret: { type: String, default: null },
+      onboardingStatus: {
+        type: String,
+        enum: ["PENDING", "ACTIVE"],
+        default: "PENDING",
+      },
+      accountStatus: {
+        type: String,
+        enum: ["ACTIVE", "DISABLED"],
+        default: "ACTIVE",
+      },
     },
   },
   { timestamps: true }

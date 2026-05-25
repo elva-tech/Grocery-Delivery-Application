@@ -144,13 +144,33 @@ export const apiSlice = createApi({
 
     /* ----------- SETTINGS (Remote Config) ----------- */
     getAppSettings: builder.query<AppSettings, void>({
-      queryFn: () => ({
-        data: {
-          allowRefunds: true,
-          allowReportIssue: false,
-          allowOrderCancellation: true
+      queryFn: async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/settings`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-tenant-id': getTenantId(),
+            },
+          });
+          if (!res.ok) throw new Error('settings fetch failed');
+          const s = await res.json();
+          return {
+            data: {
+              allowRefunds: s.allowRefunds ?? true,
+              allowReportIssue: s.allowReportIssue ?? true,
+              allowOrderCancellation: s.allowOrderCancellation ?? true,
+            },
+          };
+        } catch {
+          return {
+            data: {
+              allowRefunds: true,
+              allowReportIssue: true,
+              allowOrderCancellation: true,
+            },
+          };
         }
-      }),
+      },
     }),
 
     /* ----------- CATEGORIES (derived from products) ----------- */

@@ -1,16 +1,22 @@
-const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const Order = require("../models/Order.model");
 const Vendor = require("../models/Vendor.model");
+const {
+  getVendorRazorpayClient,
+  getVendorKeySecret,
+  assertVendorPaymentReady,
+} = require("../utils/getVendorRazorpayClient");
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+async function loadVendorForOrder(order) {
+  const vendor = await Vendor.findOne({ tenantId: order.tenantId });
+  assertVendorPaymentReady(vendor, order.tenantId);
+  return vendor;
+}
 
-const DEFAULT_COMMISSION_PERCENT = parseFloat(
-  process.env.PLATFORM_COMMISSION_PERCENT || "10"
-);
+async function fetchExistingRazorpayOrder(vendor, razorpayOrderId) {
+  const razorpay = getVendorRazorpayClient(vendor);
+  return razorpay.orders.fetch(razorpayOrderId);
+}
 
 async function createPayment(orderId, userId) {
   const order = await Order.findById(orderId);
@@ -33,12 +39,18 @@ async function createPayment(orderId, userId) {
     throw err;
   }
 
-  // Idempotency: return existing Razorpay order without creating a duplicate
+  const vendor = await loadVendorForOrder(order);
+
   if (order.razorpayOrderId && order.razorpayOrderId !== "LOCKED") {
-    const rzpOrder = await razorpay.orders.fetch(order.razorpayOrderId);
-    console.log("createPayment: returning existing razorpay order", {
-      orderId,
+    const rzpOrder = await fetchExistingRazorpayOrder(
+      vendor,
+      order.razorpayOrderId
+    );
+    console.log({
+      tenantId: order.tenantId,
+      orderId: order._id.toString(),
       razorpayOrderId: rzpOrder.id,
+      paymentStatus: order.paymentStatus,
     });
     return {
       razorpay_order_id: rzpOrder.id,
@@ -47,7 +59,6 @@ async function createPayment(orderId, userId) {
     };
   }
 
-  // Race condition fix: atomic lock — only one request proceeds if razorpayOrderId is null
   const locked = await Order.findOneAndUpdate(
     { _id: orderId, razorpayOrderId: null },
     { $set: { razorpayOrderId: "LOCKED" } },
@@ -55,11 +66,13 @@ async function createPayment(orderId, userId) {
   );
 
   if (!locked) {
-    // Another request already claimed the lock; wait briefly then return existing
     await new Promise((resolve) => setTimeout(resolve, 500));
     const refreshed = await Order.findById(orderId);
     if (refreshed?.razorpayOrderId && refreshed.razorpayOrderId !== "LOCKED") {
-      const rzpOrder = await razorpay.orders.fetch(refreshed.razorpayOrderId);
+      const rzpOrder = await fetchExistingRazorpayOrder(
+        vendor,
+        refreshed.razorpayOrderId
+      );
       return {
         razorpay_order_id: rzpOrder.id,
         amount: rzpOrder.amount,
@@ -72,48 +85,26 @@ async function createPayment(orderId, userId) {
   }
 
   try {
-    const vendor = await Vendor.findOne({ tenantId: order.tenantId });
-
     const amountInPaise = Math.round(order.totalAmount * 100);
+    const razorpay = getVendorRazorpayClient(vendor);
 
-    const rzpOrderOptions = {
+    const rzpOrder = await razorpay.orders.create({
       amount: amountInPaise,
       currency: "INR",
       receipt: `rcpt_${orderId}`.substring(0, 40),
       notes: {
-        order_id: order._id.toString(),
-      },
-    };
-
-    // Only add route transfer if vendor is onboarded with a linked Razorpay account
-    if (vendor?.razorpayAccountId) {
-      const commissionPercent = vendor.commissionPercent ?? DEFAULT_COMMISSION_PERCENT;
-      const commissionAmount = Math.round((amountInPaise * commissionPercent) / 100);
-      const vendorAmount = amountInPaise - commissionAmount;
-      rzpOrderOptions.transfers = [
-        {
-          account: vendor.razorpayAccountId,
-          amount: vendorAmount,
-          currency: "INR",
-          notes: { order_id: order._id.toString() },
-          linked_account_notes: ["order_id"],
-          on_hold: 0,
-        },
-      ];
-    } else {
-      console.warn("createPayment: vendor not onboarded, skipping transfer split", {
         tenantId: order.tenantId,
-      });
-    }
-
-    const rzpOrder = await razorpay.orders.create(rzpOrderOptions);
+        orderId: order._id.toString(),
+      },
+    });
 
     await Order.findByIdAndUpdate(orderId, { razorpayOrderId: rzpOrder.id });
 
-    console.log("createPayment: razorpay order created", {
-      orderId,
+    console.log({
+      tenantId: order.tenantId,
+      orderId: order._id.toString(),
       razorpayOrderId: rzpOrder.id,
-      amountInPaise,
+      paymentStatus: order.paymentStatus,
     });
 
     return {
@@ -122,7 +113,6 @@ async function createPayment(orderId, userId) {
       currency: rzpOrder.currency,
     };
   } catch (err) {
-    // Release lock so the order is not stuck if Razorpay call fails
     await Order.findByIdAndUpdate(orderId, { razorpayOrderId: null });
     throw err;
   }
@@ -149,26 +139,34 @@ async function verifyPayment({
     throw err;
   }
 
+  const vendor = await loadVendorForOrder(order);
+  const keySecret = getVendorKeySecret(vendor);
+
   const expectedSignature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .createHmac("sha256", keySecret)
     .update(`${razorpayOrderId}|${razorpayPaymentId}`)
     .digest("hex");
 
   if (expectedSignature !== razorpaySignature) {
     await Order.findByIdAndUpdate(orderId, { paymentStatus: "FAILED" });
+    console.log({
+      tenantId: order.tenantId,
+      orderId: order._id.toString(),
+      razorpayOrderId,
+      paymentStatus: "FAILED",
+    });
     return { success: false, message: "Signature verification failed" };
   }
 
-  // Payment captured; store still accepts the order (PLACED → CONFIRMED via admin).
   await Order.findByIdAndUpdate(orderId, {
     paymentStatus: "PAID",
     razorpayPaymentId,
   });
 
-  console.log("verifyPayment: payment verified", {
-    orderId,
+  console.log({
+    tenantId: order.tenantId,
+    orderId: order._id.toString(),
     razorpayOrderId,
-    razorpayPaymentId,
     paymentStatus: "PAID",
   });
 

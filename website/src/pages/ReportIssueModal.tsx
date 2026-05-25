@@ -36,7 +36,7 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
   }, [isOpen]);
 
   // Safety: If feature is disabled via backend, do not render modal
-  if (!isOpen || !settings?.allowReportIssue) return null;
+  if (!isOpen || !(settings?.allowReportIssue || settings?.allowRefunds)) return null;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -55,22 +55,28 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
         formData.append('file', file);
 
         const token = localStorage.getItem('token');
-        const uploadRes = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            'x-tenant-id': getTenantId(),
-          },
-        });
+        const uploadRes = await axios.post(
+          `${API_BASE_URL}/api/upload/returns?category=returns`,
+          formData,
+          {
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              'x-tenant-id': getTenantId(),
+            },
+          }
+        );
 
         if (!uploadRes?.data?.url) {
           throw new Error('Upload failed');
         }
 
         setEvidenceUrl(uploadRes.data.url);
-      } catch {
+      } catch (err: unknown) {
         setEvidenceUrl('');
-        setError("Failed to upload image. Please try again.");
+        const msg =
+          (err as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || 'Failed to upload image. Please try again.';
+        setError(msg);
       } finally {
         setUploadingImage(false);
       }
@@ -107,7 +113,7 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
           <div className="p-8">
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Report Issue.</h2>
+                <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Return Request</h2>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Order #{order?.id}</p>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
@@ -147,7 +153,7 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Photo Evidence</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Product photo (required)</label>
                 <div 
                   onClick={() => fileRef.current?.click()} 
                   className={`w-full h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden ${preview ? 'border-[#4b6f9e]' : 'border-slate-200 hover:bg-slate-50'}`}

@@ -187,6 +187,34 @@ export const rateOrderApi = async (
   return data; // { success: true, message }
 };
 
+/** Upload return evidence to Cloudinary via POST /api/upload/returns */
+export const uploadReturnEvidenceApi = async (
+  localUri: string,
+  fileName: string,
+  mimeType: string,
+) => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const formData = new FormData();
+  // @ts-expect-error React Native file part
+  formData.append('file', { uri: localUri, name: fileName, type: mimeType });
+
+  const res = await fetch(`${BASE}/api/upload/returns`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-tenant-id': await getActiveTenantId(),
+    },
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.url) {
+    throw new Error(data?.message || 'Upload failed');
+  }
+  return { url: String(data.url), public_id: data.public_id as string | undefined };
+};
+
 /** Submit an issue/return request for a delivered order. Uses POST /api/returns/create. */
 export const reportOrderIssueApi = async (
   orderId: string,

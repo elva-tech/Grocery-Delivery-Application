@@ -13,7 +13,15 @@ const {
 function resolveCategory(req) {
   const fromParam = req.params && req.params.category;
   const fromQuery = req.query && req.query.category;
-  return (fromParam || fromQuery || "").trim();
+  let category = (fromParam || fromQuery || "").trim().toLowerCase();
+  if (!category) {
+    const match = String(req.originalUrl || "").match(/\/api\/upload\/([^/?]+)/i);
+    if (match) category = match[1].toLowerCase();
+  }
+  if (!category && req.user?.role === "CUSTOMER") {
+    category = "returns";
+  }
+  return category;
 }
 
 async function handleUpload(req, res) {

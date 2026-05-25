@@ -79,11 +79,13 @@ const PromoBanners = () => {
                 </div>
               )}
 
-              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/20 to-transparent p-10 md:p-16 flex flex-col justify-center">
-                <h2 className="text-white text-3xl md:text-5xl font-black max-w-md leading-[1.1] drop-shadow-2xl">
-                  {banner.title}
-                </h2>
-              </div>
+              {banner.title ? (
+                <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col justify-end bg-gradient-to-t from-black/85 via-black/45 to-transparent px-6 pb-10 pt-16 md:px-10 md:pb-12 md:pt-20">
+                  <h2 className="text-white text-lg md:text-2xl font-black max-w-2xl leading-snug drop-shadow-md">
+                    {banner.title}
+                  </h2>
+                </div>
+              ) : null}
             </div>
           </SwiperSlide>
         );

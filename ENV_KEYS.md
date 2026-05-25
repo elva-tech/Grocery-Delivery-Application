@@ -19,16 +19,13 @@ MONGO_URI=mongodb://localhost:27017/grocery-delivery
 # ── Auth ────────────────────────────────────────────────────
 JWT_SECRET=your-secret-key-change-in-production
 
-# ── Razorpay ────────────────────────────────────────────────
+# ── Razorpay (platform billing / subscriptions only) ────────
 RAZORPAY_KEY_ID=rzp_test_SaHmJpDs42QvIp
 RAZORPAY_KEY_SECRET=YHBaSBN6vHpzLl3SN8zHXNdC
 RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 
-# ── Razorpay Route — Vendor linked account ───────────────────
-VENDOR_RAZORPAY_ACCOUNT_ID=acc_XXXXXXXXXXXXXXXX
-
-# ── Platform Settings ───────────────────────────────────────
-PLATFORM_COMMISSION_PERCENT=10
+# ── Vendor checkout secrets (encrypted at rest in MongoDB) ───
+MASTER_ENCRYPTION_KEY=change-this-to-a-long-random-secret
 ```
 
 | Variable | Current Value | Notes |
@@ -38,9 +35,8 @@ PLATFORM_COMMISSION_PERCENT=10
 | `JWT_SECRET` | `your-secret-key-change-in-production` | Change to a strong random string in production |
 | `RAZORPAY_KEY_ID` | `rzp_test_SaHmJpDs42QvIp` | Test mode key |
 | `RAZORPAY_KEY_SECRET` | `YHBaSBN6vHpzLl3SN8zHXNdC` | **Never expose this in frontend** |
-| `RAZORPAY_WEBHOOK_SECRET` | `your_razorpay_webhook_secret` | Set this when creating the webhook in Razorpay dashboard |
-| `VENDOR_RAZORPAY_ACCOUNT_ID` | `acc_XXXXXXXXXXXXXXXX` | Linked vendor account ID from Razorpay Route |
-| `PLATFORM_COMMISSION_PERCENT` | `10` | Route split % to platform account |
+| `RAZORPAY_WEBHOOK_SECRET` | `your_razorpay_webhook_secret` | Platform billing webhooks only |
+| `MASTER_ENCRYPTION_KEY` | long random string | Encrypts per-vendor Razorpay secrets stored in MongoDB |
 
 ---
 

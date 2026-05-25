@@ -18,6 +18,9 @@ const ReportsPage = () => {
 const [inventory, setInventory] = useState([]);
 const [loading, setLoading] = useState(false);
 const [inventoryError, setInventoryError] = useState('');
+const [revenueReport, setRevenueReport] = useState({ totalRevenue: 0, rows: [] });
+const [revenueLoading, setRevenueLoading] = useState(true);
+const [revenueError, setRevenueError] = useState('');
 
 useEffect(() => {
   const fetchInventory = async () => {
@@ -47,6 +50,33 @@ useEffect(() => {
   fetchInventory();
 }, []);
 
+useEffect(() => {
+  const fetchRevenueReport = async () => {
+    try {
+      setRevenueLoading(true);
+      setRevenueError('');
+      const res = await apiService.getRevenueReport();
+      if (res.success) {
+        setRevenueReport({
+          totalRevenue: res.totalRevenue ?? 0,
+          rows: res.rows || [],
+        });
+      } else {
+        setRevenueReport({ totalRevenue: 0, rows: [] });
+        setRevenueError('Failed to load revenue report');
+      }
+    } catch (err) {
+      console.error('Revenue report error:', err);
+      setRevenueReport({ totalRevenue: 0, rows: [] });
+      setRevenueError('Failed to load revenue report');
+    } finally {
+      setRevenueLoading(false);
+    }
+  };
+
+  fetchRevenueReport();
+}, []);
+
 const refetchInventory = async () => {
   try {
     setLoading(true);
@@ -66,16 +96,7 @@ const refetchInventory = async () => {
   }
 };
 
-  // 1. TOTAL REVENUE - count DELIVERED or PAID orders, exclude CANCELLED
-  const totalRevenue = useMemo(() => {
-    return (orders || [])
-      .filter(o => {
-        const status = o.status?.toUpperCase();
-        const paymentStatus = o.paymentStatus?.toUpperCase();
-        return status !== 'CANCELLED' && (paymentStatus === 'PAID' || status === 'DELIVERED');
-      })
-      .reduce((sum, order) => sum + (Number(order.totalAmount || order.total) || 0), 0);
-  }, [orders]);
+  const totalRevenue = revenueReport.totalRevenue ?? 0;
 
   // 2. CSV EXPORT - FIXED: Updated keys
   const exportToCSV = () => {
@@ -90,11 +111,10 @@ const refetchInventory = async () => {
     };
 
     if (activeTab === 'REVENUE') {
-      headers = "Date,Customer,Amount,Status\n";
-      rows = revenueData.map(o => {
-        const dateRaw = orders.find(orig => orig.customerName === o.customer || orig.customer === o.customer)?.date;
-        return `${formatDate(dateRaw)},${o.customer},${o.amount.replace(/[₹,]/g, '')},${o.status || 'PAID'}`;
-      }).join("\n");
+      headers = "Date,Customer,Net Revenue,Gross,Status\n";
+      rows = revenueData.map(o =>
+        `${formatDate(o.dateRaw)},${o.customer},${o.netAmount},${o.grossAmount},${o.status}`
+      ).join("\n");
     } else if (activeTab === 'ORDERS') {
       headers = "Order ID,Customer,Total Amount,Status,Date\n";
       rows = orders.map(o => {
@@ -118,21 +138,27 @@ const refetchInventory = async () => {
     window.URL.revokeObjectURL(url);
   };
 
-  // 3. REVENUE DATA - FIXED: Using totalAmount and customerName
-const revenueData = useMemo(() => {
-    return (orders || [])
-      .filter(o => o.status?.toUpperCase() !== 'CANCELLED')
-      .map(o => {
-        const status = o.status?.toUpperCase();
-        return {
-          date: o.date ? new Date(o.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A',
-          customer: o.customerName || o.customer || 'Unknown',
-          amount: `₹${(Number(o.totalAmount || o.total) || 0).toLocaleString('en-IN')}`,
-          // If status is DELIVERED, display as PAID
-          status: status === 'DELIVERED' ? 'PAID' : status 
-        };
-      });
-  }, [orders]);
+  const revenueData = useMemo(() => {
+    return (revenueReport.rows || []).map((row) => {
+      const status = String(row.orderStatus || '').toUpperCase();
+      const net = Number(row.amount) || 0;
+      const gross = Number(row.grossAmount) || 0;
+      return {
+        date: row.date
+          ? new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+          : 'N/A',
+        dateRaw: row.date,
+        customer: row.customer || 'Unknown',
+        amount: `₹${net.toLocaleString('en-IN')}`,
+        netAmount: net,
+        grossAmount: gross,
+        status:
+          status === 'REFUND_APPROVED' || row.paymentStatus === 'REFUNDED'
+            ? `REFUNDED (₹${(Number(row.refundAmount) || gross).toLocaleString('en-IN')})`
+            : status,
+      };
+    });
+  }, [revenueReport.rows]);
 
  const inventoryReport = useMemo(() => {
   return (inventory || []).map(p => ({
@@ -164,7 +190,10 @@ const getFilteredData = () => {
   );
 };
 
-const filteredData = useMemo(() => getFilteredData(), [activeTab, searchTerm, orders, inventory]);
+const filteredData = useMemo(
+  () => getFilteredData(),
+  [activeTab, searchTerm, orders, inventory, revenueData]
+);
 
 const {
   currentPage,
@@ -178,12 +207,18 @@ const {
     REVENUE: { title: 'Earnings Report', columns: [
       { header: 'Date', accessor: 'date' },
       { header: 'Customer', accessor: 'customer' },
-      { header: 'Revenue', accessor: 'amount' },
-      { header: 'Status', accessor: 'status', render: (v) => (
-        <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase">
-          {v || 'PAID'}
+      { header: 'Net revenue', accessor: 'amount' },
+      { header: 'Status', accessor: 'status', render: (v) => {
+        const s = String(v || '');
+        const isRefund = s.includes('REFUND');
+        return (
+        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+          isRefund ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
+        }`}>
+          {s || 'DELIVERED'}
         </span>
-      )}
+        );
+      }}
     ]},
    ORDERS: { 
   title: 'Order History', 
@@ -228,8 +263,12 @@ const {
     <div className="space-y-6 pb-10">
       <div className="bg-[#1A4D2E] text-white p-8 rounded-[32px] shadow-lg flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-black">Total Revenue: ₹{totalRevenue.toLocaleString('en-IN')}</h1>
-          <p className="text-green-200/60 text-sm mt-1">Confirmed earnings excluding cancelled orders.</p>
+          <h1 className="text-3xl font-black">
+            Total Revenue: ₹{totalRevenue.toLocaleString('en-IN')}
+          </h1>
+          <p className="text-green-200/60 text-sm mt-1">
+            Delivered orders only; refunds reduce net revenue.
+          </p>
         </div>
         <CustomButton onClick={exportToCSV} className="bg-white text-[#1A4D2E] px-8 py-4 rounded-2xl font-black flex gap-2 shadow-xl">
           <Download size={20} /> EXPORT
@@ -267,7 +306,17 @@ const {
       </div>
 
       <div className="bg-white p-8 rounded-[32px] border shadow-sm">
-        {activeTab === 'INVENTORY' && loading ? (
+        {activeTab === 'REVENUE' && revenueLoading ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading revenue report...</p>
+          </div>
+        ) : activeTab === 'REVENUE' && revenueError ? (
+          <div className="py-8 flex items-start gap-3 bg-red-50 border border-red-100 rounded-2xl p-4">
+            <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+            <p className="text-sm font-bold text-red-700">{revenueError}</p>
+          </div>
+        ) : activeTab === 'INVENTORY' && loading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-3">
             <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
             <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading inventory report...</p>
