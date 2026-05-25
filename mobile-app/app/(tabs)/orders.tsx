@@ -23,6 +23,7 @@ import {
   rateOrderApi,
   reportOrderIssueApi,
   uploadReturnEvidenceApi,
+  downloadOrderSummaryPdfApi,
 } from '@/api/ordersApi';
 import { RootState } from '@/store/store';
 import { Image } from 'expo-image';
@@ -89,6 +90,7 @@ export default function OrdersScreen() {
   const [starValue, setStarValue] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [isDownloadingSummary, setIsDownloadingSummary] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>('all');
   const [sortBy, setSortBy] = useState<OrderSortBy>('newest');
@@ -325,6 +327,25 @@ export default function OrdersScreen() {
     items.forEach((p: any) => dispatch(addToCart(p)));
     showToast('success', 'Reordered', 'Added to cart');
     router.push('/(tabs)/cart');
+  };
+
+  const handleDownloadOrderSummary = async () => {
+    const orderId = selectedOrder?._id ?? selectedOrder?.id;
+    if (!orderId) return;
+    setIsDownloadingSummary(true);
+    try {
+      await downloadOrderSummaryPdfApi(String(orderId));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('success', 'Order summary', 'Use the share menu to save or open the PDF.');
+    } catch (err: any) {
+      showToast(
+        'error',
+        'Download failed',
+        err?.message || 'Could not download order summary.',
+      );
+    } finally {
+      setIsDownloadingSummary(false);
+    }
   };
 
   const renderListToolbar = () => (
@@ -619,6 +640,23 @@ export default function OrdersScreen() {
                 </TouchableOpacity>
               )}
 
+              {selectedOrder?.status === 'DELIVERED' && (
+                <TouchableOpacity
+                  style={styles.downloadSummaryBtn}
+                  onPress={handleDownloadOrderSummary}
+                  disabled={isDownloadingSummary}
+                >
+                  {isDownloadingSummary ? (
+                    <ActivityIndicator color="#059669" size="small" />
+                  ) : (
+                    <Ionicons name="download-outline" size={18} color="#059669" />
+                  )}
+                  <Text style={styles.downloadSummaryBtnText}>
+                    {isDownloadingSummary ? 'Preparing PDF…' : 'Download Order Summary'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
               {selectedOrder?.status === 'DELIVERED' &&
                 (settings?.allowReportIssue || settings?.allowRefunds) &&
@@ -904,7 +942,20 @@ const styles = StyleSheet.create({
   billValue: { fontSize: 24, fontWeight: '900', color: '#4b6f9e' },
   cancelBtn: { marginTop: 20, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#ef4444', justifyContent: 'center', alignItems: 'center' },
   cancelBtnText: { color: '#ef4444', fontWeight: '800', fontSize: 16 },
-  reportBtn: { marginTop: 20, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  downloadSummaryBtn: {
+    marginTop: 16,
+    backgroundColor: '#fff',
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#6ee7b7',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  downloadSummaryBtnText: { color: '#059669', fontWeight: '800', fontSize: 15 },
+  reportBtn: { marginTop: 12, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   reportBtnText: { color: '#f59e0b', fontWeight: '800', fontSize: 15 },
   
   label: { fontSize: 14, fontWeight: '800', color: '#64748b', marginTop: 20, marginBottom: 12 },
