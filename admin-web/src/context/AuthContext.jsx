@@ -1,11 +1,12 @@
 import { createContext, useContext, useState } from 'react';
 import { apiService } from '../services/apiService';
+import { getTenantId } from '../utils/getTenantId';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
 
-  const envTenantId = String(import.meta.env.VITE_TENANT_ID || '').trim().toLowerCase();
+  const expectedTenantId = getTenantId();
 
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('freshroot_user');
@@ -13,8 +14,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const parsed = JSON.parse(savedUser);
       const savedTenant = String(parsed?.tenantId || '').trim().toLowerCase();
-      // If env tenant changed, force fresh login for correct tenant context.
-      if (envTenantId && savedTenant && savedTenant !== envTenantId) {
+      // If host/env tenant changed, force fresh login for correct tenant context.
+      if (expectedTenantId && savedTenant && savedTenant !== expectedTenantId) {
         localStorage.removeItem('freshroot_user');
         localStorage.removeItem('jwtToken');
         localStorage.removeItem('token');

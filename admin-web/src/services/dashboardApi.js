@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getTenantId } from '../utils/getTenantId';
 
 // ============================================
 // DASHBOARD API SERVICE
@@ -6,27 +7,6 @@ import axios from 'axios';
 
 // Get API Base URL from environment variable or use default
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://grocery-delivery-application-6n3w.onrender.com';
-
-// ============================================
-// JWT TOKEN DECODER
-// ============================================
-
-const decodeToken = (token) => {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch (error) {
-    console.error('Error decoding token:', error);
-    return null;
-  }
-};
 
 // Create axios instance
 const dashboardApi = axios.create({
@@ -44,18 +24,13 @@ const dashboardApi = axios.create({
 dashboardApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('jwtToken');
-    
+
     if (token) {
-      // Add Authorization header
       config.headers.Authorization = `Bearer ${token}`;
-      
-      // Decode token to get tenantId
-      const decoded = decodeToken(token);
-      if (decoded && decoded.tenantId) {
-        config.headers['x-tenant-id'] = decoded.tenantId;
-      }
     }
-    
+
+    config.headers['x-tenant-id'] = getTenantId();
+
     return config;
   },
   (error) => Promise.reject(error)

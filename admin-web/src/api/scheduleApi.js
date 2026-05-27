@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getTenantId } from "../utils/getTenantId";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "https://grocery-delivery-application-6n3w.onrender.com",
@@ -10,11 +11,8 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem("jwtToken");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-    try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      if (payload.tenantId) config.headers["x-tenant-id"] = payload.tenantId;
-    } catch { /* malformed token */ }
   }
+  config.headers["x-tenant-id"] = getTenantId();
   return config;
 });
 

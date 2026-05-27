@@ -1,5 +1,5 @@
 /**
- * Resolves the current tenantId for API calls and auth.
+ * Resolves tenantId for API calls.
  *
  * Priority:
  *   1. Hostname (production): admin.{tenant}.… or {tenant}.…
@@ -7,7 +7,7 @@
  *   3. Fallback: "demo-tenant"
  */
 
-function tenantIdFromHostname(host: string): string {
+function tenantIdFromHostname(host) {
   const parts = host.split(".");
   const ignored = ["www"];
   const cleanParts = parts.filter((p) => !ignored.includes(p));
@@ -20,23 +20,22 @@ function tenantIdFromHostname(host: string): string {
   return cleanParts[0] || "";
 }
 
-export function getTenantId(): string {
+export function getTenantId() {
+  if (typeof window === "undefined") return "demo-tenant";
+
   const host = window.location.hostname.toLowerCase();
 
   if (host === "localhost" || host === "127.0.0.1") {
-    const fromEnv = (import.meta.env.VITE_TENANT_ID as string | undefined)?.trim();
+    const fromEnv = String(import.meta.env.VITE_TENANT_ID || "").trim().toLowerCase();
     if (fromEnv) return fromEnv;
 
-    const localDefault = (
-      import.meta.env.VITE_LOCAL_DEFAULT_TENANT_ID as string | undefined
-    )?.trim();
+    const localDefault = String(
+      import.meta.env.VITE_LOCAL_DEFAULT_TENANT_ID || ""
+    )
+      .trim()
+      .toLowerCase();
     if (localDefault) return localDefault;
 
-    if (!import.meta.env.VITE_TENANT_ID && !import.meta.env.VITE_LOCAL_DEFAULT_TENANT_ID) {
-      console.warn(
-        "[tenant] Set VITE_TENANT_ID in website/.env.development for local dev (e.g. enandi)."
-      );
-    }
     return "demo-tenant";
   }
 

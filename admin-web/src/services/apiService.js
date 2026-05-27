@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getTenantId } from "../utils/getTenantId";
 
 /* -------- CREATE AXIOS INSTANCE -------- */
 const api = axios.create({
@@ -12,35 +13,11 @@ const api = axios.create({
 /* -------- ATTACH TOKEN + TENANT (send-otp needs tenant before JWT exists) -------- */
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("jwtToken");
-  const envTenant = String(import.meta.env.VITE_TENANT_ID || "").trim().toLowerCase();
-  if (envTenant) {
-    config.headers["x-tenant-id"] = envTenant;
-  }
-
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-    try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      if (!config.headers["x-tenant-id"] && payload.tenantId) {
-        config.headers["x-tenant-id"] = payload.tenantId;
-      }
-    } catch {
-      /* malformed token */
-    }
   }
 
-  // When calling a remote API (e.g. Render), hostname is not localhost — backend needs x-tenant-id.
-  if (!config.headers["x-tenant-id"]) {
-    if (typeof window !== "undefined") {
-      const host = window.location.hostname;
-      if (host === "localhost" || host === "127.0.0.1") {
-        const local = String(
-          import.meta.env.VITE_LOCAL_DEFAULT_TENANT_ID || "demo-tenant"
-        ).trim();
-        config.headers["x-tenant-id"] = local;
-      }
-    }
-  }
+  config.headers["x-tenant-id"] = getTenantId();
 
   return config;
 });
