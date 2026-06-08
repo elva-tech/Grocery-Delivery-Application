@@ -27,6 +27,7 @@ const {
   streamInvoicePdfFromCloudinary,
   streamGeneratedInvoicePdf,
 } = require("../services/invoice.service");
+const { notifyOrderPlacedSafe, notifyOrderDeliveredSafe } = require("../services/notify.service");
 
 function isInvoiceAssetPdf(invoiceAsset) {
   if (!invoiceAsset || !invoiceAsset.imageUrl) return false;
@@ -411,6 +412,8 @@ exports.placeCustomerOrder = async (req, res) => {
       console.error("Billing tracking error (non-critical):", billingErr.message);
     }
 
+    await notifyOrderPlacedSafe(order);
+
     res.status(201).json({
       message: "Order placed successfully",
       orderId: order._id,
@@ -572,6 +575,8 @@ exports.markOrderDelivered = async (req, res) => {
     }
 
     await order.save();
+
+    await notifyOrderDeliveredSafe(order);
 
     res.status(200).json({
       message: "Order delivered successfully",

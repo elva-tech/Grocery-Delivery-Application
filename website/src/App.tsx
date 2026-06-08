@@ -23,6 +23,7 @@ import {
   apiSlice,
 } from './api/apiSlice';
 import type { RootState } from './store/store';
+import { BYPASS_STORE_CLOSED } from './config';
 import { getTenantId } from './utils/getTenantId';
 import { clearCart } from './store/slices/cartSlice';
 import { AlertCircle, ChevronRight, Loader2, Search, X } from 'lucide-react';
@@ -159,7 +160,7 @@ const App = () => {
     pollingInterval: 30000 // Every 30 seconds: call API again → update UI automatically
   });
 
-  const isClosed = storeStatus?.isClosed ?? false;
+  const isClosed = BYPASS_STORE_CLOSED ? false : (storeStatus?.isClosed ?? false);
   const reason = storeStatus?.reason ?? "";
   const showClosingSoon =
     !isClosed &&

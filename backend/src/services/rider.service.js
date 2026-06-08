@@ -1,5 +1,9 @@
 const Rider = require("../models/Rider.model");
 const Order = require("../models/Order.model");
+const {
+  notifyOutForDeliverySafe,
+  notifyOrderDeliveredSafe,
+} = require("./notify.service");
 
 /**
  * Validate if rider is available for order assignment
@@ -69,6 +73,8 @@ exports.assignOrderToRider = async (orderId, riderId, tenantId) => {
     order.orderStatus = "OUT_FOR_DELIVERY";
     await order.save();
 
+    await notifyOutForDeliverySafe(order);
+
     // Update rider
     rider.activeOrders = (rider.activeOrders || 0) + 1;
     rider.lastOnlineAt = new Date();
@@ -108,6 +114,8 @@ exports.completeDelivery = async (riderId, orderId, tenantId, location = {}) => 
       order.deliveryAddress.lng = location.lng;
     }
     await order.save();
+
+    await notifyOrderDeliveredSafe(order);
 
     // Update rider
     const rider = await Rider.findByIdAndUpdate(
