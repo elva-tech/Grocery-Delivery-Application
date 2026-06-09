@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { OlaMaps } from 'olamaps-web-sdk';
 import { processSelectedLocation, searchPlaces } from '../../api/mapApi';
 import { getAccurateLocation } from '../../utils/geolocation';
+import { getOlaMapsApiKey } from '../../utils/olaMapsApiKey';
 import './LocationPicker.css';
 
 const BANGALORE_CENTER = { lat: 12.9716, lng: 77.5946 };
@@ -31,19 +32,6 @@ function accuracyHintMessage(accuracyMeters, desktop) {
   }
 
   return "We've set your approximate location. Adjust pin if needed.";
-}
-
-function getMapsApiKey() {
-  return (
-    (typeof import.meta !== 'undefined' &&
-      import.meta.env &&
-      (import.meta.env.REACT_APP_OLA_MAPS_API_KEY ||
-        import.meta.env.VITE_OLA_MAPS_API_KEY)) ||
-    (typeof process !== 'undefined' &&
-      process.env &&
-      process.env.REACT_APP_OLA_MAPS_API_KEY) ||
-    ''
-  );
 }
 
 function LocationPicker({
@@ -182,10 +170,10 @@ function LocationPicker({
     let disposed = false;
 
     const initMap = async () => {
-      const apiKey = getMapsApiKey();
+      const apiKey = await getOlaMapsApiKey();
 
       if (!apiKey) {
-        setError('Missing maps API key. Add REACT_APP_OLA_MAPS_API_KEY.');
+        setError('Map is unavailable right now. Please try again later.');
         return;
       }
 

@@ -119,7 +119,11 @@ export const placeOrderBackend = async (
     body: JSON.stringify(payload),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.message || 'Order creation failed');
+  if (!res.ok) {
+    const err = new Error(data?.message || 'Order creation failed') as Error & { code?: string };
+    err.code = data?.code;
+    throw err;
+  }
   return data; // { orderId, totalAmount, ... }
 };
 
@@ -147,8 +151,12 @@ export const createMobilePaymentOrder = async (orderId: string, token: string) =
     body: JSON.stringify({ order_id: orderId }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.message || 'Payment initiation failed');
-  return data; // { amount (paise), currency, razorpay_order_id }
+  if (!res.ok) {
+    const err = new Error(data?.message || 'Payment initiation failed') as Error & { code?: string };
+    err.code = data?.code;
+    throw err;
+  }
+  return data; // { amount (paise), currency, razorpay_order_id, key_id? }
 };
 
 /** Verify Razorpay payment signature with the backend. */

@@ -1,4 +1,5 @@
 const { createPayment, verifyPayment } = require("../services/payment.service");
+const { customerPaymentErrorMessage } = require("../utils/customerFacingErrors.util");
 
 exports.initiatePayment = async (req, res) => {
   try {
@@ -13,11 +14,7 @@ exports.initiatePayment = async (req, res) => {
   } catch (err) {
     console.error("initiatePayment error:", err.message, err.cause?.message || "");
     const status = err.status || 500;
-    let message = err.message || "Payment initiation failed";
-    if (message.includes("decrypt vendor")) {
-      message =
-        "Store payment setup is invalid. Re-save Razorpay credentials in admin or contact support.";
-    }
+    const message = customerPaymentErrorMessage(err);
     return res.status(status).json({ message });
   }
 };

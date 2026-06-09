@@ -14,6 +14,7 @@ import {
 } from '../../utils/indiaPincode';
 import { requestPrecisePosition } from '../../utils/geolocation';
 import { parseAddressLatLng } from '../../utils/coordinates';
+import { getOlaMapsApiKey } from '../../utils/olaMapsApiKey';
 
 interface AddressModalProps {
   isOpen: boolean;
@@ -139,11 +140,6 @@ const AddressModal: React.FC<AddressModalProps> = ({
     return () => window.clearTimeout(timer);
   }, [searchQuery, showMap, isOpen]);
 
-  const getMapsApiKey = () =>
-    (import.meta.env.REACT_APP_OLA_MAPS_API_KEY as string | undefined) ||
-    (import.meta.env.VITE_OLA_MAPS_API_KEY as string | undefined) ||
-    '';
-
   const upsertMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
 
@@ -204,9 +200,9 @@ const AddressModal: React.FC<AddressModalProps> = ({
     const initMap = async () => {
       if (mapRef.current) return;
 
-      const apiKey = getMapsApiKey();
+      const apiKey = await getOlaMapsApiKey();
       if (!apiKey) {
-        showError('Missing REACT_APP_OLA_MAPS_API_KEY.');
+        showError('Map is unavailable right now. Please try again later or enter your address manually.');
         return;
       }
 

@@ -81,10 +81,7 @@ function DeliveryEligibilityAlerts(props: {
         <p className="text-xs font-black uppercase tracking-widest text-amber-800">Delivery check unavailable</p>
         <p className="text-sm font-semibold text-amber-900 mt-1">{message}</p>
         <p className="text-[10px] font-bold text-amber-700/80 mt-2">
-          Tip: In dev, Map Service uses same-origin{' '}
-          <span className="font-mono">/map-service-remote</span> (Vite → Render), then{' '}
-          <span className="font-mono">/map-service</span> → localhost:3000. Production needs{' '}
-          <span className="font-mono">VITE_MAP_SERVICE_BASE_URL</span> to a backend proxy if Render still has no CORS.
+          We could not reach the map service. Check your connection and try again, or pick a saved address.
         </p>
       </div>
     );

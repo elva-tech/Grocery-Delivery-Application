@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { fetchTenantDetails, type TenantDetails } from '../api/tenantApi';
 import { getTenantId } from '../utils/getTenantId';
+import { applyDocumentBranding } from '../utils/documentBranding';
 
 export type TenantBrandingValue = {
   loading: boolean;
@@ -73,6 +74,13 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
       heroBadge: raw?.heroBadge?.trim() || 'Shop local',
     };
   }, [raw, loading, error]);
+
+  useEffect(() => {
+    applyDocumentBranding({
+      title: value.storeName,
+      faviconUrl: value.logo || undefined,
+    });
+  }, [value.storeName, value.logo]);
 
   return (
     <TenantBrandingContext.Provider value={value}>

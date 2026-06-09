@@ -17,6 +17,7 @@ const {
   reverseOrderBilling,
 } = require("../modules/billing");
 const { assertCanPlaceOrder } = require("../modules/billing/services/enforcement.service");
+const { customerOrderBlockResponse } = require("../utils/customerFacingErrors.util");
 const {
   isValidIndianPincodeFormat,
   extractPinFromAddressFields,
@@ -146,10 +147,11 @@ exports.placeCustomerOrder = async (req, res) => {
     try {
       await assertCanPlaceOrder(tenantId);
     } catch (billingBlock) {
+      const customer = customerOrderBlockResponse(billingBlock);
       return res.status(billingBlock.status || 403).json({
         success: false,
-        message: billingBlock.message,
-        code: billingBlock.code,
+        message: customer.message,
+        code: customer.code,
       });
     }
 

@@ -56,6 +56,7 @@ async function createPayment(orderId, userId) {
       razorpay_order_id: rzpOrder.id,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
+      key_id: vendor.razorpay.keyId,
     };
   }
 
@@ -77,6 +78,7 @@ async function createPayment(orderId, userId) {
         razorpay_order_id: rzpOrder.id,
         amount: rzpOrder.amount,
         currency: rzpOrder.currency,
+        key_id: vendor.razorpay.keyId,
       };
     }
     const err = new Error("Payment initiation already in progress");
@@ -111,6 +113,7 @@ async function createPayment(orderId, userId) {
       razorpay_order_id: rzpOrder.id,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
+      key_id: vendor.razorpay.keyId,
     };
   } catch (err) {
     await Order.findByIdAndUpdate(orderId, { razorpayOrderId: null });

@@ -41,6 +41,13 @@ export const WEB_COPY = {
     closingAt: (time: string) =>
       `Store closes at ${time} — finish checkout to get your order in.`,
   },
+  checkout: {
+    storeUnavailable:
+      'This store is temporarily unable to accept orders. Please try again later or contact the store.',
+    onlinePaymentUnavailable:
+      'Online payment is not available at this store right now. Please choose Cash on Delivery or contact the store.',
+    paymentFailedGeneric: 'Failed to place order. Please try again or use Cash on Delivery.',
+  },
   delivery: {
     bannerTitle: 'We can’t deliver to this area',
     outsideDeliveryRadius:
@@ -82,4 +89,48 @@ export function customerFacingDeliveryUnavailable(apiMessage?: string | null): s
   }
 
   return (apiMessage ?? '').trim();
+}
+
+/** Hide platform billing / vendor setup messages from shoppers at checkout. */
+export function customerFacingCheckoutError(
+  apiMessage?: string | null,
+  opts?: { code?: string | null; status?: number | null },
+): string {
+  const code = (opts?.code ?? '').trim();
+  if (
+    code === 'BILLING_OVERDUE' ||
+    code === 'SUBSCRIPTION_SUSPENDED' ||
+    code === 'TENANT_SUSPENDED' ||
+    opts?.status === 402 ||
+    opts?.status === 403
+  ) {
+    const m = (apiMessage ?? '').toLowerCase();
+    if (
+      m.includes('subscription') ||
+      m.includes('platform invoice') ||
+      m.includes('suspended') ||
+      m.includes('billing')
+    ) {
+      return WEB_COPY.checkout.storeUnavailable;
+    }
+  }
+
+  const m = (apiMessage ?? '').trim().toLowerCase();
+  if (!m) return WEB_COPY.checkout.paymentFailedGeneric;
+
+  if (
+    m.includes('vendor payment') ||
+    m.includes('vendor razorpay') ||
+    m.includes('payment configuration not found') ||
+    m.includes('payment setup') ||
+    m.includes('onboarding is not active')
+  ) {
+    return WEB_COPY.checkout.onlinePaymentUnavailable;
+  }
+
+  if (m.includes('platform invoice') || m.includes('subscription bill')) {
+    return WEB_COPY.checkout.storeUnavailable;
+  }
+
+  return (apiMessage ?? '').trim() || WEB_COPY.checkout.paymentFailedGeneric;
 }
