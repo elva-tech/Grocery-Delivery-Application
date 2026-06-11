@@ -1,5 +1,8 @@
 const crypto = require("crypto");
+const Tenant = require("../models/Tenant.model");
+const User = require("../models/User.model");
 const { notifyConfig, validateNotifyConfig } = require("../config/notify.config");
+const { formatOrderDisplayId } = require("../utils/orderDisplayId.util");
 
 const TEMPLATE_KEYS = {
   LOGIN_OTP: "LOGIN_OTP",
@@ -8,7 +11,14 @@ const TEMPLATE_KEYS = {
   ORDER_DELIVERED: "ORDER_DELIVERED",
 };
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 20000;
+const NOTIFY_MAX_ATTEMPTS = 5;
+const NOTIFY_CHANNEL = "SMS";
+const RETRYABLE_UPSTREAM_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function createRequestId() {
   return crypto.randomUUID();
@@ -29,11 +39,78 @@ function buildCredentials() {
   };
 }
 
+/** Order /notify templates — named keys mapped by Notify to DLT slots. */
+function buildOrderNotifyVariables({ storeName, customerName, orderId } = {}) {
+  const variables = {};
+  const resolvedStoreName = String(storeName || "").trim();
+  if (resolvedStoreName) variables.businessName = resolvedStoreName;
+  if (customerName) variables.customerName = String(customerName);
+  if (orderId) variables.orderId = String(orderId);
+  return variables;
+}
+
+function resolveOtpStoreName({ tenantId, storeName } = {}) {
+  return (
+    String(storeName || "").trim() ||
+    String(tenantId || "").trim() ||
+    "Store"
+  );
+}
+
+/**
+ * Notify playground pipes DLT slot 1 from ONE value used for both top-level `business`
+ * and `variables.businessName` (e.g. business="puma", businessName="puma" → "puma|OTP").
+ * If they differ, Notify falls back to the retired static template ("eNandi").
+ */
+function resolveOtpBrandKey({ tenantId, storeName } = {}) {
+  const slug = String(tenantId || "").trim().toLowerCase();
+  const displayName = resolveOtpStoreName({ tenantId, storeName });
+
+  if (notifyConfig.otpBrand === "storename") {
+    return displayName;
+  }
+
+  return slug || displayName || notifyConfig.appId;
+}
+
+/**
+ * LOGIN_OTP DLT (message 216423):
+ *   "Your OTP for {#VAR#} login is {#VAR#}"
+ * Slot 1 = brand key (tenant slug by default), slot 2 = OTP (Notify-generated).
+ */
+function buildOtpSendBody({ tenantId, storeName, phone }) {
+  const brandKey = resolveOtpBrandKey({ tenantId, storeName });
+
+  return {
+    ...buildCredentials(),
+    business: brandKey,
+    phone,
+    templateKey: TEMPLATE_KEYS.LOGIN_OTP,
+    variables: { businessName: brandKey },
+  };
+}
+
+function buildOtpVerifyBody({ tenantId, storeName, phone, otp }) {
+  return {
+    ...buildCredentials(),
+    business: resolveOtpBrandKey({ tenantId, storeName }),
+    phone,
+    otp: String(otp).trim(),
+  };
+}
+
+async function resolveTenantStoreName(tenantId) {
+  const id = String(tenantId || "").trim().toLowerCase();
+  if (!id) return "Store";
+
+  const tenant = await Tenant.findOne({ tenantId: id }).select("name").lean();
+  return String(tenant?.name || "").trim() || id;
+}
+
 function logNotifyEvent(event, fields = {}) {
   const payload = {
     event,
     timestamp: new Date().toISOString(),
-    business: notifyConfig.business,
     appId: notifyConfig.appId,
     ...fields,
   };
@@ -66,33 +143,63 @@ function assertNotifyReady({ requireOtp = false, requireOrder = false } = {}) {
 }
 
 class NotifyServiceError extends Error {
-  constructor(message, statusCode = 502) {
+  constructor(message, statusCode = 502, meta = {}) {
     super(message);
     this.name = "NotifyServiceError";
     this.statusCode = statusCode;
+    this.upstreamStatus = meta.upstreamStatus;
+    this.responseData = meta.responseData;
+    this.retryable = Boolean(meta.retryable);
   }
 }
 
-async function notifyHttpRequest({
+function isRetryableNotifyFailure(error, upstreamStatus) {
+  if (error?.name === "AbortError") return true;
+  if (upstreamStatus && RETRYABLE_UPSTREAM_STATUSES.has(upstreamStatus)) return true;
+  if (error instanceof NotifyServiceError && error.retryable) return true;
+  return false;
+}
+
+async function executeNotifyHttpRequest({
   path,
   body,
   templateKey,
   phone,
   orderId,
   customerId,
+  tenantId,
+  storeName,
   requestId,
+  attempt,
 }) {
   const startedAt = Date.now();
   const url = `${notifyConfig.baseUrl}${path}`;
 
-  logNotifyEvent("notify_request_started", {
-    requestId,
-    templateKey,
-    phone: phone || undefined,
-    orderId: orderId || undefined,
-    customerId: customerId || undefined,
-    path,
-  });
+  if (attempt === 1) {
+    logNotifyEvent("notify_request_started", {
+      requestId,
+      templateKey,
+      tenantId: tenantId || undefined,
+      storeName: storeName || undefined,
+      notifyModuleBusiness: body?.business,
+      notifyOtpBrandKey: body?.business,
+      dltSlot1: body?.variables?.businessName ?? (Array.isArray(body?.variables) ? body.variables[0] : undefined),
+      notifyVariables: body?.variables,
+      phone: phone || undefined,
+      orderId: orderId || undefined,
+      customerId: customerId || undefined,
+      path,
+    });
+  } else {
+    logNotifyEvent("notify_request_retry", {
+      requestId,
+      templateKey,
+      tenantId: tenantId || undefined,
+      orderId: orderId || undefined,
+      attempt,
+      path,
+    });
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
@@ -103,6 +210,7 @@ async function notifyHttpRequest({
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        Connection: "close",
       },
       body: JSON.stringify(body),
       signal: controller.signal,
@@ -123,27 +231,39 @@ async function notifyHttpRequest({
     if (!response.ok) {
       const message =
         data?.message || data?.error || `Notify request failed (${response.status})`;
+      const retryable = RETRYABLE_UPSTREAM_STATUSES.has(response.status);
       logNotifyEvent("notify_request_failed", {
         requestId,
         templateKey,
+        tenantId: tenantId || undefined,
+        storeName: storeName || undefined,
         phone: phone || undefined,
         orderId: orderId || undefined,
         customerId: customerId || undefined,
         durationMs,
         statusCode: response.status,
+        attempt,
         error: message,
+        notifyResponse: data,
       });
-      throw new NotifyServiceError(message, response.status >= 500 ? 502 : 400);
+      throw new NotifyServiceError(message, response.status >= 500 ? 502 : 400, {
+        upstreamStatus: response.status,
+        responseData: data,
+        retryable,
+      });
     }
 
     logNotifyEvent("notify_request_completed", {
       requestId,
       templateKey,
+      tenantId: tenantId || undefined,
+      storeName: storeName || undefined,
       phone: phone || undefined,
       orderId: orderId || undefined,
-      customerId: customerId || undefined,
+      customerId: customerId ? String(customerId) : undefined,
       durationMs,
       statusCode: response.status,
+      attempt,
     });
 
     return data;
@@ -162,17 +282,45 @@ async function notifyHttpRequest({
     logNotifyEvent("notify_request_failed", {
       requestId,
       templateKey,
+      tenantId: tenantId || undefined,
+      storeName: storeName || undefined,
       phone: phone || undefined,
       orderId: orderId || undefined,
-      customerId: customerId || undefined,
+      customerId: customerId ? String(customerId) : undefined,
       durationMs,
+      attempt,
       error: message,
     });
 
-    throw new NotifyServiceError(message, 502);
+    throw new NotifyServiceError(message, 502, { retryable: true });
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function notifyHttpRequest(options) {
+  const maxAttempts = Math.max(1, Number(options.maxAttempts) || 1);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await executeNotifyHttpRequest({ ...options, attempt });
+    } catch (error) {
+      const upstreamStatus =
+        error instanceof NotifyServiceError ? error.upstreamStatus : undefined;
+      const shouldRetry =
+        attempt < maxAttempts && isRetryableNotifyFailure(error, upstreamStatus);
+
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      await sleep(1000 * attempt + Math.floor(Math.random() * 500));
+    }
+  }
+
+  throw new NotifyServiceError("Notify request failed after retries", 502, {
+    retryable: false,
+  });
 }
 
 function isOtpEnabled() {
@@ -191,7 +339,7 @@ function isOrderDeliveredEnabled() {
   return notifyConfig.enabled && notifyConfig.orderDeliveredEnabled;
 }
 
-async function sendOtp(phoneNumber) {
+async function sendOtp({ tenantId, phoneNumber }) {
   assertNotifyReady({ requireOtp: true });
 
   const requestId = createRequestId();
@@ -200,21 +348,25 @@ async function sendOtp(phoneNumber) {
     throw new NotifyServiceError("Invalid phone number", 400);
   }
 
+  const storeName = await resolveTenantStoreName(tenantId);
+
   return notifyHttpRequest({
     path: "/otp/send",
     templateKey: TEMPLATE_KEYS.LOGIN_OTP,
     phone,
+    tenantId,
+    storeName,
     requestId,
-    body: {
-      ...buildCredentials(),
-      business: notifyConfig.business,
+    maxAttempts: NOTIFY_MAX_ATTEMPTS,
+    body: buildOtpSendBody({
+      tenantId,
+      storeName,
       phone,
-      templateKey: TEMPLATE_KEYS.LOGIN_OTP,
-    },
+    }),
   });
 }
 
-async function verifyOtp(phoneNumber, otp) {
+async function verifyOtp({ tenantId, phoneNumber, otp }) {
   assertNotifyReady({ requireOtp: true });
 
   const requestId = createRequestId();
@@ -226,21 +378,21 @@ async function verifyOtp(phoneNumber, otp) {
     throw new NotifyServiceError("OTP is required", 400);
   }
 
+  const storeName = await resolveTenantStoreName(tenantId);
+
   return notifyHttpRequest({
     path: "/otp/verify",
     templateKey: TEMPLATE_KEYS.LOGIN_OTP,
     phone,
+    tenantId,
+    storeName,
     requestId,
-    body: {
-      ...buildCredentials(),
-      business: notifyConfig.business,
-      phone,
-      otp: String(otp).trim(),
-    },
+    maxAttempts: NOTIFY_MAX_ATTEMPTS,
+    body: buildOtpVerifyBody({ tenantId, storeName, phone, otp }),
   });
 }
 
-async function resendOtp(phoneNumber) {
+async function resendOtp({ tenantId, phoneNumber }) {
   assertNotifyReady({ requireOtp: true });
 
   const requestId = createRequestId();
@@ -249,150 +401,205 @@ async function resendOtp(phoneNumber) {
     throw new NotifyServiceError("Invalid phone number", 400);
   }
 
+  const storeName = await resolveTenantStoreName(tenantId);
+
   return notifyHttpRequest({
     path: "/otp/resend",
     templateKey: TEMPLATE_KEYS.LOGIN_OTP,
     phone,
+    tenantId,
+    storeName,
     requestId,
-    body: {
-      ...buildCredentials(),
-      business: notifyConfig.business,
+    maxAttempts: NOTIFY_MAX_ATTEMPTS,
+    body: buildOtpSendBody({
+      tenantId,
+      storeName,
       phone,
-      templateKey: TEMPLATE_KEYS.LOGIN_OTP,
-    },
+    }),
   });
 }
 
+async function resolveOrderNotifyContext(order) {
+  const tenantId = order.tenantId;
+  const storeName = await resolveTenantStoreName(tenantId);
+
+  let phoneNumber = String(order.customerPhone || "").trim();
+  let customerName = String(order.customerName || "").trim();
+
+  if ((!phoneNumber || !customerName) && order.userId) {
+    const user = await User.findById(order.userId).select("phoneNumber name").lean();
+    if (!phoneNumber) phoneNumber = String(user?.phoneNumber || "").trim();
+    if (!customerName) customerName = String(user?.name || "").trim();
+  }
+
+  return {
+    tenantId,
+    storeName,
+    phoneNumber,
+    customerName: customerName || "Customer",
+    orderId: formatOrderDisplayId(order._id),
+  };
+}
+
 async function sendOrderNotification({
+  tenantId,
   templateKey,
   phoneNumber,
   customerName,
   orderId,
   customerId,
+  storeName,
 }) {
   const phone = normalizeIndianPhone(phoneNumber);
+  const displayOrderId = formatOrderDisplayId(orderId);
+
   if (!phone) {
     console.warn(
       JSON.stringify({
         event: "notify_request_skipped",
         reason: "missing_or_invalid_phone",
         templateKey,
-        orderId: String(orderId || ""),
+        tenantId,
+        orderId: displayOrderId,
         customerId: customerId ? String(customerId) : undefined,
       })
     );
     return null;
   }
 
+  const resolvedStoreName = storeName || (await resolveTenantStoreName(tenantId));
   const requestId = createRequestId();
 
   return notifyHttpRequest({
     path: "/notify",
     templateKey,
     phone,
-    orderId: String(orderId || ""),
+    orderId: displayOrderId,
     customerId: customerId ? String(customerId) : undefined,
+    tenantId,
+    storeName: resolvedStoreName,
     requestId,
+    maxAttempts: NOTIFY_MAX_ATTEMPTS,
     body: {
       ...buildCredentials(),
-      business: notifyConfig.business,
+      // Notify /notify requires business === appId; store name goes in variables.businessName
+      business: notifyConfig.appId,
+      channel: NOTIFY_CHANNEL,
       templateKey,
-      phone,
-      variables: {
+      to: [phone],
+      variables: buildOrderNotifyVariables({
+        storeName: resolvedStoreName,
         customerName: String(customerName || "Customer"),
-        businessName: notifyConfig.appId,
-        orderId: String(orderId || ""),
-      },
+        orderId: displayOrderId,
+      }),
     },
   });
 }
 
-async function sendOrderPlaced({ phoneNumber, customerName, orderId, customerId }) {
+async function sendOrderPlaced(context) {
   if (!isOrderPlacedEnabled()) return null;
   assertNotifyReady();
 
   return sendOrderNotification({
     templateKey: TEMPLATE_KEYS.ORDER_PLACED,
-    phoneNumber,
-    customerName,
-    orderId,
-    customerId,
+    ...context,
   });
 }
 
-async function sendOutForDelivery({ phoneNumber, customerName, orderId, customerId }) {
+async function sendOutForDelivery(context) {
   if (!isOutForDeliveryEnabled()) return null;
   assertNotifyReady();
 
   return sendOrderNotification({
     templateKey: TEMPLATE_KEYS.OUT_FOR_DELIVERY,
-    phoneNumber,
-    customerName,
-    orderId,
-    customerId,
+    ...context,
   });
 }
 
-async function sendOrderDelivered({ phoneNumber, customerName, orderId, customerId }) {
+async function sendOrderDelivered(context) {
   if (!isOrderDeliveredEnabled()) return null;
   assertNotifyReady();
 
   return sendOrderNotification({
     templateKey: TEMPLATE_KEYS.ORDER_DELIVERED,
-    phoneNumber,
-    customerName,
-    orderId,
-    customerId,
+    ...context,
   });
 }
 
 /**
  * Fire-and-forget order notification — never throws; logs warning on failure.
  */
-async function sendOrderNotificationSafe(sender, context) {
+async function sendOrderNotificationSafe(run, meta = {}) {
   try {
-    await sender(context);
+    await run();
   } catch (error) {
     console.warn(
       JSON.stringify({
         event: "notify_order_notification_failed",
-        templateKey: context?.templateKey,
-        orderId: context?.orderId ? String(context.orderId) : undefined,
-        customerId: context?.customerId ? String(context.customerId) : undefined,
+        templateKey: meta.templateKey,
+        tenantId: meta.tenantId,
+        orderId: meta.orderId,
+        upstreamStatus: error?.upstreamStatus,
+        notifyResponse: error?.responseData,
         error: error?.message || "Unknown error",
       })
     );
   }
 }
 
-function notifyOrderPlacedSafe(order) {
-  return sendOrderNotificationSafe(sendOrderPlaced, {
-    phoneNumber: order.customerPhone,
-    customerName: order.customerName,
+async function buildOrderNotifyContext(order, templateKey) {
+  const ctx = await resolveOrderNotifyContext(order);
+  return {
+    tenantId: ctx.tenantId,
+    storeName: ctx.storeName,
+    phoneNumber: ctx.phoneNumber,
+    customerName: ctx.customerName,
     orderId: order._id,
     customerId: order.userId,
-    templateKey: TEMPLATE_KEYS.ORDER_PLACED,
-  });
+    templateKey,
+  };
+}
+
+function notifyOrderPlacedSafe(order) {
+  return sendOrderNotificationSafe(
+    async () => {
+      const context = await buildOrderNotifyContext(order, TEMPLATE_KEYS.ORDER_PLACED);
+      await sendOrderPlaced(context);
+    },
+    {
+      templateKey: TEMPLATE_KEYS.ORDER_PLACED,
+      tenantId: order.tenantId,
+      orderId: formatOrderDisplayId(order._id),
+    }
+  );
 }
 
 function notifyOutForDeliverySafe(order) {
-  return sendOrderNotificationSafe(sendOutForDelivery, {
-    phoneNumber: order.customerPhone,
-    customerName: order.customerName,
-    orderId: order._id,
-    customerId: order.userId,
-    templateKey: TEMPLATE_KEYS.OUT_FOR_DELIVERY,
-  });
+  return sendOrderNotificationSafe(
+    async () => {
+      const context = await buildOrderNotifyContext(order, TEMPLATE_KEYS.OUT_FOR_DELIVERY);
+      await sendOutForDelivery(context);
+    },
+    {
+      templateKey: TEMPLATE_KEYS.OUT_FOR_DELIVERY,
+      tenantId: order.tenantId,
+      orderId: formatOrderDisplayId(order._id),
+    }
+  );
 }
 
 function notifyOrderDeliveredSafe(order) {
-  return sendOrderNotificationSafe(sendOrderDelivered, {
-    phoneNumber: order.customerPhone,
-    customerName: order.customerName,
-    orderId: order._id,
-    customerId: order.userId,
-    templateKey: TEMPLATE_KEYS.ORDER_DELIVERED,
-  });
+  return sendOrderNotificationSafe(
+    async () => {
+      const context = await buildOrderNotifyContext(order, TEMPLATE_KEYS.ORDER_DELIVERED);
+      await sendOrderDelivered(context);
+    },
+    {
+      templateKey: TEMPLATE_KEYS.ORDER_DELIVERED,
+      tenantId: order.tenantId,
+      orderId: formatOrderDisplayId(order._id),
+    }
+  );
 }
 
 module.exports = {

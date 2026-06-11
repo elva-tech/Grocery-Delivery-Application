@@ -226,9 +226,9 @@ const sendOtp = async (req, res) => {
 
     try {
       if (isResend) {
-        await notifyResendOtp(phone);
+        await notifyResendOtp({ tenantId, phoneNumber: phone });
       } else {
-        await notifySendOtp(phone);
+        await notifySendOtp({ tenantId, phoneNumber: phone });
       }
     } catch (notifyError) {
       const statusCode =
@@ -297,20 +297,23 @@ const verifyOtp = async (req, res) => {
     const phone = String(phoneNumber).trim();
 
     try {
-      await notifyVerifyOtp(phone, otp);
+      await notifyVerifyOtp({ tenantId, phoneNumber: phone, otp });
     } catch (notifyError) {
-      const statusCode =
-        notifyError instanceof NotifyServiceError
-          ? notifyError.statusCode === 400
-            ? 401
-            : notifyError.statusCode
+      const upstreamStatus =
+        notifyError instanceof NotifyServiceError ? notifyError.upstreamStatus : undefined;
+      const isInvalidOtp =
+        notifyError instanceof NotifyServiceError &&
+        (upstreamStatus === 400 || notifyError.statusCode === 400);
+      const statusCode = isInvalidOtp
+        ? 401
+        : notifyError instanceof NotifyServiceError
+          ? notifyError.statusCode
           : 502;
       return res.status(statusCode).json({
         success: false,
-        message:
-          statusCode === 401
-            ? "Invalid OTP"
-            : notifyError.message || "Unable to verify OTP. Please try again later.",
+        message: isInvalidOtp
+          ? "Invalid OTP"
+          : notifyError.message || "Unable to verify OTP. Please try again later.",
       });
     }
 

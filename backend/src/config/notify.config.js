@@ -21,9 +21,12 @@ const notifyConfig = {
   baseUrl: trimTrailingSlash(process.env.NOTIFY_BASE_URL || ""),
   appId: String(process.env.NOTIFY_APP_ID || "").trim(),
   apiKey: String(process.env.NOTIFY_API_KEY || "").trim(),
-  business: String(process.env.NOTIFY_BUSINESS || "").trim(),
 
   loginOtpEnabled: parseEnvBoolean(process.env.NOTIFY_LOGIN_OTP_ENABLED, true),
+  /** LOGIN_OTP brand: tenantId (playground default, e.g. puma) or storeName (Tenant.name). */
+  otpBrand: String(process.env.NOTIFY_OTP_BRAND || "tenantId")
+    .trim()
+    .toLowerCase(),
   orderPlacedEnabled: parseEnvBoolean(process.env.NOTIFY_ORDER_PLACED_ENABLED, true),
   outForDeliveryEnabled: parseEnvBoolean(
     process.env.NOTIFY_OUT_FOR_DELIVERY_ENABLED,
@@ -44,7 +47,6 @@ function validateNotifyConfig(requireCredentials = false) {
   if (requireCredentials) {
     if (!notifyConfig.appId) errors.push("NOTIFY_APP_ID is required");
     if (!notifyConfig.apiKey) errors.push("NOTIFY_API_KEY is required");
-    if (!notifyConfig.business) errors.push("NOTIFY_BUSINESS is required");
   }
 
   return errors;

@@ -414,7 +414,10 @@ exports.placeCustomerOrder = async (req, res) => {
       console.error("Billing tracking error (non-critical):", billingErr.message);
     }
 
-    await notifyOrderPlacedSafe(order);
+    // COD: notify only after order is saved. ONLINE: notify after payment succeeds.
+    if (paymentMode === "COD") {
+      void notifyOrderPlacedSafe(order);
+    }
 
     res.status(201).json({
       message: "Order placed successfully",

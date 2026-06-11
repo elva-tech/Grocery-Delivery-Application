@@ -10,12 +10,12 @@ Customer OTP and order lifecycle SMS notifications are delivered through an exte
 
 | Template key | Trigger |
 |---|---|
-| `LOGIN_OTP` | Customer login / signup OTP send, verify, resend |
+| `LOGIN_OTP` | Customer login / signup OTP send, verify, resend (`business` = tenant store name) |
 | `ORDER_PLACED` | Order successfully created (`PLACED`) |
 | `OUT_FOR_DELIVERY` | Order status becomes `OUT_FOR_DELIVERY` |
 | `ORDER_DELIVERED` | Order status becomes `DELIVERED` |
 
-`LOGIN_OTP_WITH_ID` is **not** used.
+`LOGIN_OTP` uses `business` = `Tenant.name` and `variables: [storeName]` (DLT slot 1; OTP auto in slot 2). Order templates use `variables.businessName` with `business` = `NOTIFY_APP_ID`.
 
 ### Environment variables
 
@@ -25,9 +25,9 @@ Copy `backend/.env.example` to `backend/.env` and configure:
 |---|---|
 | `NOTIFY_ENABLED` | Master switch (`true` / `false`). When `false`, OTP requests fail with an error; order notifications are skipped. |
 | `NOTIFY_BASE_URL` | Notify API base URL (e.g. `https://api.notify.elvatech.in`) |
-| `NOTIFY_APP_ID` | Application identifier registered with Notify; used as `businessName` in order templates |
+| `NOTIFY_APP_ID` | Application identifier registered with Notify (platform credentials) |
 | `NOTIFY_API_KEY` | Notify API key (secret — never commit) |
-| `NOTIFY_BUSINESS` | Business slug sent with OTP requests |
+| *(runtime)* | OTP: `business` + `variables[0]` = `Tenant.name`. Orders: `variables.businessName` = `Tenant.name` |
 | `NOTIFY_LOGIN_OTP_ENABLED` | Enable OTP send / verify / resend via Notify |
 | `NOTIFY_ORDER_PLACED_ENABLED` | Enable `ORDER_PLACED` SMS after order creation |
 | `NOTIFY_OUT_FOR_DELIVERY_ENABLED` | Enable `OUT_FOR_DELIVERY` SMS on status transition |
