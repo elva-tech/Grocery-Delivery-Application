@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const Order = require("../models/Order.model");
 const Vendor = require("../models/Vendor.model");
+const { notifyOrderPlacedSafe } = require("./notify.service");
 const {
   getVendorRazorpayClient,
   getVendorKeySecret,
@@ -56,6 +57,7 @@ async function createPayment(orderId, userId) {
       razorpay_order_id: rzpOrder.id,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
+      key_id: vendor.razorpay.keyId,
     };
   }
 
@@ -77,6 +79,7 @@ async function createPayment(orderId, userId) {
         razorpay_order_id: rzpOrder.id,
         amount: rzpOrder.amount,
         currency: rzpOrder.currency,
+        key_id: vendor.razorpay.keyId,
       };
     }
     const err = new Error("Payment initiation already in progress");
@@ -111,6 +114,7 @@ async function createPayment(orderId, userId) {
       razorpay_order_id: rzpOrder.id,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
+      key_id: vendor.razorpay.keyId,
     };
   } catch (err) {
     await Order.findByIdAndUpdate(orderId, { razorpayOrderId: null });
@@ -158,17 +162,28 @@ async function verifyPayment({
     return { success: false, message: "Signature verification failed" };
   }
 
-  await Order.findByIdAndUpdate(orderId, {
-    paymentStatus: "PAID",
-    razorpayPaymentId,
-  });
+  const updated = await Order.findOneAndUpdate(
+    { _id: orderId, paymentStatus: { $nin: ["PAID", "REFUNDED"] } },
+    { paymentStatus: "PAID", razorpayPaymentId },
+    { new: true }
+  );
+
+  if (!updated) {
+    const current = await Order.findById(orderId);
+    if (current?.paymentStatus === "PAID") {
+      return { success: true, message: "Payment verified successfully" };
+    }
+    return { success: false, message: "Unable to confirm payment for this order" };
+  }
 
   console.log({
-    tenantId: order.tenantId,
-    orderId: order._id.toString(),
+    tenantId: updated.tenantId,
+    orderId: updated._id.toString(),
     razorpayOrderId,
     paymentStatus: "PAID",
   });
+
+  void notifyOrderPlacedSafe(updated);
 
   return { success: true, message: "Payment verified successfully" };
 }

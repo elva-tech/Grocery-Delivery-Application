@@ -1,25 +1,34 @@
 /**
- * Map service — browser CORS note:
- * https://ola-map-service.onrender.com does not send Access-Control-Allow-Origin, so the SPA must not
- * fetch it directly. In dev, Vite proxies same-origin paths below. In production, set
- * VITE_MAP_SERVICE_BASE_URL to your own backend path that proxies to the map service (or enable CORS on Render).
- *
- * Order when env is unset:
- * - DEV: /map-service-remote (Vite → Render) then /map-service (Vite → localhost:3000)
- * - PROD: direct Render URL then http://localhost:3000 (both often wrong without env — configure VITE_MAP_SERVICE_BASE_URL)
+ * Map service routing.
+ * Production browsers must not call ola-map-service.onrender.com directly (no CORS).
+ * Default: grocery backend GET/POST /api/map/* (server-side proxy).
+ * Dev fallbacks: Vite /map-service-remote → Render, then /map-service → localhost:3000.
  */
 
 export const REMOTE_MAP_SERVICE_URL = 'https://ola-map-service.onrender.com';
 
-/** Vite dev proxy → REMOTE_MAP_SERVICE_URL */
 const RENDER_DEV_PROXY_BASE = '/map-service-remote';
 const LOCAL_DEV_PROXY_BASE = '/map-service';
-const LOCAL_DIRECT_BASE = 'http://localhost:3000';
 
 function normalizeBase(url) {
   return String(url || '')
     .trim()
     .replace(/\/$/, '');
+}
+
+function getBackendApiBaseUrl() {
+  const raw =
+    (typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL)) ||
+    '';
+  const trimmed = normalizeBase(raw);
+  if (trimmed) return trimmed;
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return normalizeBase(window.location.origin);
+  }
+  return '';
 }
 
 function getExplicitMapServiceBaseUrl() {
@@ -38,11 +47,24 @@ function getExplicitMapServiceBaseUrl() {
 }
 
 function defaultBaseChain() {
+  const explicit = getExplicitMapServiceBaseUrl();
+  if (explicit) return [explicit];
+
+  const backend = getBackendApiBaseUrl();
   const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
+
+  if (backend) {
+    if (isDev) {
+      return [backend, RENDER_DEV_PROXY_BASE, LOCAL_DEV_PROXY_BASE];
+    }
+    return [backend];
+  }
+
   if (isDev) {
     return [RENDER_DEV_PROXY_BASE, LOCAL_DEV_PROXY_BASE];
   }
-  return [normalizeBase(REMOTE_MAP_SERVICE_URL), LOCAL_DIRECT_BASE];
+
+  return [normalizeBase(REMOTE_MAP_SERVICE_URL)];
 }
 
 /**
@@ -51,11 +73,6 @@ function defaultBaseChain() {
  */
 export async function fetchFromMapService(resourcePath, init) {
   const path = resourcePath.startsWith('/') ? resourcePath : `/${resourcePath}`;
-  const explicit = getExplicitMapServiceBaseUrl();
-  if (explicit) {
-    return fetch(`${explicit}${path}`, init);
-  }
-
   const bases = defaultBaseChain();
   /** @type {Response | null} */
   let lastNonOk = null;
@@ -78,10 +95,8 @@ export async function fetchFromMapService(resourcePath, init) {
 
 /** For logging only — first hop in the default chain. */
 export function resolveMapServiceBaseUrl() {
-  const explicit = getExplicitMapServiceBaseUrl();
-  if (explicit) return Promise.resolve(explicit);
-  const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
-  return Promise.resolve(isDev ? RENDER_DEV_PROXY_BASE : normalizeBase(REMOTE_MAP_SERVICE_URL));
+  const bases = defaultBaseChain();
+  return Promise.resolve(bases[0] || normalizeBase(REMOTE_MAP_SERVICE_URL));
 }
 
 export const MAP_SERVICE_BASE_URL = normalizeBase(REMOTE_MAP_SERVICE_URL);

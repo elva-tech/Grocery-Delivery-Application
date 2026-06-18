@@ -2,8 +2,12 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User.model");
 const Tenant = require("../models/Tenant.model");
-
-const STATIC_OTP = "123456";
+const {
+  sendOtp: notifySendOtp,
+  verifyOtp: notifyVerifyOtp,
+  resendOtp: notifyResendOtp,
+  NotifyServiceError,
+} = require("../services/notify.service");
 const ADMIN_JWT_EXPIRES = process.env.ADMIN_JWT_EXPIRES_IN || "7d";
 const INVALID_ADMIN_CREDENTIALS = "Invalid phone/email or password";
 
@@ -218,12 +222,26 @@ const sendOtp = async (req, res) => {
     }
 
     const phone = String(phoneNumber).trim();
+    const isResend = req.body?.resend === true;
 
-    console.log(`[sendOtp] tenantId=${tenantId} phone=${phone} OTP=${STATIC_OTP}`);
+    try {
+      if (isResend) {
+        await notifyResendOtp({ tenantId, phoneNumber: phone });
+      } else {
+        await notifySendOtp({ tenantId, phoneNumber: phone });
+      }
+    } catch (notifyError) {
+      const statusCode =
+        notifyError instanceof NotifyServiceError ? notifyError.statusCode : 502;
+      return res.status(statusCode).json({
+        success: false,
+        message: notifyError.message || "Unable to send OTP. Please try again later.",
+      });
+    }
 
     return res.status(200).json({
       success: true,
-      message: "OTP sent successfully",
+      message: isResend ? "OTP resent successfully" : "OTP sent successfully",
     });
   } catch (error) {
     console.error("sendOtp error:", error);
@@ -276,14 +294,28 @@ const verifyOtp = async (req, res) => {
       });
     }
 
-    if (otp !== STATIC_OTP) {
-      return res.status(401).json({
+    const phone = String(phoneNumber).trim();
+
+    try {
+      await notifyVerifyOtp({ tenantId, phoneNumber: phone, otp });
+    } catch (notifyError) {
+      const upstreamStatus =
+        notifyError instanceof NotifyServiceError ? notifyError.upstreamStatus : undefined;
+      const isInvalidOtp =
+        notifyError instanceof NotifyServiceError &&
+        (upstreamStatus === 400 || notifyError.statusCode === 400);
+      const statusCode = isInvalidOtp
+        ? 401
+        : notifyError instanceof NotifyServiceError
+          ? notifyError.statusCode
+          : 502;
+      return res.status(statusCode).json({
         success: false,
-        message: "Invalid OTP",
+        message: isInvalidOtp
+          ? "Invalid OTP"
+          : notifyError.message || "Unable to verify OTP. Please try again later.",
       });
     }
-
-    const phone = String(phoneNumber).trim();
 
     let user = await User.findOne({ tenantId, phoneNumber: phone });
 

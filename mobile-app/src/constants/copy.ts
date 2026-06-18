@@ -44,6 +44,13 @@ export const MOBILE_COPY = {
     closingAt: (time: string) =>
       `Store closes at ${time} — finish checkout to get your order in.`,
   },
+  checkout: {
+    storeUnavailable:
+      'This store is temporarily unable to accept orders. Please try again later or contact the store.',
+    onlinePaymentUnavailable:
+      'Online payment is not available at this store right now. Please choose Cash on Delivery or contact the store.',
+    paymentFailedGeneric: 'Could not complete your order. Please try again or use Cash on Delivery.',
+  },
   delivery: {
     checkoutBlockedHint:
       'This address is outside our delivery area. Choose another saved address or pin a closer location.',
@@ -92,4 +99,38 @@ export function customerFacingDeliveryUnavailable(apiMessage?: string | null): s
   }
 
   return (apiMessage ?? '').trim();
+}
+
+/** Hide platform billing / vendor setup messages from shoppers at checkout. */
+export function customerFacingCheckoutError(
+  apiMessage?: string | null,
+  opts?: { code?: string | null },
+): string {
+  const code = (opts?.code ?? '').trim();
+  if (
+    code === 'BILLING_OVERDUE' ||
+    code === 'SUBSCRIPTION_SUSPENDED' ||
+    code === 'TENANT_SUSPENDED'
+  ) {
+    return MOBILE_COPY.checkout.storeUnavailable;
+  }
+
+  const m = (apiMessage ?? '').trim().toLowerCase();
+  if (!m) return MOBILE_COPY.checkout.paymentFailedGeneric;
+
+  if (
+    m.includes('vendor payment') ||
+    m.includes('vendor razorpay') ||
+    m.includes('payment configuration not found') ||
+    m.includes('platform invoice') ||
+    m.includes('subscription bill') ||
+    m.includes('billing subscription') ||
+    m.includes('onboarding is not active')
+  ) {
+    return m.includes('platform invoice') || m.includes('subscription')
+      ? MOBILE_COPY.checkout.storeUnavailable
+      : MOBILE_COPY.checkout.onlinePaymentUnavailable;
+  }
+
+  return (apiMessage ?? '').trim() || MOBILE_COPY.checkout.paymentFailedGeneric;
 }

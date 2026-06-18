@@ -29,7 +29,7 @@ import { getCartCalculation } from '@/api/cartApi';
 import { buildDeliveryAddressPayload } from '@/utils/indiaPincode';
 import { RAZORPAY_KEY_ID } from '@/src/config/constants';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
-import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
+import { MOBILE_COPY, customerFacingCheckoutError, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
 import { useGetStoreStatusQuery } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
@@ -152,8 +152,9 @@ export default function CheckoutScreen() {
           razorpayModule = null;
         }
       }
-      if (!RAZORPAY_KEY_ID) {
-        throw new Error('Payment configuration missing. Please contact support.');
+      const razorpayKey = paymentData.key_id || RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        throw new Error(MOBILE_COPY.checkout.onlinePaymentUnavailable);
       }
       if (!razorpayModule || typeof razorpayModule.open !== 'function') {
         throw new Error(
@@ -164,7 +165,7 @@ export default function CheckoutScreen() {
       const rzpResponse: any = await razorpayModule.open({
         description: 'Grocery Order',
         currency: paymentData.currency || 'INR',
-        key: RAZORPAY_KEY_ID,
+        key: razorpayKey,
         amount: String(paymentData.amount),
         name: storeName,
         order_id: paymentData.razorpay_order_id,
@@ -198,7 +199,11 @@ export default function CheckoutScreen() {
       if (error?.code === 0 || String(error?.description).toLowerCase().includes('cancel')) {
         showToast('error', 'Cancelled', 'Payment was cancelled.');
       } else {
-        showToast('error', 'Order Failed', error?.message || 'Please try again.');
+        showToast(
+          'error',
+          'Order Failed',
+          customerFacingCheckoutError(error?.message, { code: error?.code }),
+        );
       }
     } finally {
       setIsPlacing(false);

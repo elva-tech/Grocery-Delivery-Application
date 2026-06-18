@@ -17,6 +17,7 @@ const {
   reverseOrderBilling,
 } = require("../modules/billing");
 const { assertCanPlaceOrder } = require("../modules/billing/services/enforcement.service");
+const { customerOrderBlockResponse } = require("../utils/customerFacingErrors.util");
 const {
   isValidIndianPincodeFormat,
   extractPinFromAddressFields,
@@ -27,6 +28,7 @@ const {
   streamInvoicePdfFromCloudinary,
   streamGeneratedInvoicePdf,
 } = require("../services/invoice.service");
+const { notifyOrderPlacedSafe, notifyOrderDeliveredSafe } = require("../services/notify.service");
 
 function isInvoiceAssetPdf(invoiceAsset) {
   if (!invoiceAsset || !invoiceAsset.imageUrl) return false;
@@ -145,10 +147,11 @@ exports.placeCustomerOrder = async (req, res) => {
     try {
       await assertCanPlaceOrder(tenantId);
     } catch (billingBlock) {
+      const customer = customerOrderBlockResponse(billingBlock);
       return res.status(billingBlock.status || 403).json({
         success: false,
-        message: billingBlock.message,
-        code: billingBlock.code,
+        message: customer.message,
+        code: customer.code,
       });
     }
 
@@ -411,6 +414,11 @@ exports.placeCustomerOrder = async (req, res) => {
       console.error("Billing tracking error (non-critical):", billingErr.message);
     }
 
+    // COD: notify only after order is saved. ONLINE: notify after payment succeeds.
+    if (paymentMode === "COD") {
+      void notifyOrderPlacedSafe(order);
+    }
+
     res.status(201).json({
       message: "Order placed successfully",
       orderId: order._id,
@@ -572,6 +580,8 @@ exports.markOrderDelivered = async (req, res) => {
     }
 
     await order.save();
+
+    await notifyOrderDeliveredSafe(order);
 
     res.status(200).json({
       message: "Order delivered successfully",

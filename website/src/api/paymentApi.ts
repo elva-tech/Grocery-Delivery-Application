@@ -16,6 +16,8 @@ export interface CreatePaymentResponse {
   razorpay_order_id: string;
   amount: number;
   currency: string;
+  /** Vendor Razorpay key — use this instead of a static env key per tenant. */
+  key_id?: string;
 }
 
 export interface VerifyPaymentPayload {

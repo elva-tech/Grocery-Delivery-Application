@@ -1,5 +1,9 @@
 const { createOrderStatusNotification } = require("../services/notification.service");
 const {
+  notifyOutForDeliverySafe,
+  notifyOrderDeliveredSafe,
+} = require("../services/notify.service");
+const {
   initiateOrderRefund,
   isRefundableOrder,
 } = require("../services/orderRefund.service");
@@ -204,6 +208,12 @@ exports.updateOrderStatus = async (req, res) => {
       });
     } catch (err) {
       console.log("Notification failed but order updated:", err.message);
+    }
+
+    if (status === "OUT_FOR_DELIVERY") {
+      await notifyOutForDeliverySafe(refreshedOrder || order);
+    } else if (status === "DELIVERED") {
+      await notifyOrderDeliveredSafe(refreshedOrder || order);
     }
 
     const response = {

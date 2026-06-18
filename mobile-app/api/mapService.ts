@@ -1,8 +1,9 @@
 /**
  * Map microservice (GET /api/map/search, POST /api/map/process).
- * Same contract as customer website `website/src/api/mapApi.js`.
- * RN has no CORS limits — default hits Render, optional localhost fallback for dev.
+ * Default: grocery backend /api/map/* proxy (no CORS, same as customer website).
  */
+
+import { ACTIVE_API_URL } from '@/src/config/constants';
 
 export const REMOTE_MAP_SERVICE_URL = 'https://ola-map-service.onrender.com';
 
@@ -42,6 +43,18 @@ function getExplicitBase(): string | null {
   return normalizeBase(raw);
 }
 
+function defaultBaseChain(): string[] {
+  const explicit = getExplicitBase();
+  if (explicit) return [explicit];
+
+  const backend = normalizeBase(ACTIVE_API_URL);
+  if (backend) {
+    return [backend, normalizeBase(REMOTE_MAP_SERVICE_URL), normalizeBase(LOCAL_MAP_FALLBACK)];
+  }
+
+  return [normalizeBase(REMOTE_MAP_SERVICE_URL), normalizeBase(LOCAL_MAP_FALLBACK)];
+}
+
 function throwIfAborted(signal: AbortSignal | undefined | null): void {
   if (!signal?.aborted) return;
   const err = new Error('Aborted');
@@ -55,25 +68,24 @@ async function fetchFromMapService(resourcePath: string, init?: RequestInit): Pr
 
   throwIfAborted(signal);
 
-  const explicit = getExplicitBase();
-  if (explicit) {
-    return fetch(`${explicit}${path}`, init);
+  const bases = defaultBaseChain();
+  let lastNonOk: Response | null = null;
+
+  for (const base of bases) {
+    try {
+      throwIfAborted(signal);
+      const res = await fetch(`${base}${path}`, init);
+      if (res.ok) return res;
+      if (res.status >= 400 && res.status < 500) return res;
+      lastNonOk = res;
+    } catch (e) {
+      const name = (e as Error)?.name;
+      if (name === 'AbortError') throw e;
+    }
   }
 
-  const remote = normalizeBase(REMOTE_MAP_SERVICE_URL);
-  try {
-    throwIfAborted(signal);
-    const res = await fetch(`${remote}${path}`, init);
-    if (res.ok) return res;
-    if (res.status >= 400 && res.status < 500) return res;
-  } catch (e) {
-    const name = (e as Error)?.name;
-    if (name === 'AbortError') throw e;
-    /* offline / tunnel issues */
-  }
-
-  throwIfAborted(signal);
-  return fetch(`${normalizeBase(LOCAL_MAP_FALLBACK)}${path}`, init);
+  if (lastNonOk) return lastNonOk;
+  return fetch(`${bases[bases.length - 1]}${path}`, init);
 }
 
 /** GET /api/map/search — debounce & q.length >= 3 at call sites. */
@@ -142,7 +154,6 @@ export async function processSelectedLocation(
       return {};
     }
 
-    // Same rule as map confirm: HTTP 200 can still mean “outside delivery zone” (skip when probing for home banner).
     if (
       rejectIfNotEligible &&
       payload.config.enableEligibilityCheck !== false &&

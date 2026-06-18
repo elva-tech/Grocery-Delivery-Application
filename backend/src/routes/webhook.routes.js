@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const Order = require("../models/Order.model");
 const Vendor = require("../models/Vendor.model");
 const { applyRefundWebhook } = require("../services/orderRefund.service");
+const { notifyOrderPlacedSafe } = require("../services/notify.service");
 const { getVendorWebhookSecret } = require("../utils/getVendorRazorpayClient");
 
 async function resolveTenantIdFromEvent(event) {
@@ -132,7 +133,13 @@ router.post(
 
     try {
       if (eventName === "payment.captured") {
-        if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
+        const updated = await Order.findOneAndUpdate(
+          { _id: order._id, paymentStatus: { $nin: ["PAID", "REFUNDED"] } },
+          { paymentStatus: "PAID", razorpayPaymentId },
+          { new: true }
+        );
+
+        if (!updated) {
           console.log({
             tenantId: order.tenantId,
             orderId: order._id.toString(),
@@ -141,13 +148,12 @@ router.post(
           });
           return res.status(200).json({ received: true });
         }
-        await Order.findByIdAndUpdate(order._id, {
-          paymentStatus: "PAID",
-          razorpayPaymentId,
-        });
+
+        void notifyOrderPlacedSafe(updated);
+
         console.log({
-          tenantId: order.tenantId,
-          orderId: order._id.toString(),
+          tenantId: updated.tenantId,
+          orderId: updated._id.toString(),
           razorpayOrderId,
           paymentStatus: "PAID",
         });

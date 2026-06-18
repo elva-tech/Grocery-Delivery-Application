@@ -10,7 +10,7 @@ import { buildDeliveryAddressPayload, formatAddressSummary } from '../utils/indi
 import { loadRazorpay } from '../utils/loadRazorpay';
 import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
 import { useToast } from '../context/ToastContext';
-import { WEB_COPY, customerFacingDeliveryUnavailable } from '../constants/copy';
+import { WEB_COPY, customerFacingCheckoutError, customerFacingDeliveryUnavailable } from '../constants/copy';
 import { fetchStorefrontCoupons, type StorefrontCoupon } from '../api/storefrontCouponsApi';
 
 const Checkout = ({ address, deliveryEligibility }: any) => {
@@ -181,8 +181,16 @@ const handlePlaceOrder = async () => {
     const rawPhone: string = user?.phone || user?.phoneNumber || '';
     const contact = rawPhone.replace(/^\+91/, '').replace(/\s+/g, '').slice(-10);
 
+    const razorpayKey =
+      paymentData.key_id || (import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined);
+    if (!razorpayKey) {
+      showToast('error', WEB_COPY.checkout.onlinePaymentUnavailable);
+      setIsProcessing(false);
+      return;
+    }
+
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID as string,
+      key: razorpayKey,
       amount: paymentData.amount,
       currency: paymentData.currency,
       order_id: paymentData.razorpay_order_id,
@@ -236,7 +244,13 @@ const handlePlaceOrder = async () => {
       showToast('error', 'Your session has expired. Please log in again to place your order.');
       navigate('/', { replace: true });
     } else {
-      showToast('error', error?.response?.data?.message || 'Failed to place order. Please try again.');
+      showToast(
+        'error',
+        customerFacingCheckoutError(error?.response?.data?.message, {
+          code: error?.response?.data?.code,
+          status: error?.response?.status,
+        }),
+      );
       setIsProcessing(false);
     }
   }
