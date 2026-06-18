@@ -844,11 +844,26 @@ async function generateMonthlyBilling(tenantId = null) {
 
 async function processOverdueInvoices() {
   const now = new Date();
+
+  // ₹0 invoices (e.g. FREE / PER_ORDER with no charges) should never suspend a store.
+  const zeroDue = await BillingInvoice.find({
+    payment_status: "UNPAID",
+    invoice_status: { $in: ["PENDING", "OVERDUE"] },
+    due_date: { $lt: now },
+    is_current_cycle: false,
+    total_amount: { $lte: 0 },
+  }).lean();
+
+  for (const inv of zeroDue) {
+    await autoSettleZeroAmountInvoices(inv.tenant_id, inv.store_id);
+  }
+
   const overdueInvoices = await BillingInvoice.find({
     payment_status: "UNPAID",
     invoice_status: { $in: ["PENDING", "OVERDUE"] },
     due_date: { $lt: now },
     is_current_cycle: false,
+    total_amount: { $gt: 0 },
   }).lean();
 
   const results = [];
@@ -949,6 +964,47 @@ function inferPaymentMethod(paymentId) {
   return "OTHER";
 }
 
+async function autoSettleZeroAmountInvoices(tenantId, storeId = storeIdFor(tenantId)) {
+  const paidAt = new Date();
+  const result = await BillingInvoice.updateMany(
+    {
+      tenant_id: tenantId,
+      store_id: storeId,
+      payment_status: "UNPAID",
+      invoice_status: { $nin: ["PAID", "CANCELLED"] },
+      total_amount: { $lte: 0 },
+    },
+    {
+      $set: {
+        invoice_status: "PAID",
+        payment_status: "PAID",
+        paid_at: paidAt,
+        payment_id: "auto_zero_settle",
+        payment_method: "NONE",
+      },
+    }
+  );
+
+  if (result.modifiedCount === 0) return;
+
+  const hasOverdue = await BillingInvoice.exists({
+    tenant_id: tenantId,
+    store_id: storeId,
+    invoice_status: "OVERDUE",
+    payment_status: { $ne: "PAID" },
+    total_amount: { $gt: 0 },
+  });
+
+  if (!hasOverdue) {
+    await Tenant.updateOne({ tenantId }, { status: "ACTIVE", isActive: true });
+    await TenantSubscription.updateMany(
+      { tenant_id: tenantId, store_id: storeId, subscription_status: "SUSPENDED" },
+      { $set: { subscription_status: "ACTIVE" } }
+    );
+    await Store.findOneAndUpdate({ tenantId }, { manualOverride: false });
+  }
+}
+
 async function markAllUnpaidInvoicesPaid(tenantId, paymentId = null) {
   const store_id = storeIdFor(tenantId);
   const paidAt = new Date();
@@ -1035,6 +1091,7 @@ async function _finalizeMarkPaid(tenantId, store_id, paidAt, singleInvoice = nul
     tenant_id: tenantId,
     invoice_status: "OVERDUE",
     payment_status: { $ne: "PAID" },
+    total_amount: { $gt: 0 },
   });
 
   await cleanupStaleUnpaidDuplicates(tenantId);
@@ -1249,6 +1306,7 @@ module.exports = {
   sendBillingReminders,
   markInvoicePaid,
   markAllUnpaidInvoicesPaid,
+  autoSettleZeroAmountInvoices,
   cleanupStaleUnpaidDuplicates,
   formatPlanForApi,
   formatSubscriptionForApi,
