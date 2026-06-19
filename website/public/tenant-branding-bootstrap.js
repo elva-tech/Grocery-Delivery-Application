@@ -39,7 +39,17 @@
 
   var host = (location.hostname || "").toLowerCase();
   var tenantId = tenantIdFromHostname(host);
-  if (!tenantId || host === "localhost" || host === "127.0.0.1") return;
+  var metaTenant = String(
+    (document.querySelector('meta[name="tenant-id"]') || {}).content || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!tenantId && (host === "localhost" || host === "127.0.0.1") && metaTenant) {
+    tenantId = metaTenant;
+  }
+
+  if (!tenantId) return;
 
   var suffix = document.documentElement.getAttribute("data-branding-suffix") || "";
 
