@@ -11,18 +11,20 @@ export function applyDocumentBranding({
   }
   if (!faviconUrl) return;
 
-  let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'icon';
-    document.head.appendChild(link);
-  }
-
-  link.href = faviconUrl;
   const lower = faviconUrl.toLowerCase();
-  if (lower.includes('.svg')) link.type = 'image/svg+xml';
-  else if (lower.includes('.png')) link.type = 'image/png';
-  else if (lower.includes('.jpg') || lower.includes('.jpeg')) link.type = 'image/jpeg';
-  else if (lower.includes('.webp')) link.type = 'image/webp';
-  else link.removeAttribute('type');
+  let type: string = 'image/png';
+  if (lower.includes('.svg')) type = 'image/svg+xml';
+  else if (lower.includes('.jpg') || lower.includes('.jpeg')) type = 'image/jpeg';
+  else if (lower.includes('.webp')) type = 'image/webp';
+
+  ['icon', 'shortcut icon', 'apple-touch-icon'].forEach((rel) => {
+    let link = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = rel;
+      document.head.appendChild(link);
+    }
+    link.href = faviconUrl;
+    if (rel !== 'apple-touch-icon') link.type = type;
+  });
 }

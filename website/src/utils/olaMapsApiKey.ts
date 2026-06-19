@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config';
+import { fetchFromMapService } from '../constants/mapService';
 
 let cachedKey: string | null = null;
 let inflight: Promise<string> | null = null;
@@ -11,20 +12,8 @@ function keyFromViteEnv(): string {
   return String(raw).trim();
 }
 
-function apiOriginForConfig(): string {
-  const fromEnv = String(API_BASE_URL || '').trim().replace(/\/$/, '');
-  if (fromEnv) return fromEnv;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-  return '';
-}
-
 async function fetchKeyFromBackend(): Promise<string> {
-  const origin = apiOriginForConfig();
-  if (!origin) return '';
-
-  const res = await fetch(`${origin}/api/map/config`, {
+  const res = await fetchFromMapService('/api/map/config', {
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) return '';
@@ -33,7 +22,7 @@ async function fetchKeyFromBackend(): Promise<string> {
   return String(data?.apiKey || '').trim();
 }
 
-/** Ola Maps tile SDK key — Vite env first, then backend /api/map/config. */
+/** Ola Maps tile SDK key — Vite env first, then backend GET /api/map/config. */
 export async function getOlaMapsApiKey(): Promise<string> {
   const fromEnv = keyFromViteEnv();
   if (fromEnv) return fromEnv;
@@ -50,4 +39,14 @@ export async function getOlaMapsApiKey(): Promise<string> {
     });
 
   return inflight;
+}
+
+/** For diagnostics — whether a key is configured at build time. */
+export function hasOlaMapsKeyInBuild(): boolean {
+  return Boolean(keyFromViteEnv());
+}
+
+/** Backend API origin used for map config fallback (empty if unset). */
+export function mapConfigApiOrigin(): string {
+  return String(API_BASE_URL || '').trim().replace(/\/$/, '');
 }

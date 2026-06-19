@@ -1,8 +1,11 @@
 const Tenant = require("../../../models/Tenant.model");
 const TenantSubscription = require("../models/TenantSubscription.model");
 const BillingInvoice = require("../models/BillingInvoice.model");
+const { autoSettleZeroAmountInvoices } = require("./billing.service");
 
 async function assertCanPlaceOrder(tenantId, storeId = tenantId) {
+  await autoSettleZeroAmountInvoices(tenantId, storeId);
+
   const tenant = await Tenant.findOne({ tenantId }).select("status").lean();
   if (tenant?.status === "SUSPENDED") {
     const err = new Error("Store account is suspended. Orders cannot be placed.");
@@ -14,7 +17,6 @@ async function assertCanPlaceOrder(tenantId, storeId = tenantId) {
   const sub = await TenantSubscription.findOne({
     tenant_id: tenantId,
     store_id: storeId,
-    subscription_status: "ACTIVE",
   }).lean();
 
   if (sub?.subscription_status === "SUSPENDED") {
@@ -29,6 +31,7 @@ async function assertCanPlaceOrder(tenantId, storeId = tenantId) {
     store_id: storeId,
     invoice_status: "OVERDUE",
     payment_status: "UNPAID",
+    total_amount: { $gt: 0 },
   }).lean();
 
   if (overdue) {

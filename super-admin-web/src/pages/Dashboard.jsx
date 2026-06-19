@@ -449,7 +449,7 @@ export default function Dashboard() {
                             ? 'PAID'
                             : inv.invoice_status || inv.status || 'PENDING';
                           const amount = Number(inv.totalAmount ?? inv.total_amount ?? 0);
-                          const canMarkPaid = !isPaid && amount > 0;
+                          const canMarkPaid = !isPaid;
                           const period =
                             inv.period_label ||
                             (inv.billing_month && inv.billing_year
@@ -491,7 +491,11 @@ export default function Dashboard() {
                                   disabled={markingPaid[tenant.tenantId]}
                                   className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 transition-colors w-fit font-semibold"
                                 >
-                                  {markingPaid[tenant.tenantId] ? 'Saving…' : 'Mark Paid'}
+                                  {markingPaid[tenant.tenantId]
+                                    ? 'Saving…'
+                                    : amount > 0
+                                      ? 'Mark Paid'
+                                      : 'Waive (₹0)'}
                                 </button>
                               )}
                               {isPaid && inv.paidAt && (

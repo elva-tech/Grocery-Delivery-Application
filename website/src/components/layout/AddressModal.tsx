@@ -202,7 +202,9 @@ const AddressModal: React.FC<AddressModalProps> = ({
 
       const apiKey = await getOlaMapsApiKey();
       if (!apiKey) {
-        showError('Map is unavailable right now. Please try again later or enter your address manually.');
+        showError(
+          'Map is unavailable — Ola Maps API key is not configured. Redeploy the site with VITE_OLA_MAPS_API_KEY or set OLA_MAPS_API_KEY on the backend.',
+        );
         return;
       }
 
