@@ -2,8 +2,6 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { Colors, Fonts } from "@/theme/theme";
-import { sendOtp } from "@/api/authApi";
-import { showToast } from "@/utils/toast";
 import { StoreLogo } from '@/src/components/StoreLogo';
 import { MOBILE_COPY } from "@/src/constants/copy";
 
@@ -20,17 +18,14 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await sendOtp(phone as string);
-      
       router.push({
         pathname: '/auth/otp',
         params: {
           phone,
-          mode: "signup"
-        }
+          mode: 'signup',
+          autoSend: '1',
+        },
       });
-    } catch (error: any) {
-      showToast("error", "Error", error?.message || "Failed to send OTP");
     } finally {
       setLoading(false);
     }

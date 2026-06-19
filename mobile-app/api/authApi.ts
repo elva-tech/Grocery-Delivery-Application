@@ -23,15 +23,20 @@ export interface VerifyOtpResponse {
 }
 
 const REQUEST_TIMEOUT_MS = 12000;
+const SEND_OTP_TIMEOUT_MS = 45000;
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
   const fetchPromise = fetch(url, { ...init, signal: controller.signal });
   const timeoutPromise = new Promise<Response>((_, reject) => {
     setTimeout(() => {
       controller.abort();
       reject(new Error('Request timed out. Check backend/server connection.'));
-    }, REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
   });
 
   try {
@@ -59,17 +64,27 @@ async function parseJsonSafely<T>(response: Response): Promise<T> {
 /**
  * Send OTP to phone number
  */
-export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => {
-  const response = await fetchWithTimeout(`${ACTIVE_API_URL}/api/auth/send-otp`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'x-platform': 'mobile',
-      'x-tenant-id': await getActiveTenantId(),
+export const sendOtp = async (
+  phoneNumber: string,
+  options: { resend?: boolean } = {},
+): Promise<SendOtpResponse> => {
+  const response = await fetchWithTimeout(
+    `${ACTIVE_API_URL}/api/auth/send-otp`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-platform': 'mobile',
+        'x-tenant-id': await getActiveTenantId(),
+      },
+      body: JSON.stringify({
+        phoneNumber,
+        ...(options.resend ? { resend: true } : {}),
+      }),
     },
-    body: JSON.stringify({ phoneNumber }),
-  });
+    SEND_OTP_TIMEOUT_MS,
+  );
 
   const data = await parseJsonSafely<SendOtpResponse>(response);
 

@@ -19,11 +19,32 @@ export default function OTP() {
   const phone = params.phone as string;
   const name = (params.name as string) || "";
   const mode = (params.mode as "signup" | "login") || "login";
+  const autoSend = params.autoSend === "1";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(30);
   const [loading, setLoading] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(autoSend);
   const inputs = useRef<(TextInput | null)[]>([]);
+  const autoSendStarted = useRef(false);
+
+  useEffect(() => {
+    if (!autoSend || autoSendStarted.current || !phone) return;
+    autoSendStarted.current = true;
+
+    (async () => {
+      setSendingOtp(true);
+      try {
+        await sendOtp(phone);
+        setTimer(30);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to send OTP";
+        showToast("error", "Error", msg);
+      } finally {
+        setSendingOtp(false);
+      }
+    })();
+  }, [autoSend, phone]);
 
   useEffect(() => {
     let interval: any;
@@ -51,7 +72,7 @@ export default function OTP() {
   const handleResend = async () => {
     setLoading(true);
     try {
-      await sendOtp(phone as string);
+      await sendOtp(phone as string, { resend: true });
       setOtp(["", "", "", "", "", ""]);
       setTimer(30);
       inputs.current[0]?.focus();
@@ -134,9 +155,18 @@ export default function OTP() {
   Enter the 6-digit code sent to
 </Text>
 
-<Text style={[styles.subtitle, { color: Colors.PRIMARY, fontFamily: Fonts.medium }]}>
+      <Text style={[styles.subtitle, { color: Colors.PRIMARY, fontFamily: Fonts.medium }]}>
   +91 {phone}
 </Text>
+
+      {sendingOtp ? (
+        <View style={styles.sendingRow}>
+          <ActivityIndicator color={Colors.PRIMARY} size="small" />
+          <Text style={[styles.sendingText, { fontFamily: Fonts.regular }]}>
+            Sending OTP…
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.otpContainer}>
         {otp.map((d, i) => (
@@ -174,6 +204,8 @@ const styles = StyleSheet.create({
   lottieHero: { width: 220, height: 220, alignSelf: "center", marginBottom: 20 },
   title: { fontSize: 28, color: Colors.PRIMARY_TEXT },
   subtitle: { fontSize: 16, color: Colors.TEXT_MUTED, marginTop: 12, marginBottom: 40, lineHeight: 24 },
+  sendingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 },
+  sendingText: { fontSize: 14, color: Colors.TEXT_MUTED },
   otpContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 40,  gap: 8 },
 input: {
   width: 48,

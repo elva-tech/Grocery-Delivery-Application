@@ -1,19 +1,20 @@
 /**
- * Resolves the current tenantId for mobile (pre-auth API headers).
+ * Sync tenant hint for bootstrapping UI only.
+ * API calls must use async `getActiveTenantId()` from tenantStorage.
  *
- * Set EXPO_PUBLIC_TENANT_ID per store (see eas.json).
- * Optional: EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID when TENANT_ID is unset in dev.
- * Built-in default: puma (must match tenantStorage fallback).
+ * In production APK, tenant comes from store code / QR (AsyncStorage).
+ * For local Expo dev, set EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID in .env.
  */
 export function getTenantId(): string {
-  const envTenant = process.env.EXPO_PUBLIC_TENANT_ID?.trim();
-  if (envTenant) return envTenant;
-
   const localDefault = process.env.EXPO_PUBLIC_LOCAL_DEFAULT_TENANT_ID?.trim();
   if (localDefault) return localDefault;
 
-  return "puma";
+  if (__DEV__) {
+    const envTenant = process.env.EXPO_PUBLIC_TENANT_ID?.trim();
+    if (envTenant) return envTenant;
+  }
+
+  return '';
 }
 
-/** @deprecated Import from `@/src/utils/tenantStorage` — async tenant for API headers */
-export { getActiveTenantId } from './tenantStorage';
+export { getActiveTenantId, hasActiveTenant } from './tenantStorage';

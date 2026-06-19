@@ -81,7 +81,7 @@ if (__DEV__) {
 
     
 
-// Dynamically resolved — configure EXPO_PUBLIC_TENANT_ID in eas.json per build profile.
+// Resolved at runtime via store code / QR — see tenantStorage (empty until user picks a store).
 export const TENANT_ID = getTenantId();
 export const RAZORPAY_KEY_ID = 'rzp_test_SaHmJpDs42QvIp';
 export const APP_BRAND = 'Enandi';

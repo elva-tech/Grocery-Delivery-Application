@@ -139,14 +139,31 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!mounted || !segments?.length || !appReady) return;
 
-    const rootSegment = segments[0];
-    const inAuthFlow = rootSegment === 'auth';
+    let cancelled = false;
 
-    if (!isAuthenticated && !inAuthFlow) {
-      router.replace('/auth/landing');
-    } else if (isAuthenticated && inAuthFlow) {
-      router.replace('/(tabs)');
-    }
+    (async () => {
+      const tid = (await getActiveTenantId()).trim();
+      if (cancelled) return;
+
+      const rootSegment = segments[0];
+      const inAuthFlow = rootSegment === 'auth';
+      const onStoreCode = segments[1] === 'store-code';
+
+      if (!tid && !onStoreCode) {
+        router.replace('/auth/store-code');
+        return;
+      }
+
+      if (!isAuthenticated && !inAuthFlow) {
+        router.replace('/auth/landing');
+      } else if (isAuthenticated && inAuthFlow) {
+        router.replace('/(tabs)');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated, segments, mounted, appReady]);
 
   if (!appReady) return null;

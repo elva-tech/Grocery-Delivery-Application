@@ -14,8 +14,6 @@ import { useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
 import { Colors, Fonts } from "@/theme/theme";
 import { StoreLogo } from '@/src/components/StoreLogo';
-import { sendOtp } from "@/api/authApi";
-import { showToast } from "@/utils/toast";
 import { MOBILE_COPY } from "@/src/constants/copy";
 
 export default function Login() {
@@ -29,26 +27,19 @@ export default function Login() {
     const handleNext = async () => {
         if (!isValid || loading) return;
 
+        setLoading(true);
         try {
-            setLoading(true);
-
-            await sendOtp(phone);
-
             router.push({
                 pathname: "/auth/otp",
                 params: {
                     phone,
-                    mode: "login"
-                }
+                    mode: "login",
+                    autoSend: "1",
+                },
             });
-
-        } catch (error: any) {
-            showToast("error", "Error", error?.message || "Failed to send OTP");
         } finally {
             setLoading(false);
         }
-
-
     };
         return (
             <KeyboardAvoidingView
