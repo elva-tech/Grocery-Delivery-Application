@@ -247,6 +247,21 @@ export const apiSlice = createApi({
     }, void>({
       queryFn: async () => {
         try {
+          const tenantId = (await getActiveTenantId()).trim();
+          if (!tenantId) {
+            return {
+              data: {
+                isClosed: false,
+                reason: 'UNAVAILABLE',
+                nextChange: null,
+                closingSoon: false,
+                hasScheduledHours: false,
+                minutesUntilClose: null,
+                closesAt: null,
+              },
+            };
+          }
+
           const res = await fetch(`${BASE}/api/store/status`, { headers: await tenantHeaders() });
           if (!res.ok) throw new Error('store status fetch failed');
           const data = await res.json();

@@ -153,7 +153,9 @@ class NotifyServiceError extends Error {
   }
 }
 
-function isRetryableNotifyFailure(error, upstreamStatus) {
+function isRetryableNotifyFailure(error, upstreamStatus, { allow429Retry = false, allowTimeoutRetry = true } = {}) {
+  if (upstreamStatus === 429 && !allow429Retry) return false;
+  if (error?.name === "AbortError" && !allowTimeoutRetry) return false;
   if (error?.name === "AbortError") return true;
   if (upstreamStatus && RETRYABLE_UPSTREAM_STATUSES.has(upstreamStatus)) return true;
   if (error instanceof NotifyServiceError && error.retryable) return true;
@@ -300,6 +302,7 @@ async function executeNotifyHttpRequest({
 
 async function notifyHttpRequest(options) {
   const maxAttempts = Math.max(1, Number(options.maxAttempts) || 1);
+  const retryOptions = options.retryOptions || {};
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -308,7 +311,8 @@ async function notifyHttpRequest(options) {
       const upstreamStatus =
         error instanceof NotifyServiceError ? error.upstreamStatus : undefined;
       const shouldRetry =
-        attempt < maxAttempts && isRetryableNotifyFailure(error, upstreamStatus);
+        attempt < maxAttempts &&
+        isRetryableNotifyFailure(error, upstreamStatus, retryOptions);
 
       if (!shouldRetry) {
         throw error;
@@ -358,6 +362,7 @@ async function sendOtp({ tenantId, phoneNumber }) {
     storeName,
     requestId,
     maxAttempts: NOTIFY_MAX_ATTEMPTS,
+    retryOptions: { allow429Retry: false, allowTimeoutRetry: false },
     body: buildOtpSendBody({
       tenantId,
       storeName,
@@ -411,6 +416,7 @@ async function resendOtp({ tenantId, phoneNumber }) {
     storeName,
     requestId,
     maxAttempts: NOTIFY_MAX_ATTEMPTS,
+    retryOptions: { allow429Retry: false, allowTimeoutRetry: false },
     body: buildOtpSendBody({
       tenantId,
       storeName,

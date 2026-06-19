@@ -87,8 +87,16 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
 
   const bootstrap = useCallback(async () => {
     setReady(false);
-    const tid = (await getActiveTenantId()).trim() || getTenantId();
+    const tid = (await getActiveTenantId()).trim() || getTenantId().trim();
     setTenantId(tid);
+
+    if (!tid) {
+      setRaw(null);
+      setLoading(false);
+      setReady(true);
+      return;
+    }
+
     const cached = await readTenantBrandingCache(tid);
     if (cached) {
       setRaw(cacheToTenantDetails(tid, cached));
@@ -113,9 +121,9 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
   }, [bootstrap]);
 
   const value = useMemo((): TenantBrandingValue => {
-    const tid = raw?.tenantId?.trim() || tenantId || getTenantId();
+    const tid = raw?.tenantId?.trim() || tenantId || getTenantId().trim();
     const storeName =
-      raw?.storeName?.trim() || titleCaseTenantId(tid) || 'Store';
+      raw?.storeName?.trim() || (tid ? titleCaseTenantId(tid) : 'ELVA');
     const logoUri = raw?.logo?.trim()
       ? resolveProductImageUri({ imageUrl: raw.logo.trim() })
       : null;

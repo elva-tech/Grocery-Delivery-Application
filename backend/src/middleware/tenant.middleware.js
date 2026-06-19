@@ -27,6 +27,15 @@ const resolveTenant = async (req, res, next) => {
 
     // ── SUBDOMAIN (ROBUST LOGIC) ────────────────────
     if (!tenantId) {
+      const isIpLike = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+      if (isIpLike) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Tenant could not be resolved from IP address. Send x-tenant-id header (enter store code in the app first).",
+        });
+      }
+
       const parts = hostname.split(".");
 
       // Remove common prefixes

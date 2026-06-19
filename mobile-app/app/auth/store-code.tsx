@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import { Colors, Fonts } from "@/theme/theme";
 import { StoreLogo } from '@/src/components/StoreLogo';
-import { saveTenantId } from "@/src/utils/tenantStorage";
+import { saveTenantId, hasActiveTenant } from "@/src/utils/tenantStorage";
 import { ACTIVE_API_URL } from "@/src/config/constants";
 
 export default function StoreCodeEntry() {
@@ -21,6 +21,11 @@ export default function StoreCodeEntry() {
   const [code, setCode]       = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
+  const [canGoBack, setCanGoBack] = useState(false);
+
+  useEffect(() => {
+    hasActiveTenant().then(setCanGoBack);
+  }, []);
 
   const handleSubmit = async () => {
     const trimmed = code.trim().toUpperCase();
@@ -96,13 +101,15 @@ export default function StoreCodeEntry() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.backText, { fontFamily: Fonts.regular }]}>← Back</Text>
-        </TouchableOpacity>
+        {canGoBack ? (
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.backText, { fontFamily: Fonts.regular }]}>← Back</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );
