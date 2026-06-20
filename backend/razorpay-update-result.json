@@ -1,0 +1,5 @@
+{
+  "ok": false,
+  "tenants": [],
+  "error": "querySrv ECONNREFUSED _mongodb._tcp.apnakart.pqdchef.mongodb.net"
+}

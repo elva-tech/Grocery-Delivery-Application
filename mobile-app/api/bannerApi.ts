@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '@/src/config/constants';
+import { ACTIVE_API_URL } from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 /** Matches backend Banner documents returned from GET /api/banners (same as customer website). */
@@ -22,7 +22,7 @@ export async function fetchBanners(): Promise<BannerRecord[]> {
     throw new Error('Tenant not configured');
   }
 
-  const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/banners`, {
+  const res = await fetch(`${ACTIVE_API_URL}/api/banners`, {
     headers: { 'x-tenant-id': tenantId },
   });
 

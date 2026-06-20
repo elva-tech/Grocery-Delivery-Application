@@ -9,17 +9,12 @@ import { Colors, Fonts } from "@/theme/theme";
 import { useTenantBranding } from "@/contexts/TenantBrandingContext";
 
 import { StoreLogo } from '@/src/components/StoreLogo';
-
-
+import { isCustomerBuild } from '@/src/utils/customer';
 
 export default function Landing() {
-
   const router = useRouter();
-
   const { storeName, heroTitle, heroSubtitle } = useTenantBranding();
-
-
-
+  const customerBuild = isCustomerBuild();
   return (
 
     <View style={styles.container}>
@@ -72,23 +67,16 @@ export default function Landing() {
 
       </TouchableOpacity>
 
-
-
-      <TouchableOpacity
-
-        style={styles.storeCodeBtn}
-
-        onPress={() => router.push('/auth/store-code')}
-
-      >
-
-        <Text style={[styles.storeCodeText, { fontFamily: Fonts.regular }]}>
-
-          Enter Store Code
-
-        </Text>
-
-      </TouchableOpacity>
+      {!customerBuild ? (
+        <TouchableOpacity
+          style={styles.storeCodeBtn}
+          onPress={() => router.push('/auth/store-code')}
+        >
+          <Text style={[styles.storeCodeText, { fontFamily: Fonts.regular }]}>
+            Enter Store Code
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
     </View>
 

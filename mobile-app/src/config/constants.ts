@@ -60,7 +60,9 @@ export const API_BASE_URL = {
     return resolveDevelopmentApiUrl();
   },
   STAGING: 'https://staging-api.egrocery.com',
-  PRODUCTION: 'https://grocery-delivery-application-6n3w.onrender.com',
+  PRODUCTION:
+    process.env.EXPO_PUBLIC_API_URL?.trim() ||
+    'https://grocery-delivery-application-x1yk.onrender.com',
 };
 
 

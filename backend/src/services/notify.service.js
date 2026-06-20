@@ -73,29 +73,43 @@ function resolveOtpBrandKey({ tenantId, storeName } = {}) {
   return slug || displayName || notifyConfig.appId;
 }
 
-/**
- * LOGIN_OTP DLT (message 216423):
- *   "Your OTP for {#VAR#} login is {#VAR#}"
- * Slot 1 = brand key (tenant slug by default), slot 2 = OTP (Notify-generated).
- */
-function buildOtpSendBody({ tenantId, storeName, phone }) {
-  const brandKey = resolveOtpBrandKey({ tenantId, storeName });
+function resolveOtpBrandId({ tenantId, brandIdOverride } = {}) {
+  const override = String(brandIdOverride || "").trim();
+  if (override) return override;
 
+  const slug = String(tenantId || "").trim().toLowerCase();
+  const mapped = notifyConfig.brandIdByTenant?.[slug];
+  if (mapped) return String(mapped).trim();
+
+  const fallback = resolveOtpBrandKey({ tenantId });
+  const resolved = String(fallback || "").trim();
+  if (!resolved) {
+    throw new Error(
+      "Notify brandId could not be resolved for this store. Set NOTIFY_BRAND_ID_MAP on the server."
+    );
+  }
+  return resolved;
+}
+
+/**
+ * Notify POST /otp/send — requires brandId + loginId (Notify playground format).
+ */
+function buildOtpSendBody({ tenantId, storeName, phone, brandId }) {
   return {
     ...buildCredentials(),
-    business: brandKey,
+    brandId: resolveOtpBrandId({ tenantId, brandIdOverride: brandId }),
     phone,
-    templateKey: TEMPLATE_KEYS.LOGIN_OTP,
-    variables: { businessName: brandKey },
+    loginId: notifyConfig.loginId,
   };
 }
 
-function buildOtpVerifyBody({ tenantId, storeName, phone, otp }) {
+function buildOtpVerifyBody({ tenantId, storeName, phone, otp, brandId }) {
   return {
     ...buildCredentials(),
-    business: resolveOtpBrandKey({ tenantId, storeName }),
+    brandId: resolveOtpBrandId({ tenantId, brandIdOverride: brandId }),
     phone,
     otp: String(otp).trim(),
+    loginId: notifyConfig.loginId,
   };
 }
 
@@ -183,8 +197,10 @@ async function executeNotifyHttpRequest({
       templateKey,
       tenantId: tenantId || undefined,
       storeName: storeName || undefined,
+      notifyBrandId: body?.brandId,
+      notifyLoginId: body?.loginId,
       notifyModuleBusiness: body?.business,
-      notifyOtpBrandKey: body?.business,
+      notifyOtpBrandKey: body?.brandId || body?.business,
       dltSlot1: body?.variables?.businessName ?? (Array.isArray(body?.variables) ? body.variables[0] : undefined),
       notifyVariables: body?.variables,
       phone: phone || undefined,
@@ -343,7 +359,7 @@ function isOrderDeliveredEnabled() {
   return notifyConfig.enabled && notifyConfig.orderDeliveredEnabled;
 }
 
-async function sendOtp({ tenantId, phoneNumber }) {
+async function sendOtp({ tenantId, phoneNumber, brandId }) {
   assertNotifyReady({ requireOtp: true });
 
   const requestId = createRequestId();
@@ -367,11 +383,12 @@ async function sendOtp({ tenantId, phoneNumber }) {
       tenantId,
       storeName,
       phone,
+      brandId,
     }),
   });
 }
 
-async function verifyOtp({ tenantId, phoneNumber, otp }) {
+async function verifyOtp({ tenantId, phoneNumber, otp, brandId }) {
   assertNotifyReady({ requireOtp: true });
 
   const requestId = createRequestId();
@@ -393,11 +410,13 @@ async function verifyOtp({ tenantId, phoneNumber, otp }) {
     storeName,
     requestId,
     maxAttempts: NOTIFY_MAX_ATTEMPTS,
-    body: buildOtpVerifyBody({ tenantId, storeName, phone, otp }),
+    // Retry transient Notify failures (503/timeout). Wrong/expired OTP (400/404) never retries.
+    retryOptions: { allow429Retry: false, allowTimeoutRetry: true },
+    body: buildOtpVerifyBody({ tenantId, storeName, phone, otp, brandId }),
   });
 }
 
-async function resendOtp({ tenantId, phoneNumber }) {
+async function resendOtp({ tenantId, phoneNumber, brandId }) {
   assertNotifyReady({ requireOtp: true });
 
   const requestId = createRequestId();
@@ -421,6 +440,7 @@ async function resendOtp({ tenantId, phoneNumber }) {
       tenantId,
       storeName,
       phone,
+      brandId,
     }),
   });
 }

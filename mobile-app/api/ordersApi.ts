@@ -1,10 +1,10 @@
-import { API_BASE_URL } from '@/src/config/constants';
+import { ACTIVE_API_URL } from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
 import { store } from '@/store/store';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
-const BASE = API_BASE_URL.DEVELOPMENT;
+const BASE = ACTIVE_API_URL;
 
 const getAuthToken = (): string | null => (store.getState() as any).auth?.token ?? null;
 

@@ -15,12 +15,30 @@ function trimTrailingSlash(url) {
   return String(url || "").replace(/\/+$/, "");
 }
 
+function parseBrandIdMap(raw) {
+  const defaults = { sales: "elva-sales", enandi: "enandi" };
+  if (!raw || !String(raw).trim()) return defaults;
+  try {
+    const parsed = JSON.parse(String(raw));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { ...defaults, ...parsed };
+    }
+  } catch {
+    /* ignore invalid JSON */
+  }
+  return defaults;
+}
+
 const notifyConfig = {
   enabled: parseEnvBoolean(process.env.NOTIFY_ENABLED, false),
 
   baseUrl: trimTrailingSlash(process.env.NOTIFY_BASE_URL || ""),
   appId: String(process.env.NOTIFY_APP_ID || "").trim(),
   apiKey: String(process.env.NOTIFY_API_KEY || "").trim(),
+  /** Notify OTP login template id (e.g. 7488). */
+  loginId: String(process.env.NOTIFY_LOGIN_ID || "7488").trim(),
+  /** Maps tenantId → Notify brandId (e.g. sales → elva-sales). */
+  brandIdByTenant: parseBrandIdMap(process.env.NOTIFY_BRAND_ID_MAP),
 
   loginOtpEnabled: parseEnvBoolean(process.env.NOTIFY_LOGIN_OTP_ENABLED, true),
   /** LOGIN_OTP brand: tenantId (playground default, e.g. puma) or storeName (Tenant.name). */

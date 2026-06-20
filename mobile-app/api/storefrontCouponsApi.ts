@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '@/src/config/constants';
+import { ACTIVE_API_URL } from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 export type StorefrontCoupon = {
@@ -26,7 +26,7 @@ export async function fetchStorefrontCoupons(
   };
   if (token?.trim()) headers.Authorization = `Bearer ${token.trim()}`;
   const q = new URLSearchParams({ cartSubtotal: String(cartSubtotal) });
-  const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/coupons/public?${q}`, { headers });
+  const res = await fetch(`${ACTIVE_API_URL}/api/coupons/public?${q}`, { headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.message || 'Could not load offers');
   const list = data?.coupons;
