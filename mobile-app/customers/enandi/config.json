@@ -1,0 +1,9 @@
+{
+  "appName": "ELVA",
+  "tenantId": "enandi",
+  "androidPackage": "com.vittesh.enandi",
+  "urlScheme": "enandi",
+  "slug": "Enandi",
+  "notifyBrandId": "enandi",
+  "version": "1.0.0"
+}

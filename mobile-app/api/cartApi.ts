@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '@/src/config/constants';
+import { ACTIVE_API_URL } from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 // ── Cart Bill Calculation ─────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ export const calculateBillBackend = (
 /** Fetches live delivery settings from backend, falls back to defaults */
 export const getCartCalculation = async (items: any[]) => {
   try {
-    const res = await fetch(`${API_BASE_URL.DEVELOPMENT}/api/settings`, {
+    const res = await fetch(`${ACTIVE_API_URL}/api/settings`, {
       headers: { 'x-tenant-id': await getActiveTenantId() },
     });
     if (!res.ok) throw new Error('settings fetch failed');

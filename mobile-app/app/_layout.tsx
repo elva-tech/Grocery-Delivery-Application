@@ -17,7 +17,7 @@ import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import StoreClosingSoonBanner from '@/components/StoreClosingSoonBanner';
-import { extractTenantFromUrl, getActiveTenantId, saveTenantId } from '@/src/utils/tenantStorage';
+import { extractTenantFromUrl, getActiveTenantId, isCustomerBuild, saveTenantId } from '@/src/utils/tenantStorage';
 import { TenantBrandingProvider, useTenantBranding } from '@/contexts/TenantBrandingContext';
 
 SplashScreen.preventAutoHideAsync();
@@ -90,9 +90,10 @@ function RootLayoutNav() {
     })();
   }, []);
 
-  // ── Deep link / QR tenant resolution ────────────────────────────────────────
+  // ── Deep link / QR tenant resolution (generic app only) ─────────────────────
   useEffect(() => {
-    // Cold start: app opened via deep link
+    if (isCustomerBuild()) return;
+
     Linking.getInitialURL().then((url) => {
       if (url) {
         const tenantId = extractTenantFromUrl(url);
@@ -149,7 +150,7 @@ function RootLayoutNav() {
       const inAuthFlow = rootSegment === 'auth';
       const onStoreCode = segments[1] === 'store-code';
 
-      if (!tid && !onStoreCode) {
+      if (!tid && !onStoreCode && !isCustomerBuild()) {
         router.replace('/auth/store-code');
         return;
       }

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ELVA",
-    "slug": "Enandi",
+    "name": "ELVA Grocery",
+    "slug": "elva-grocery",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "enandi",
+    "scheme": "elvagrocery",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -33,7 +33,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.vittesh.enandi"
+      "package": "com.elvatech.grocery"
     },
     "web": {
       "output": "static",

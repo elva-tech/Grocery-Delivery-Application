@@ -7,6 +7,7 @@ require("dotenv").config({
   path: require("path").join(__dirname, "../.env"),
   override: true,
 });
+require("dns").setServers(["8.8.8.8", "1.1.1.1"]);
 const mongoose = require("mongoose");
 const Vendor = require("../src/models/Vendor.model");
 const { encrypt } = require("../src/utils/encryption");

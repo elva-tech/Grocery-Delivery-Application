@@ -3,6 +3,7 @@
  */
 
 import { API_BASE_URL, getTenantId } from '../config';
+import { getNotifyBrandId } from '../utils/notifyBrandId';
 
 export interface SendOtpResponse {
   success: boolean;
@@ -44,7 +45,10 @@ export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => 
         'x-platform': 'web',
         'x-tenant-id': getTenantId(),
       },
-      body: JSON.stringify({ phoneNumber }),
+      body: JSON.stringify({
+        phoneNumber,
+        brandId: getNotifyBrandId(),
+      }),
     });
 
     const data = await response.json();
@@ -77,7 +81,13 @@ export const verifyOtp = async (
         'x-platform': 'web',
         'x-tenant-id': getTenantId(),
       },
-      body: JSON.stringify({ phoneNumber, otp, mode, ...(name && { name }) }),
+      body: JSON.stringify({
+        phoneNumber,
+        otp,
+        mode,
+        brandId: getNotifyBrandId(),
+        ...(name && { name }),
+      }),
     });
 
     const data = await response.json();

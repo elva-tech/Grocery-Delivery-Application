@@ -12,7 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import { Colors, Fonts } from "@/theme/theme";
 import { StoreLogo } from '@/src/components/StoreLogo';
-import { saveTenantId, hasActiveTenant } from "@/src/utils/tenantStorage";
+import { saveTenantId, hasActiveTenant, isCustomerBuild } from "@/src/utils/tenantStorage";
 import { ACTIVE_API_URL } from "@/src/config/constants";
 
 export default function StoreCodeEntry() {
@@ -24,8 +24,12 @@ export default function StoreCodeEntry() {
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
+    if (isCustomerBuild()) {
+      router.replace('/auth/landing');
+      return;
+    }
     hasActiveTenant().then(setCanGoBack);
-  }, []);
+  }, [router]);
 
   const handleSubmit = async () => {
     const trimmed = code.trim().toUpperCase();

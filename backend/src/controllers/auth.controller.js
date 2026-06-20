@@ -211,7 +211,7 @@ const sendOtp = async (req, res) => {
       });
     }
 
-    const { phoneNumber } = req.body;
+    const { phoneNumber, brandId } = req.body;
 
     const phoneError = validatePhone(phoneNumber);
     if (phoneError) {
@@ -225,10 +225,11 @@ const sendOtp = async (req, res) => {
     const isResend = req.body?.resend === true;
 
     try {
+      const notifyBrandId = String(brandId || "").trim() || undefined;
       if (isResend) {
-        await notifyResendOtp({ tenantId, phoneNumber: phone });
+        await notifyResendOtp({ tenantId, phoneNumber: phone, brandId: notifyBrandId });
       } else {
-        await notifySendOtp({ tenantId, phoneNumber: phone });
+        await notifySendOtp({ tenantId, phoneNumber: phone, brandId: notifyBrandId });
       }
     } catch (notifyError) {
       const statusCode =
@@ -257,7 +258,7 @@ const sendOtp = async (req, res) => {
 ================================ */
 const verifyOtp = async (req, res) => {
   try {
-    const { phoneNumber, otp, name } = req.body;
+    const { phoneNumber, otp, name, brandId } = req.body;
 
     const tenantId = req.tenantId;
     if (!tenantId) {
@@ -297,23 +298,33 @@ const verifyOtp = async (req, res) => {
     const phone = String(phoneNumber).trim();
 
     try {
-      await notifyVerifyOtp({ tenantId, phoneNumber: phone, otp });
+      const notifyBrandId = String(brandId || "").trim() || undefined;
+      await notifyVerifyOtp({ tenantId, phoneNumber: phone, otp, brandId: notifyBrandId });
     } catch (notifyError) {
       const upstreamStatus =
         notifyError instanceof NotifyServiceError ? notifyError.upstreamStatus : undefined;
+      const notifyMessage = String(notifyError?.message || "");
       const isInvalidOtp =
         notifyError instanceof NotifyServiceError &&
-        (upstreamStatus === 400 || notifyError.statusCode === 400);
+        upstreamStatus === 400 &&
+        !/no active otp/i.test(notifyMessage);
+      const isExpiredOtp =
+        notifyError instanceof NotifyServiceError &&
+        (upstreamStatus === 404 || /no active otp/i.test(notifyMessage));
       const statusCode = isInvalidOtp
         ? 401
-        : notifyError instanceof NotifyServiceError
-          ? notifyError.statusCode
-          : 502;
+        : isExpiredOtp
+          ? 400
+          : notifyError instanceof NotifyServiceError
+            ? notifyError.statusCode
+            : 502;
       return res.status(statusCode).json({
         success: false,
         message: isInvalidOtp
           ? "Invalid OTP"
-          : notifyError.message || "Unable to verify OTP. Please try again later.",
+          : isExpiredOtp
+            ? "OTP expired or already used. Tap Resend and enter the new code."
+            : notifyError.message || "Unable to verify OTP. Please try again later.",
       });
     }
 

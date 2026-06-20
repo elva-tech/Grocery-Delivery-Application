@@ -1,0 +1,9 @@
+{
+  "appName": "ELVA Sales",
+  "tenantId": "sales",
+  "androidPackage": "com.elvatech.sales",
+  "urlScheme": "sales",
+  "slug": "elva-sales",
+  "notifyBrandId": "elva-sales",
+  "version": "1.0.0"
+}

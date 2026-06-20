@@ -2,7 +2,7 @@
  * Picks Cloudinary / legacy image URLs from API-shaped objects without crashing
  * when fields are missing or oddly typed.
  */
-import { API_BASE_URL } from '@/src/config/constants';
+import { ACTIVE_API_URL } from '@/src/config/constants';
 
 function urlsFromField(field: unknown): string[] {
   if (field == null) return [];
@@ -28,7 +28,7 @@ function normalizeUri(value: string): string {
   }
 
   const normalizedPath = trimmed.replace(/\\/g, '/');
-  const base = (API_BASE_URL.DEVELOPMENT || '').trim().replace(/\/+$/, '');
+  const base = (ACTIVE_API_URL || '').trim().replace(/\/+$/, '');
   if (!base) return normalizedPath;
   const withLeadingSlash = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
   return `${base}${withLeadingSlash}`;

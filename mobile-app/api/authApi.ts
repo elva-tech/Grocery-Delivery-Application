@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ACTIVE_API_URL } from '@/src/config/constants';
+import { getNotifyBrandId } from '@/src/utils/notifyBrandId';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
 
 export interface SendOtpResponse {
@@ -24,6 +25,8 @@ export interface VerifyOtpResponse {
 
 const REQUEST_TIMEOUT_MS = 12000;
 const SEND_OTP_TIMEOUT_MS = 45000;
+/** Verify can wait on Notify; must exceed client abort so we don't drop a successful login. */
+const VERIFY_OTP_TIMEOUT_MS = 60000;
 
 async function fetchWithTimeout(
   url: string,
@@ -68,6 +71,12 @@ export const sendOtp = async (
   phoneNumber: string,
   options: { resend?: boolean } = {},
 ): Promise<SendOtpResponse> => {
+  const brandId = (await getNotifyBrandId()).trim();
+  if (!brandId) {
+    throw new Error(
+      'Store configuration is incomplete (Notify brandId missing). Reinstall the app or contact support.',
+    );
+  }
   const response = await fetchWithTimeout(
     `${ACTIVE_API_URL}/api/auth/send-otp`,
     {
@@ -80,6 +89,7 @@ export const sendOtp = async (
       },
       body: JSON.stringify({
         phoneNumber,
+        brandId,
         ...(options.resend ? { resend: true } : {}),
       }),
     },
@@ -104,6 +114,12 @@ export const verifyOtp = async (
   name?: string,
   mode: 'signup' | 'login' = 'signup'
 ): Promise<VerifyOtpResponse> => {
+  const brandId = (await getNotifyBrandId()).trim();
+  if (!brandId) {
+    throw new Error(
+      'Store configuration is incomplete (Notify brandId missing). Reinstall the app or contact support.',
+    );
+  }
   const response = await fetchWithTimeout(`${ACTIVE_API_URL}/api/auth/verify-otp`, {
     method: 'POST',
     headers: {
@@ -112,8 +128,8 @@ export const verifyOtp = async (
       'x-platform': 'mobile',
       'x-tenant-id': await getActiveTenantId(),
     },
-    body: JSON.stringify({ phoneNumber, otp, ...(name && { name }) }),
-  });
+    body: JSON.stringify({ phoneNumber, otp, brandId, ...(name && { name }) }),
+  }, VERIFY_OTP_TIMEOUT_MS);
 
   const data = await parseJsonSafely<VerifyOtpResponse>(response);
 
