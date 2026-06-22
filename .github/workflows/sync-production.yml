@@ -3,7 +3,6 @@ name: Sync to Production
 on:
   push:
     branches:
-      - master
       - feature/develop
 
 concurrency:
@@ -18,98 +17,87 @@ jobs:
     env:
       SOURCE_REPO: ${{ github.repository }}
       TARGET_REPO: elvatech-apnacart/apnacart
-      TARGET_REPO_URL: https://github.com/elvatech-apnacart/apnacart.git
 
     steps:
-      - name: Checkout source repository (full history)
+      - name: Checkout source repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Configure Git identity
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Resolve branch mapping
         id: mapping
         run: |
           SOURCE_BRANCH="${GITHUB_REF_NAME}"
-          echo "source_branch=${SOURCE_BRANCH}" >> "${GITHUB_OUTPUT}"
 
-          case "${SOURCE_BRANCH}" in
-            master)
-              TARGET_BRANCH="master"
-              ;;
-            feature/develop)
-              TARGET_BRANCH="develop"
-              ;;
-            *)
-              echo "::error::Unsupported source branch '${SOURCE_BRANCH}'. Only master and feature/develop are synced to production."
-              echo "sync_status=FAILED_UNSUPPORTED_BRANCH" >> "${GITHUB_OUTPUT}"
-              exit 1
-              ;;
-          esac
-
-          echo "target_branch=${TARGET_BRANCH}" >> "${GITHUB_OUTPUT}"
-          echo "sync_status=PENDING" >> "${GITHUB_OUTPUT}"
-
-      - name: Log sync plan
-        run: |
-          echo "=============================================="
-          echo " Production Repository Sync"
-          echo "=============================================="
-          echo "Source repository : ${SOURCE_REPO}"
-          echo "Source branch     : ${{ steps.mapping.outputs.source_branch }}"
-          echo "Target repository : ${TARGET_REPO}"
-          echo "Target branch     : ${{ steps.mapping.outputs.target_branch }}"
-          echo "Trigger           : push to ${{ github.ref }}"
-          echo "Commit SHA        : ${{ github.sha }}"
-          echo "Run ID            : ${{ github.run_id }}"
-          echo "=============================================="
-
-      - name: Push to production repository
-        id: push
-        env:
-          PROD_REPO_TOKEN: ${{ secrets.PROD_REPO_TOKEN }}
-        run: |
-          if [[ -z "${PROD_REPO_TOKEN}" ]]; then
-            echo "::error::PROD_REPO_TOKEN secret is not configured."
+          if [ "${SOURCE_BRANCH}" = "feature/develop" ]; then
+            TARGET_BRANCH="develop"
+          else
+            echo "::error::Unsupported branch ${SOURCE_BRANCH}"
             exit 1
           fi
 
-          AUTHENTICATED_URL="https://x-access-token:${PROD_REPO_TOKEN}@github.com/${TARGET_REPO}.git"
+          echo "source_branch=${SOURCE_BRANCH}" >> $GITHUB_OUTPUT
+          echo "target_branch=${TARGET_BRANCH}" >> $GITHUB_OUTPUT
 
-          if git remote | grep -qx production; then
-            git remote set-url production "${AUTHENTICATED_URL}"
-          else
-            git remote add production "${AUTHENTICATED_URL}"
+      - name: Log Sync Plan
+        run: |
+          echo "=================================="
+          echo "Source Repo   : $SOURCE_REPO"
+          echo "Source Branch : ${{ steps.mapping.outputs.source_branch }}"
+          echo "Target Repo   : $TARGET_REPO"
+          echo "Target Branch : ${{ steps.mapping.outputs.target_branch }}"
+          echo "=================================="
+
+      - name: Configure Production Remote
+        env:
+          PROD_REPO_TOKEN: ${{ secrets.PROD_REPO_TOKEN }}
+        run: |
+
+          if [ -z "$PROD_REPO_TOKEN" ]; then
+            echo "::error::PROD_REPO_TOKEN secret is missing"
+            exit 1
           fi
 
-          echo "Pushing HEAD (${{ steps.mapping.outputs.source_branch }}) to production/${{ steps.mapping.outputs.target_branch }} (non-force)..."
-          git push production "HEAD:refs/heads/${{ steps.mapping.outputs.target_branch }}"
+          echo "PROD_REPO_TOKEN detected"
+          echo "Token Length: ${#PROD_REPO_TOKEN}"
 
-      - name: Log sync result
+          git remote remove production 2>/dev/null || true
+
+          git remote add production \
+          https://x-access-token:${PROD_REPO_TOKEN}@github.com/elvatech-apnacart/apnacart.git
+
+          echo "Remote configured"
+
+      - name: Verify Production Access
+        run: |
+          git remote -v
+          git ls-remote production
+
+      - name: Push To Production
+        run: |
+          echo "Pushing ${GITHUB_REF_NAME} -> ${{ steps.mapping.outputs.target_branch }}"
+
+          git push production \
+          HEAD:refs/heads/${{ steps.mapping.outputs.target_branch }}
+
+      - name: Success
         if: success()
         run: |
-          echo "=============================================="
-          echo " Sync status: SUCCESS"
-          echo "=============================================="
-          echo "Source repository : ${SOURCE_REPO}"
-          echo "Source branch     : ${{ steps.mapping.outputs.source_branch }}"
-          echo "Target repository : ${TARGET_REPO}"
-          echo "Target branch     : ${{ steps.mapping.outputs.target_branch }}"
-          echo "Synced commit     : ${{ github.sha }}"
-          echo "=============================================="
+          echo "=================================="
+          echo "SYNC SUCCESSFUL"
+          echo "Source Branch : ${{ steps.mapping.outputs.source_branch }}"
+          echo "Target Branch : ${{ steps.mapping.outputs.target_branch }}"
+          echo "=================================="
 
-      - name: Log sync failure
+      - name: Failure
         if: failure()
         run: |
-          echo "=============================================="
-          echo " Sync status: FAILED"
-          echo "=============================================="
-          echo "Source repository : ${SOURCE_REPO}"
-          echo "Source branch     : ${{ github.ref_name }}"
-          echo "Target repository : ${TARGET_REPO}"
-          echo "See job logs above for the failure reason."
-          echo "=============================================="
+          echo "=================================="
+          echo "SYNC FAILED"
+          echo "Check previous logs"
+          echo "=================================="
