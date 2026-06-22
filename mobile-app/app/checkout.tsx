@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showToast } from '@/utils/toast';
 import { clearCart, setAppliedCartCoupon, clearAppliedCartCoupon } from '@/store/slices/cartSlice';
 import { clearCheckoutDraft } from '@/store/slices/checkoutSlice';
@@ -50,11 +51,25 @@ export default function CheckoutScreen() {
   const [couponError, setCouponError] = useState('');
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isPlacing, setIsPlacing] = useState(false);
+  const orderPlacedRef = useRef(false);
 
   const { data: storeStatus } = useGetStoreStatusQuery();
   const isStoreClosed = storeStatus?.isClosed ?? false;
 
+  const completeOrderSuccess = async (orderId: string) => {
+    orderPlacedRef.current = true;
+    if (orderId) {
+      await AsyncStorage.setItem('@last_order_id', String(orderId));
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    dispatch(clearCheckoutDraft());
+    dispatch(clearAppliedCartCoupon());
+    dispatch(clearCart());
+    router.replace('/(tabs)/order-success');
+  };
+
   useEffect(() => {
+    if (orderPlacedRef.current) return;
     if (items.length === 0) {
       router.replace('/(tabs)/cart');
       return;
@@ -127,11 +142,8 @@ export default function CheckoutScreen() {
       };
 
       if (paymentMethod === 'COD') {
-        await placeOrderBackend(orderPayload, token);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        dispatch(clearCheckoutDraft());
-        dispatch(clearCart());
-        router.replace('/(tabs)/order-success');
+        const order = await placeOrderBackend(orderPayload, token);
+        await completeOrderSuccess(String(order.orderId || ''));
         return;
       }
 
@@ -188,10 +200,7 @@ export default function CheckoutScreen() {
       );
 
       if (verified.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        dispatch(clearCheckoutDraft());
-        dispatch(clearCart());
-        router.replace('/(tabs)/order-success');
+        await completeOrderSuccess(String(order.orderId || ''));
       } else {
         showToast('error', 'Payment Error', 'Verification failed. Contact support.');
       }

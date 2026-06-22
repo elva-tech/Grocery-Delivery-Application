@@ -833,9 +833,43 @@ const getInventory = async (req, res) => {
     }
 
     const tenantId = req.user.tenantId;
+    const rawPage = req.query.page;
+    const rawLimit = req.query.limit;
+    const paginate = rawPage !== undefined || rawLimit !== undefined;
+    let page = parseInt(rawPage);
+    let limit = parseInt(rawLimit);
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    if (paginate) {
+      if (isNaN(page) || page <= 0) page = 1;
+      if (isNaN(limit) || limit <= 0) limit = 25;
+      if (limit > 100) limit = 100;
+    }
 
     const visibility = tenantPolicy.buildProductTenantRoot(tenantId);
-    const productDocs = await Product.find(visibility).sort({ name: 1 }).lean();
+    if (search) {
+      visibility.name = { $regex: search, $options: "i" };
+    }
+
+    let productDocs;
+    let totalItems;
+    let totalPages;
+
+    if (paginate) {
+      const skip = (page - 1) * limit;
+      [totalItems, productDocs] = await Promise.all([
+        Product.countDocuments(visibility),
+        Product.find(visibility).sort({ name: 1 }).skip(skip).limit(limit).lean(),
+      ]);
+      totalPages = Math.max(1, Math.ceil(totalItems / limit));
+    } else {
+      productDocs = await Product.find(visibility).sort({ name: 1 }).lean();
+      totalItems = productDocs.length;
+      totalPages = 1;
+      page = 1;
+      limit = totalItems;
+    }
+
     const productIds = productDocs.map((p) => p._id);
     const inventories = await Inventory.find({
       tenantId,
@@ -853,10 +887,18 @@ const getInventory = async (req, res) => {
       formatAdminInventoryRow(product, invByProduct.get(String(product._id)) || [])
     );
 
-    return res.status(200).json({
+    const payload = {
       success: true,
       data: inventory,
-    });
+    };
+    if (paginate) {
+      payload.page = page;
+      payload.limit = limit;
+      payload.totalItems = totalItems;
+      payload.totalPages = totalPages;
+    }
+
+    return res.status(200).json(payload);
   } catch (error) {
     console.error("Error in getInventory:", error);
 

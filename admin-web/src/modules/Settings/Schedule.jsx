@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Calendar, Save, CheckCircle, Power } from 'lucide-react';
+import { Clock, Calendar, Save, CheckCircle, Power, Loader2 } from 'lucide-react';
 import { saveSchedule, getSchedule, toggleStore } from '../../api/scheduleApi';
 
 const Schedule = () => {
@@ -8,6 +8,8 @@ const Schedule = () => {
   const [showPopup, setShowPopup] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
     startTime: '',
@@ -19,9 +21,14 @@ const Schedule = () => {
 
   useEffect(() => {
     const load = async () => {
-      const data = await getSchedule();
-      setCurrentSchedule(data);
-      if (typeof data?.isOpen === 'boolean') setIsOpen(data.isOpen);
+      setScheduleLoading(true);
+      try {
+        const data = await getSchedule();
+        setCurrentSchedule(data);
+        if (typeof data?.isOpen === 'boolean') setIsOpen(data.isOpen);
+      } finally {
+        setScheduleLoading(false);
+      }
     };
     load();
   }, []);
@@ -43,6 +50,8 @@ const Schedule = () => {
   };
 
   const handleSave = async () => {
+    setSaving(true);
+    try {
     // Build UTC ISO strings from the form inputs
     let openISO, closeISO;
 
@@ -67,7 +76,19 @@ const Schedule = () => {
 
     setShowPopup(true);
     setTimeout(() => setShowPopup(false), 2000);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (scheduleLoading) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading schedule…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-100 p-6">
@@ -260,10 +281,11 @@ const Schedule = () => {
         {/* SAVE */}
         <button
           onClick={handleSave}
-          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+          disabled={saving}
+          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60"
         >
-          <Save className="w-5 h-5" />
-          Save Schedule
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          {saving ? 'Saving…' : 'Save Schedule'}
         </button>
 
         {/* STOP */}

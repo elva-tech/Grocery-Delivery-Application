@@ -6,7 +6,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
-import { X, Plus, ChevronDown, ArrowLeft } from 'lucide-react';
+import { X, Plus, ChevronDown, ArrowLeft, Loader2 } from 'lucide-react';
 import { useAppState } from '../../context/AppStateContext';
 import { apiService } from '../../services/apiService';
 import resolveImageUrl from '../../utils/resolveImageUrl';
@@ -96,7 +96,7 @@ function variantsFromInitial(initial) {
   ];
 }
 
-const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted }) => {
+const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted, saving = false }) => {
   const fileInputRef = useRef(null);
   const { categories } = useAppState();
 
@@ -570,11 +570,17 @@ const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted }) =
 
                     <button
                       type="submit"
-                      className="w-full bg-[#1A4D2E] text-white py-4 rounded-xl font-bold shadow-md hover:bg-[#143d24] transition-colors"
+                      disabled={saving || imageBusy}
+                      className="w-full bg-[#1A4D2E] text-white py-4 rounded-xl font-bold shadow-md hover:bg-[#143d24] transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-
-                      Save Product
-
+                      {saving ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        'Save Product'
+                      )}
                     </button>
 
                   </div>

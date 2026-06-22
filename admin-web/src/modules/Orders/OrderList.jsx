@@ -1,13 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useAppState } from '../../context/AppStateContext';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useAppState, normalizeAdminOrderRow } from '../../context/AppStateContext';
 import { useToast } from '../../context/ToastContext';
+import { apiService } from '../../services/apiService';
 import DataTable from '../../components/shared/DataTable';
+import Pagination from '../../components/shared/Pagination';
+import { ORDER_STATUS } from '../../config/constants';
 import {
   Bike, CheckCircle, PackageCheck, Truck, X, User, CheckCircle2,
   Eye, Phone, Smartphone, Hash, MapPin, MapPinned, ShoppingBag,
   XCircle, AlertTriangle, UserPlus, AlertCircle, Image as ImageIcon,
   Star, MessageSquare, Filter, Search, Calendar, Banknote, CreditCard,
-  ExternalLink, Copy,
+  ExternalLink, Copy, Loader2,
 } from 'lucide-react';
 
 /** Renders filled/empty star row */
@@ -21,90 +24,197 @@ const StarRating = ({ value }) => (
   </span>
 );
 
+const STATUS_FILTER_OPTIONS = [
+  { value: 'ALL', label: 'All statuses' },
+  { value: ORDER_STATUS.PLACED, label: 'Placed' },
+  { value: ORDER_STATUS.CONFIRMED, label: 'Confirmed' },
+  { value: ORDER_STATUS.OUT_FOR_DELIVERY, label: 'Out for delivery' },
+  { value: ORDER_STATUS.DELIVERED, label: 'Delivered' },
+  { value: ORDER_STATUS.CANCELLED, label: 'Cancelled' },
+];
+
 const OrderList = () => {
   const { showToast } = useToast();
-  const { orders, riders, updateOrderStatus, assignRider, markCODPaid, retryOrderRefund, refreshOrders } = useAppState();
+  const {
+    riders,
+    ridersLoading,
+    updateOrderStatus,
+    assignRider,
+    markCODPaid,
+    retryOrderRefund,
+    refreshOrders,
+    refreshRiders,
+  } = useAppState();
   const [retryingRefundId, setRetryingRefundId] = useState(null);
-  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [selectedOrderForAssign, setSelectedOrderForAssign] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
   const [deliveryAddressModalOrder, setDeliveryAddressModalOrder] = useState(null);
   const [cancellingOrder, setCancellingOrder] = useState(null);
-  const [assigningLoading, setAssigningLoading] = useState(false);
+  const [assigningRiderId, setAssigningRiderId] = useState(null);
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
   const [markingPaid, setMarkingPaid] = useState(false);
-  const [ratingFilter, setRatingFilter] = useState('ALL'); // ALL | RATED | LOW
+  const [ratingFilter, setRatingFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [orderRows, setOrderRows] = useState([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState(null);
+  const listRequestRef = useRef(0);
 
-  // Fetch fresh orders every time this tab is visited
   useEffect(() => {
-    refreshOrders();
-  }, [refreshOrders]);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const filteredOrders = useMemo(() => {
-    if (!orders) return [];
-    let result = orders;
-
-    // Rating filter
-    if (ratingFilter === 'RATED') result = result.filter(o => o.rating?.value != null);
-    if (ratingFilter === 'LOW')   result = result.filter(o => o.rating?.value != null && o.rating.value <= 2);
-
-    // Search by order ID or customer name
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter(o => {
-        const id   = (o.id || o._id || '').toLowerCase();
-        const name = (o.customerName || o.customer || '').toLowerCase();
-        return id.includes(q) || name.includes(q);
+  const loadOrders = useCallback(async () => {
+    const requestId = ++listRequestRef.current;
+    setListLoading(true);
+    setListError(null);
+    try {
+      const data = await apiService.getOrders({
+        page: currentPage,
+        limit: pageSize,
+        status: statusFilter !== 'ALL' ? statusFilter : undefined,
+        search: debouncedSearch.trim() || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        ratingFilter: ratingFilter !== 'ALL' ? ratingFilter : undefined,
       });
-    }
+      if (requestId !== listRequestRef.current) return null;
 
-    // Date range filter
-    if (dateFrom) {
-      const from = new Date(dateFrom);
-      from.setHours(0, 0, 0, 0);
-      result = result.filter(o => o.createdAt && new Date(o.createdAt) >= from);
+      const normalized = (data.orders || []).map(normalizeAdminOrderRow);
+      setOrderRows(normalized);
+      setTotalOrders(data.totalOrders ?? 0);
+      return normalized;
+    } catch (err) {
+      if (requestId !== listRequestRef.current) return null;
+      console.error('Failed to load orders:', err);
+      setListError('Failed to load orders');
+      setOrderRows([]);
+      setTotalOrders(0);
+      return null;
+    } finally {
+      if (requestId === listRequestRef.current) {
+        setListLoading(false);
+      }
     }
-    if (dateTo) {
-      const to = new Date(dateTo);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter(o => o.createdAt && new Date(o.createdAt) <= to);
+  }, [currentPage, pageSize, statusFilter, debouncedSearch, dateFrom, dateTo, ratingFilter]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  useEffect(() => {
+    if (selectedOrderForAssign) {
+      refreshRiders({ silent: true });
     }
+  }, [selectedOrderForAssign, refreshRiders]);
 
-    return result;
-  }, [orders, ratingFilter, searchQuery, dateFrom, dateTo]);
+  const openAssignModal = async (row) => {
+    const orderId = String(row?.id ?? row?._id ?? '').trim();
+    if (!orderId) {
+      showToast('error', 'Invalid order — refresh the page and try again.');
+      return;
+    }
+    const freshOrders = await loadOrders();
+    const fresh = (freshOrders || orderRows).find(
+      (o) => String(o.id) === orderId
+    );
+    const status = String(fresh?.status ?? fresh?.orderStatus ?? '').toUpperCase();
+    if (!fresh || status !== 'CONFIRMED') {
+      showToast(
+        'error',
+        status === 'PLACED'
+          ? 'Accept the order first, then assign a rider.'
+          : `Order is ${status || 'unavailable'} — list refreshed.`,
+      );
+      return;
+    }
+    setSelectedOrderForAssign(fresh);
+  };
 
-  const hasActiveFilters = searchQuery.trim() || dateFrom || dateTo || ratingFilter !== 'ALL';
+  const hasActiveFilters =
+    searchQuery.trim() || dateFrom || dateTo || ratingFilter !== 'ALL' || statusFilter !== 'ALL';
 
   const clearFilters = () => {
     setSearchQuery('');
     setDateFrom('');
     setDateTo('');
     setRatingFilter('ALL');
+    setStatusFilter('ALL');
+    setCurrentPage(1);
   };
 
-  const availableRiders = riders ? riders.filter(r => r.status === 'Online') : [];
+  const availableRiders = riders
+    ? riders.filter((r) => String(r.status || '').toLowerCase() === 'online')
+    : [];
 
   const handleSelectRider = async (riderId, riderName) => {
-    setAssigningLoading(true);
+    if (assigningRiderId || !selectedOrderForAssign) return;
+    const orderId = String(selectedOrderForAssign.id ?? '').trim();
+    setAssigningRiderId(riderId);
     try {
-      await assignRider(selectedOrderId, riderId, riderName);
+      const freshOrders = await loadOrders();
+      const fresh = (freshOrders || []).find((o) => String(o.id) === orderId);
+      const status = String(fresh?.status ?? '').toUpperCase();
+      if (!fresh || status !== 'CONFIRMED') {
+        showToast(
+          'error',
+          status === 'OUT_FOR_DELIVERY'
+            ? 'This order is already out for delivery.'
+            : status === 'PLACED'
+              ? 'Accept the order first, then assign a rider.'
+              : `Order status changed (${status || 'unknown'}). Try again.`,
+        );
+        setSelectedOrderForAssign(null);
+        return;
+      }
+      await assignRider(orderId, riderId, riderName);
       showToast('success', `Rider assigned — order is now out for delivery.`);
+      setSelectedOrderForAssign(null);
+      await loadOrders();
+      refreshOrders({ silent: true });
     } catch (error) {
       console.error("Failed to assign rider:", error);
-      showToast('error', error?.response?.data?.message || 'Failed to assign rider. Please try again.');
+      const apiStatus = error?.response?.data?.currentStatus;
+      const msg =
+        error?.response?.data?.message ||
+        (apiStatus ? `Cannot assign — order is ${apiStatus}` : null) ||
+        'Failed to assign rider. Please try again.';
+      showToast('error', msg);
     } finally {
-      // Close modal regardless of success or error
-      setSelectedOrderId(null);
-      setAssigningLoading(false);
+      setAssigningRiderId(null);
     }
   };
 
   const confirmCancellation = async () => {
+    if (!cancellingOrder || statusUpdatingId) return;
+    setStatusUpdatingId(cancellingOrder.id);
     try {
       await updateOrderStatus(cancellingOrder.id, 'CANCELLED');
+      await loadOrders();
+      refreshOrders({ silent: true });
     } finally {
+      setStatusUpdatingId(null);
       setCancellingOrder(null);
+    }
+  };
+
+  const handleStatusUpdate = async (orderId, newStatus) => {
+    if (statusUpdatingId) return;
+    setStatusUpdatingId(orderId);
+    try {
+      await updateOrderStatus(orderId, newStatus);
+      await loadOrders();
+      refreshOrders({ silent: true });
+    } finally {
+      setStatusUpdatingId(null);
     }
   };
 
@@ -228,7 +338,7 @@ const OrderList = () => {
           <div>
             <h1 className="text-3xl font-black text-[#1A4D2E]">Order Management</h1>
             <p className="text-sm text-slate-400 font-medium mt-0.5">
-              {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}
+              {totalOrders} order{totalOrders !== 1 ? 's' : ''}
               {hasActiveFilters && <span className="text-emerald-600"> (filtered)</span>}
             </p>
           </div>
@@ -251,7 +361,10 @@ const OrderList = () => {
             <input
               type="text"
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search by Order ID or Customer name…"
               className="w-full pl-9 pr-9 py-2.5 bg-slate-50 rounded-xl text-sm font-medium placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-emerald-200 transition-all"
             />
@@ -269,7 +382,10 @@ const OrderList = () => {
               type="date"
               value={dateFrom}
               max={dateTo || undefined}
-              onChange={e => setDateFrom(e.target.value)}
+              onChange={e => {
+                setDateFrom(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-8 pr-3 py-2.5 bg-slate-50 rounded-xl text-sm font-medium text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200 transition-all cursor-pointer"
               title="From date"
             />
@@ -284,7 +400,10 @@ const OrderList = () => {
               type="date"
               value={dateTo}
               min={dateFrom || undefined}
-              onChange={e => setDateTo(e.target.value)}
+              onChange={e => {
+                setDateTo(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-8 pr-3 py-2.5 bg-slate-50 rounded-xl text-sm font-medium text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200 transition-all cursor-pointer"
               title="To date"
             />
@@ -293,13 +412,35 @@ const OrderList = () => {
           {/* Divider */}
           <div className="w-px h-6 bg-slate-100 hidden sm:block" />
 
+          {/* Status filter */}
+          <div className="flex items-center gap-1.5 min-w-[160px]">
+            <Filter size={13} className="text-slate-400 shrink-0" />
+            <select
+              value={statusFilter}
+              onChange={e => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="flex-1 py-2.5 px-3 bg-slate-50 rounded-xl text-sm font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200 cursor-pointer"
+            >
+              {STATUS_FILTER_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-px h-6 bg-slate-100 hidden sm:block" />
+
           {/* Rating filter */}
           <div className="flex items-center gap-1.5">
             <Filter size={13} className="text-slate-400" />
             {['ALL','RATED','LOW'].map(f => (
               <button
                 key={f}
-                onClick={() => setRatingFilter(f)}
+                onClick={() => {
+                  setRatingFilter(f);
+                  setCurrentPage(1);
+                }}
                 className={`px-3 py-1.5 text-[11px] font-black rounded-lg transition-all ${
                   ratingFilter === f
                     ? 'bg-[#1A4D2E] text-white'
@@ -314,9 +455,37 @@ const OrderList = () => {
         </div>
       </div>
 
+    {listLoading && orderRows.length === 0 ? (
+      <div className="py-20 flex flex-col items-center justify-center gap-3 bg-white rounded-2xl border border-slate-100">
+        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading orders…</p>
+      </div>
+    ) : listError && orderRows.length === 0 ? (
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start gap-3">
+        <AlertCircle className="text-red-600 mt-0.5" size={18} />
+        <div className="space-y-3">
+          <p className="text-sm font-bold text-red-700">{listError}</p>
+          <button
+            type="button"
+            onClick={() => loadOrders()}
+            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    ) : (
+      <>
+        {listLoading ? (
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2">
+            <Loader2 size={14} className="animate-spin text-emerald-600" />
+            Loading orders…
+          </div>
+        ) : null}
+
     <DataTable
         columns={columns}
-        data={filteredOrders}
+        data={orderRows}
         actions={(row) => {
           const status = row.status?.toUpperCase();
           return (
@@ -336,8 +505,13 @@ const OrderList = () => {
 
               {status === 'PLACED' && (
                 <>
-                  <button onClick={() => updateOrderStatus(row.id, 'CONFIRMED')} className="flex items-center gap-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all shadow-sm">
-                    <CheckCircle size={14} /> Accept Order
+                  <button
+                    disabled={statusUpdatingId === row.id}
+                    onClick={() => handleStatusUpdate(row.id, 'CONFIRMED')}
+                    className="flex items-center gap-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all shadow-sm disabled:opacity-60"
+                  >
+                    {statusUpdatingId === row.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                    {statusUpdatingId === row.id ? 'Updating…' : 'Accept Order'}
                   </button>
                   <button onClick={() => setCancellingOrder(row)} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-all border border-red-100 shadow-sm">
                     <X size={14} /> Cancel
@@ -347,7 +521,7 @@ const OrderList = () => {
 
               {status === 'CONFIRMED' && (
                 <>
-                  <button onClick={() => setSelectedOrderId(row.id)} className="flex items-center gap-1 bg-[#1A4D2E] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:scale-105 transition-all shadow-sm">
+                  <button onClick={() => openAssignModal(row)} className="flex items-center gap-1 bg-[#1A4D2E] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:scale-105 transition-all shadow-sm">
                     <UserPlus size={14} /> Assign Rider
                   </button>
                   <button onClick={() => setCancellingOrder(row)} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-all border border-red-100 shadow-sm">
@@ -358,8 +532,13 @@ const OrderList = () => {
 
               {status === 'OUT_FOR_DELIVERY' && (
                 <>
-                  <button onClick={() => updateOrderStatus(row.id, 'DELIVERED')} className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-all border border-emerald-200 shadow-sm">
-                    <CheckCircle2 size={14} /> Mark Delivered
+                  <button
+                    disabled={statusUpdatingId === row.id}
+                    onClick={() => handleStatusUpdate(row.id, 'DELIVERED')}
+                    className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-all border border-emerald-200 shadow-sm disabled:opacity-60"
+                  >
+                    {statusUpdatingId === row.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    {statusUpdatingId === row.id ? 'Updating…' : 'Mark Delivered'}
                   </button>
                   <button onClick={() => setCancellingOrder(row)} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-all border border-red-100 shadow-sm">
                     <X size={14} /> Cancel
@@ -445,6 +624,15 @@ const OrderList = () => {
           );
         }}
       />
+      <Pagination
+        totalItems={totalOrders}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+      />
+      </>
+    )}
 
       {/* DELIVERY ADDRESS + MAP LINK */}
       {deliveryAddressModalOrder && (
@@ -646,23 +834,35 @@ const OrderList = () => {
             <AlertTriangle size={40} className="text-red-500 mx-auto mb-6" />
             <h3 className="text-2xl font-black text-slate-800 mb-2">Cancel Order?</h3>
             <div className="grid grid-cols-2 gap-3 mt-8">
-              <button onClick={() => setCancellingOrder(null)} className="py-4 bg-gray-100 text-gray-600 rounded-2xl font-black">NO</button>
-              <button onClick={confirmCancellation} className="py-4 bg-red-600 text-white rounded-2xl font-black">YES, CANCEL</button>
+              <button onClick={() => setCancellingOrder(null)} disabled={!!statusUpdatingId} className="py-4 bg-gray-100 text-gray-600 rounded-2xl font-black disabled:opacity-50">NO</button>
+              <button onClick={confirmCancellation} disabled={!!statusUpdatingId} className="py-4 bg-red-600 text-white rounded-2xl font-black disabled:opacity-50 flex items-center justify-center gap-2">
+                {statusUpdatingId ? <><Loader2 size={16} className="animate-spin" /> Cancelling…</> : 'YES, CANCEL'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* RIDER SELECTION */}
-      {selectedOrderId && (
+      {selectedOrderForAssign && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[28px] w-full max-w-sm shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="font-black text-[#1A4D2E]">Assign Partner</h2>
-              <button onClick={() => setSelectedOrderId(null)} disabled={assigningLoading} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
+              <div>
+                <h2 className="font-black text-[#1A4D2E]">Assign Partner</h2>
+                <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  Order {String(selectedOrderForAssign.id).slice(-8)}
+                </p>
+              </div>
+              <button onClick={() => setSelectedOrderForAssign(null)} disabled={!!assigningRiderId} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
             </div>
             <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
-              {availableRiders.length === 0 ? (
+              {ridersLoading ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-2 text-slate-400">
+                  <Loader2 size={22} className="animate-spin text-emerald-600" />
+                  <p className="text-sm font-medium">Loading riders…</p>
+                </div>
+              ) : availableRiders.length === 0 ? (
                 <div className="p-4 text-center text-gray-500">
                   <p className="font-medium">No available riders</p>
                   <p className="text-xs">Please ensure riders are registered and online</p>
@@ -671,11 +871,13 @@ const OrderList = () => {
                 availableRiders.map((rider) => (
                   <div 
                     key={rider.id} 
-                    onClick={() => !assigningLoading && handleSelectRider(rider.id, rider.name)} 
+                    onClick={() => !assigningRiderId && handleSelectRider(rider.id, rider.name)} 
                     className={`flex items-center justify-between p-4 rounded-2xl transition-all border border-transparent ${
-                      assigningLoading 
-                        ? 'cursor-not-allowed opacity-50' 
-                        : 'hover:bg-emerald-50 cursor-pointer hover:border-emerald-500'
+                      assigningRiderId && assigningRiderId !== rider.id
+                        ? 'cursor-not-allowed opacity-50'
+                        : assigningRiderId === rider.id
+                          ? 'cursor-wait bg-emerald-50/50'
+                          : 'hover:bg-emerald-50 cursor-pointer hover:border-emerald-500'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -685,7 +887,7 @@ const OrderList = () => {
                         <span className="text-[10px] font-bold text-gray-400">{rider.phone}</span>
                       </div>
                     </div>
-                    {assigningLoading ? (
+                    {assigningRiderId === rider.id ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent"></div>
                     ) : (
                       <CheckCircle size={16} className="text-emerald-500" />

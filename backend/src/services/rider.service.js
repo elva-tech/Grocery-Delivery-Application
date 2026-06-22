@@ -43,44 +43,78 @@ exports.validateRiderAvailability = async (riderId, tenantId) => {
 };
 
 /**
- * Assign order to rider and update both documents
+ * Assign order to rider and update both documents (atomic — avoids race with stale UI).
  */
 exports.assignOrderToRider = async (orderId, riderId, tenantId) => {
   try {
-    // Get order and rider
-    const order = await Order.findOne({
-      _id: orderId,
-      tenantId,
-    });
-
-    if (!order) {
-      throw new Error("Order not found");
-    }
+    const orderIdStr = String(orderId || "").trim();
+    const riderIdStr = String(riderId || "").trim();
+    const tenant = String(tenantId || "").trim();
 
     const rider = await Rider.findOne({
-      _id: riderId,
-      tenantId,
+      _id: riderIdStr,
+      tenantId: tenant,
     });
 
     if (!rider) {
       throw new Error("Rider not found");
     }
 
-    // Update order
-    order.riderId = riderId;
-    order.riderName = rider.name;
-    order.riderAssignedAt = new Date();
-    order.orderStatus = "OUT_FOR_DELIVERY";
-    await order.save();
+    // Idempotent: already assigned to this rider and out for delivery
+    const alreadyAssigned = await Order.findOne({
+      _id: orderIdStr,
+      tenantId: tenant,
+      orderStatus: "OUT_FOR_DELIVERY",
+      riderId: riderIdStr,
+    });
+    if (alreadyAssigned) {
+      return { updatedOrder: alreadyAssigned, updatedRider: rider };
+    }
 
-    await notifyOutForDeliverySafe(order);
+    const updatedOrder = await Order.findOneAndUpdate(
+      {
+        _id: orderIdStr,
+        tenantId: tenant,
+        orderStatus: "CONFIRMED",
+      },
+      {
+        $set: {
+          riderId: riderIdStr,
+          riderName: rider.name,
+          riderAssignedAt: new Date(),
+          orderStatus: "OUT_FOR_DELIVERY",
+        },
+      },
+      { new: true }
+    );
 
-    // Update rider
+    if (!updatedOrder) {
+      const current = await Order.findOne({ _id: orderIdStr, tenantId: tenant });
+      if (!current) {
+        const err = new Error("Order not found");
+        err.statusCode = 404;
+        throw err;
+      }
+      const status = String(current.orderStatus || "").trim().toUpperCase();
+      const err = new Error(
+        status === "OUT_FOR_DELIVERY"
+          ? "This order is already out for delivery"
+          : status === "PLACED"
+            ? "Accept the order first (status must be CONFIRMED)"
+            : `Cannot assign rider while order is ${status}`
+      );
+      err.statusCode = 400;
+      err.currentStatus = status;
+      throw err;
+    }
+
+    await notifyOutForDeliverySafe(updatedOrder);
+
     rider.activeOrders = (rider.activeOrders || 0) + 1;
     rider.lastOnlineAt = new Date();
     await rider.save();
 
-    return { order, rider };
+    return { updatedOrder, updatedRider: rider };
   } catch (error) {
     console.error("assignOrderToRider error:", error);
     throw error;

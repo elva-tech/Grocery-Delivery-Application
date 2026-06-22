@@ -8,7 +8,10 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { clearCart } from '@/store/slices/cartSlice';
+import { clearCheckoutDraft } from '@/store/slices/checkoutSlice';
 import { useDispatch } from 'react-redux';
+import { useTenantBranding } from '@/contexts/TenantBrandingContext';
+import { MOBILE_COPY } from '@/src/constants/copy';
 
 const { width } = Dimensions.get('window');
 
@@ -18,6 +21,7 @@ const WARNING_GOLD = '#f59e0b';
 
 export default function OrderSuccessScreen() {
   const [orderId, setOrderId] = useState<string | null>(null);
+  const { storeName } = useTenantBranding();
 
   const router = useRouter();
   const dispatch = useDispatch();
@@ -39,6 +43,7 @@ export default function OrderSuccessScreen() {
     ]).start();
 
     dispatch(clearCart());
+    dispatch(clearCheckoutDraft());
 
     const timer = setTimeout(() => {
       confettiRef.current?.start();
@@ -77,14 +82,14 @@ export default function OrderSuccessScreen() {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', width: '100%' }}>
-          <Text style={styles.title}>Order Placed!</Text>
+          <Text style={styles.title}>{MOBILE_COPY.orderSuccess.title}</Text>
           <Text style={styles.subtitle}>
-            Your dairy essentials are being prepared{'\n'}and will arrive soon.
+            {MOBILE_COPY.orderSuccess.subtitle(storeName)}
           </Text>
 
           {orderId && (
            <View style={styles.idBadge}>
-  <Text style={styles.idLabel}>ORDER ID: {String(orderId)}</Text>
+  <Text style={styles.idLabel}>{MOBILE_COPY.orderSuccess.orderIdLabel}: {String(orderId)}</Text>
 </View>
 
           )}
@@ -94,10 +99,10 @@ export default function OrderSuccessScreen() {
       <View style={styles.footer}>
         <TouchableOpacity style={styles.trackButton} onPress={handleTrackOrder} activeOpacity={0.8}>
           <Ionicons name="navigate-outline" size={20} color="#ffffff" />
-          <Text style={styles.trackButtonText}>Track Order</Text>
+          <Text style={styles.trackButtonText}>{MOBILE_COPY.orderSuccess.trackOrder}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.homeButton} onPress={handleBackHome} activeOpacity={0.7}>
-          <Text style={styles.homeButtonText}>Return to Shop</Text>
+          <Text style={styles.homeButtonText}>{MOBILE_COPY.orderSuccess.returnToShop}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

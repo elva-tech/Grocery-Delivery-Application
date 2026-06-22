@@ -409,14 +409,16 @@ export default function OrdersScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View>
+          <View style={styles.cardHeaderMain}>
             <Text style={styles.orderId}>Order #{item.id?.slice(0, 10)}</Text>
             <Text style={styles.dateText}>
               {new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
             </Text>
           </View>
           <View style={[styles.badge, { backgroundColor: theme.color + '15' }]}>
-            <Text style={[styles.badgeText, { color: theme.color }]}>{theme.label}</Text>
+            <Text style={[styles.badgeText, { color: theme.color }]} numberOfLines={2}>
+              {theme.label}
+            </Text>
           </View>
         </View>
         {item.status === 'PLACED' && theme.subtitle ? (
@@ -892,12 +894,40 @@ const styles = StyleSheet.create({
   sortChipTextActive: { color: '#4b6f9e' },
   
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  cardHeaderMain: { flex: 1, minWidth: 0, paddingRight: 4 },
   orderId: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
-  badge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  badgeText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    maxWidth: '44%',
+    flexShrink: 1,
+    alignSelf: 'flex-start',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    textAlign: 'right',
+    lineHeight: 14,
+  },
   dateText: { fontSize: 13, color: '#94a3b8' },
-  awaitingSubtitle: { fontSize: 12, fontWeight: '600', color: '#d97706', marginBottom: 10, marginTop: -4 },
+  awaitingSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#d97706',
+    marginBottom: 10,
+    marginTop: -4,
+    lineHeight: 18,
+    flexShrink: 1,
+  },
   refundSubtitle: { fontSize: 12, fontWeight: '600', color: '#64748b', marginBottom: 10, marginTop: -4 },
   awaitingBanner: {
     flexDirection: 'row',
@@ -910,8 +940,15 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 14,
   },
-  awaitingBannerTitle: { fontSize: 11, fontWeight: '900', color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5 },
-  awaitingBannerText: { fontSize: 13, fontWeight: '600', color: '#b45309', marginTop: 4 },
+  awaitingBannerTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#92400e',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    flexShrink: 1,
+  },
+  awaitingBannerText: { fontSize: 13, fontWeight: '600', color: '#b45309', marginTop: 4, lineHeight: 18, flexShrink: 1 },
   detailsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, paddingVertical: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#f8fafc' },
   itemCount: { color: '#64748b', fontSize: 14, fontWeight: '600' },
   totalPrice: { fontWeight: '900', color: '#1e293b', fontSize: 18 },

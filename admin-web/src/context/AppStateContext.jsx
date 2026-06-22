@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   MOCK_RIDERS,
   MOCK_BANNERS,
@@ -92,12 +92,16 @@ const buildCategories = items => {
 
 const AppStateContext = createContext();
 
-function normalizeAdminOrderRow(o) {
+export function normalizeAdminOrderRow(o) {
   const da = o.deliveryAddress;
+  const orderId = String(o._id ?? o.id ?? '').trim();
+  const orderStatus = String(o.orderStatus ?? o.status ?? 'PLACED').trim().toUpperCase();
   return {
     ...o,
-    id: o._id,
-    status: o.orderStatus,
+    _id: orderId,
+    id: orderId,
+    status: orderStatus,
+    orderStatus,
     total: o.totalAmount,
     date: o.createdAt,
     assignment: o.riderId?.name || o.riderName || 'Pending',
@@ -162,8 +166,12 @@ export const AppStateProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
 
   /* -------- LOADING + ERROR STATE -------- */
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState(null);
+  const [ridersLoading, setRidersLoading] = useState(false);
+  const ordersRequestIdRef = useRef(0);
 
   const [riders, setRiders] = useState([]);
 
@@ -178,11 +186,11 @@ export const AppStateProvider = ({ children }) => {
   const fetchProductsFromAPI = useCallback(async () => {
     const token = localStorage.getItem('jwtToken');
     if (!token) {
-      setLoading(false);
+      setProductsLoading(false);
       return;
     }
-    setLoading(true);
-    setError(null);
+    setProductsLoading(true);
+    setProductsError(null);
     try {
       const data = await apiService.getInventory();
       const items = data.data || [];
@@ -199,9 +207,9 @@ export const AppStateProvider = ({ children }) => {
       sessionStorage.removeItem('app_categories');
     } catch (err) {
       console.error('Failed to fetch products:', err);
-      setError('Failed to load inventory data');
+      setProductsError('Failed to load inventory data');
     } finally {
-      setLoading(false);
+      setProductsLoading(false);
     }
   }, []);
 
@@ -255,6 +263,7 @@ export const AppStateProvider = ({ children }) => {
   /* ---------- FETCH ORDERS ---------- */
   const fetchOrders = useCallback(async (opts = {}) => {
     const silent = Boolean(opts.silent);
+    const requestId = ++ordersRequestIdRef.current;
 
     const token = localStorage.getItem('jwtToken');
     if (!token) {
@@ -262,15 +271,20 @@ export const AppStateProvider = ({ children }) => {
     }
 
     if (!silent) {
-      setLoading(true);
-      setError(null);
+      setOrdersLoading(true);
+      setOrdersError(null);
     }
 
     try {
       const data = await apiService.getOrders();
+      if (requestId !== ordersRequestIdRef.current) return;
+
       const normalized = (data.orders || []).map(normalizeAdminOrderRow);
       setOrders(normalized);
+      return normalized;
     } catch (err) {
+      if (requestId !== ordersRequestIdRef.current) return;
+
       if (err.response?.status === 401) {
         localStorage.removeItem('jwtToken');
         localStorage.removeItem('freshroot_user');
@@ -278,9 +292,11 @@ export const AppStateProvider = ({ children }) => {
         return;
       }
       console.error('Failed to fetch orders:', err);
-      if (!silent) setError('Failed to load orders');
+      if (!silent) setOrdersError('Failed to load orders');
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && requestId === ordersRequestIdRef.current) {
+        setOrdersLoading(false);
+      }
     }
   }, []);
 
@@ -298,46 +314,48 @@ export const AppStateProvider = ({ children }) => {
   }, [fetchOrders]);
 
   /* ---------- FETCH RIDERS ---------- */
-  useEffect(() => {
+  const fetchRiders = useCallback(async (opts = {}) => {
+    const silent = Boolean(opts?.silent);
+    const token = localStorage.getItem('jwtToken');
+    if (!token) return;
 
-    const fetchRiders = async () => {
-
-      // Only fetch if user has a token
-      const token = localStorage.getItem('jwtToken');
-      if (!token) {
+    if (!silent) setRidersLoading(true);
+    try {
+      const data = await apiService.getRiders();
+      const normalized = (data.data?.riders || []).map(r => ({
+        ...r,
+        id: r._id,
+      }));
+      setRiders(normalized);
+    } catch (err) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('jwtToken');
+        localStorage.removeItem('freshroot_user');
+        window.location.href = '/login';
         return;
       }
-
-      try {
-
-        const data = await apiService.getRiders();
-
-        const normalized = (data.data?.riders || []).map(r => ({
-          ...r,
-          id: r._id,
-        }));
-
-        setRiders(normalized);
-
-      } catch (err) {
-
-        // Handle 401 - redirect to login
-        if (err.response?.status === 401) {
-          localStorage.removeItem('jwtToken');
-          localStorage.removeItem('freshroot_user');
-          window.location.href = '/login';
-          return;
-        }
-
-        console.error("Failed to fetch riders:", err);
-
-      }
-
-    };
-
-    fetchRiders();
-
+      console.error('Failed to fetch riders:', err);
+    } finally {
+      if (!silent) setRidersLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchRiders({ silent: true });
+  }, [fetchRiders]);
+
+  const refreshAllAfterLogin = useCallback(() => {
+    fetchProductsFromAPI();
+    fetchOrders({ silent: false });
+    fetchReturns();
+    fetchRiders({ silent: true });
+  }, [fetchProductsFromAPI, fetchOrders, fetchReturns, fetchRiders]);
+
+  useEffect(() => {
+    const onAuthChanged = () => refreshAllAfterLogin();
+    window.addEventListener('admin-auth-changed', onAuthChanged);
+    return () => window.removeEventListener('admin-auth-changed', onAuthChanged);
+  }, [refreshAllAfterLogin]);
 
   /* ---------- SAVE STATE ---------- */
   useEffect(() => {
@@ -349,17 +367,8 @@ export const AppStateProvider = ({ children }) => {
 
   const addRider = async (riderData) => {
     try {
-      // Call API to create rider
       await apiService.createRider(riderData);
-      
-      // Fetch updated riders list
-      const data = await apiService.getRiders();
-      const normalized = (data.data?.riders || []).map(r => ({
-        ...r,
-        id: r._id,
-      }));
-      
-      setRiders(normalized);
+      await fetchRiders({ silent: true });
     } catch (error) {
       console.error("Add rider failed:", error);
       throw error;
@@ -386,16 +395,14 @@ export const AppStateProvider = ({ children }) => {
   };
 
   const assignRider = async (orderId, riderId, riderName) => {
+    const normalizedOrderId = String(orderId ?? '').trim();
+    const normalizedRiderId = String(riderId ?? '').trim();
+    if (!normalizedOrderId || !normalizedRiderId) {
+      throw new Error('Order and rider are required');
+    }
     try {
-      // Call API to assign rider
-      await apiService.assignRiderToOrder(riderId, orderId);
-
-      // Fetch updated orders
-      const data = await apiService.getOrders();
-
-      const normalized = (data.orders || []).map(normalizeAdminOrderRow);
-
-      setOrders(normalized);
+      await apiService.assignRiderToOrder(normalizedRiderId, normalizedOrderId);
+      await fetchOrders({ silent: true });
     } catch (error) {
       console.error("Assign rider failed:", error);
       throw error;
@@ -408,13 +415,10 @@ export const AppStateProvider = ({ children }) => {
 
     try {
 
-      const result = await apiService.updateOrderStatus(orderId, newStatus);
+      const normalizedOrderId = String(orderId ?? '').trim();
+      const result = await apiService.updateOrderStatus(normalizedOrderId, newStatus);
 
-      const data = await apiService.getOrders();
-
-      const normalized = (data.orders || []).map(normalizeAdminOrderRow);
-
-      setOrders(normalized);
+      await fetchOrders({ silent: true });
 
       if (result?.message) {
         showToast(
@@ -452,8 +456,13 @@ export const AppStateProvider = ({ children }) => {
   return (
     <AppStateContext.Provider value={{
       appSettings,
-      loading,
-      error,
+      loading: productsLoading,
+      error: productsError,
+      productsLoading,
+      productsError,
+      ordersLoading,
+      ordersError,
+      ridersLoading,
       updateSettings: (newSettings) =>
         setAppSettings(prev => ({ ...prev, ...newSettings })),
 
@@ -480,6 +489,7 @@ export const AppStateProvider = ({ children }) => {
       },
       refreshProducts: fetchProductsFromAPI,
       refreshOrders: fetchOrders,
+      refreshRiders: fetchRiders,
 
       addCategory: c => {
         const id = c.parentId ? toSubId(c.name) : toCatId(c.name);

@@ -47,7 +47,11 @@ module.exports = () => {
   );
 
   const appName = customer?.config.appName || base.name;
-  const slug = customer?.config.slug || base.slug;
+  // One EAS projectId → one Expo slug. Per-customer slug only when using a separate easProjectId.
+  const slug =
+    customer?.config.easProjectId && customer?.config.slug
+      ? customer.config.slug
+      : base.slug;
   const version = customer?.config.version || base.version;
   const urlScheme = customer?.config.urlScheme || base.scheme;
   const androidPackage =

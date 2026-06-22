@@ -438,6 +438,14 @@ exports.assignOrderToRider = async (req, res) => {
       });
     }
 
+    const orderIdStr = String(orderId).trim();
+    if (!mongoose.Types.ObjectId.isValid(orderIdStr)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       console.log("[ASSIGN RIDER] Invalid rider ID:", id);
       return res.status(400).json({
@@ -460,34 +468,23 @@ exports.assignOrderToRider = async (req, res) => {
       });
     }
 
-    // Check order exists and is in CONFIRMED status
+    // Check order exists (service enforces CONFIRMED atomically)
     const order = await Order.findOne({
-      _id: orderId,
+      _id: orderIdStr,
       tenantId,
     });
-    // Debug log removed
 
     if (!order) {
-      // Debug log removed
       return res.status(404).json({
         success: false,
         message: "Order not found",
       });
     }
 
-    if (order.orderStatus !== "CONFIRMED") {
-      // Debug log removed
-      return res.status(400).json({
-        success: false,
-        message: "Only CONFIRMED orders can be assigned",
-      });
-    }
-
-    // Assign order
+    // Assign order (atomic — only CONFIRMED orders transition)
     const { updatedOrder, updatedRider } =
-      await riderService.assignOrderToRider(orderId, id, tenantId);
+      await riderService.assignOrderToRider(orderIdStr, id, tenantId);
 
-    // Debug log removed
     return res.status(200).json({
       success: true,
       message: "Order assigned to rider successfully",
@@ -498,9 +495,11 @@ exports.assignOrderToRider = async (req, res) => {
     });
   } catch (error) {
     console.error("assignOrderToRider error:", error);
-    return res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to assign order",
+      currentStatus: error.currentStatus,
     });
   }
 };

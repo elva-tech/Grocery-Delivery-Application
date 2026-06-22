@@ -8,7 +8,7 @@ export const MOBILE_COPY = {
   auth: {
     loginSubtitle: 'Enter your mobile number to continue',
     createAccountCta: 'New here? Create an account',
-    registerSubtitle: 'Sign up quickly with mobile OTP',
+    registerSubtitle: 'Enter your name and mobile number to get started',
     signInCta: 'Already have an account? Sign in',
     otpTitle: 'OTP Verification',
     loginToContinueTitle: 'Please log in to continue',
@@ -50,6 +50,20 @@ export const MOBILE_COPY = {
     onlinePaymentUnavailable:
       'Online payment is not available at this store right now. Please choose Cash on Delivery or contact the store.',
     paymentFailedGeneric: 'Could not complete your order. Please try again or use Cash on Delivery.',
+  },
+  orderSuccess: {
+    title: 'Order Placed!',
+    /** Tenant-agnostic — works for grocery, pharmacy, retail, etc. */
+    subtitle: (storeName?: string | null) => {
+      const name = String(storeName || '').trim();
+      if (name) {
+        return `${name} is preparing your order and it will be on its way soon.`;
+      }
+      return 'Your order is confirmed and will be on its way soon.';
+    },
+    orderIdLabel: 'ORDER ID',
+    trackOrder: 'Track Order',
+    returnToShop: 'Return to Shop',
   },
   delivery: {
     checkoutBlockedHint:

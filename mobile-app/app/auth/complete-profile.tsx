@@ -60,6 +60,10 @@ export default function CompleteProfile() {
   };
 
   const handleSaveDetails = async () => {
+    if (name.trim().length < 2) {
+      showToast("error", "Profile", "Please enter your full name (at least 2 characters)");
+      return;
+    }
     setSaving(true);
     try {
       await updateProfile({
@@ -100,13 +104,17 @@ export default function CompleteProfile() {
 
     setSaving(true);
     try {
-      const profileName = String(name || authUser?.name || "Guest User").trim();
+      const profileName = String(name || authUser?.name || "").trim();
+      if (profileName.length < 2) {
+        showToast("error", "Profile", "Please enter your full name before saving your address");
+        return;
+      }
       await updateProfile({
-        name: profileName.length >= 2 ? profileName : "Guest User",
+        name: profileName,
         address: composedAddress,
       });
       await persistLocalUser({
-        name: profileName.length >= 2 ? profileName : "Guest User",
+        name: profileName,
         address: composedAddress,
       });
       goHome();
