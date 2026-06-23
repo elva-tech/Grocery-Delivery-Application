@@ -7,11 +7,13 @@ import { MOBILE_COPY } from "@/src/constants/copy";
 
 export default function Register() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
 
   const indiaRegex = /^[6-9]\d{9}$/;
-  const isValid = indiaRegex.test(phone.trim());
+  const isValid =
+    name.trim().length >= 2 && indiaRegex.test(phone.trim());
 
   const handleNext = async () => {
     if (!isValid || loading) return;
@@ -22,6 +24,7 @@ export default function Register() {
         pathname: '/auth/otp',
         params: {
           phone,
+          name: name.trim(),
           mode: 'signup',
           autoSend: '1',
         },
@@ -38,6 +41,18 @@ export default function Register() {
 
         <Text style={[styles.title, { fontFamily: Fonts.bold }]}>Create Account</Text>
         <Text style={[styles.subtitle, { fontFamily: Fonts.regular }]}>{MOBILE_COPY.auth.registerSubtitle}</Text>
+
+        <View style={styles.inputWrapper}>
+          <Text style={styles.inputLabel}>Full Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Your full name"
+            placeholderTextColor="#94a3b8"
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+          />
+        </View>
 
         <View style={styles.inputWrapper}>
           <Text style={styles.inputLabel}>Mobile Number</Text>

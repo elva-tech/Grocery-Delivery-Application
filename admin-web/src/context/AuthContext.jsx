@@ -46,6 +46,8 @@ export const AuthProvider = ({ children }) => {
         // Remove any old 'token' key to avoid confusion
         localStorage.removeItem('token');
 
+        window.dispatchEvent(new CustomEvent('admin-auth-changed'));
+
         return { success: true, user: userData };
       }
 

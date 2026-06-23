@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import DataTable from '../../components/shared/DataTable';
 import CustomButton from '../../components/shared/CustomButton';
@@ -134,8 +134,8 @@ const ProductList = () => {
   const {
     products,
     categories,
-    loading,
-    error,
+    productsLoading,
+    productsError,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -146,6 +146,7 @@ const ProductList = () => {
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [activePillarId, setActivePillarId] = useState('All');
   const [activeSubCatId, setActiveSubCatId] = useState('All');
@@ -155,6 +156,13 @@ const ProductList = () => {
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('jwtToken');
+    if (token) {
+      refreshProducts();
+    }
+  }, [refreshProducts]);
 
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -372,6 +380,7 @@ const ProductList = () => {
 
         <ProductForm
           onImagesPersisted={refreshProducts}
+          saving={isSaving}
 
           initialValues={{
             ...editingItem,
@@ -386,7 +395,8 @@ const ProductList = () => {
           }}
 
           onSubmit={async (v) => {
-
+            if (isSaving) return;
+            setIsSaving(true);
             try {
 
               const catObj = categories.find(c => c.id === v.parentCategoryId);
@@ -461,23 +471,23 @@ const ProductList = () => {
                 'error',
                 error.response?.data?.message || 'Error saving product'
               );
-
+            } finally {
+              setIsSaving(false);
             }
-
           }}
         />
       )}
 
-      {!showForm && !editingItem && loading ? (
+      {!showForm && !editingItem && productsLoading ? (
         <div className="py-20 flex flex-col items-center justify-center gap-3">
           <Loader className="w-8 h-8 text-emerald-600 animate-spin" />
           <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading inventory...</p>
         </div>
-      ) : !showForm && !editingItem && error ? (
+      ) : !showForm && !editingItem && productsError ? (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start gap-3">
           <AlertCircle className="text-red-600 mt-0.5" size={18} />
           <div className="space-y-3">
-            <p className="text-sm font-bold text-red-700">{error}</p>
+            <p className="text-sm font-bold text-red-700">{productsError}</p>
             <button
               onClick={() => refreshProducts()}
               className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest"
@@ -557,6 +567,15 @@ const ProductList = () => {
         </div>
       )}
 
+
+      {isSaving && (showForm || editingItem) && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-[2px]">
+          <div className="bg-white rounded-2xl px-8 py-6 shadow-2xl flex flex-col items-center gap-3">
+            <Loader className="w-8 h-8 text-emerald-600 animate-spin" />
+            <p className="text-sm font-bold text-slate-700">Saving product…</p>
+          </div>
+        </div>
+      )}
 
       {/* {Succes POP UP} */}
     {showSuccess && (

@@ -44,10 +44,10 @@ exports.getAllOrdersForAdmin = async (req, res) => {
   try {
     let page = parseInt(req.query.page);
     let limit = parseInt(req.query.limit);
-    const { status } = req.query;
+    const { status, search, dateFrom, dateTo, ratingFilter } = req.query;
 
     if (isNaN(page) || page <= 0) page = 1;
-    if (isNaN(limit) || limit <= 0) limit = 10;
+    if (isNaN(limit) || limit <= 0) limit = 25;
     if (limit > 100) limit = 100;
 
     const query = { tenantId: req.user.tenantId };
@@ -62,16 +62,63 @@ exports.getAllOrdersForAdmin = async (req, res) => {
       query.orderStatus = status;
     }
 
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        if (!isNaN(from.getTime())) {
+          from.setHours(0, 0, 0, 0);
+          query.createdAt.$gte = from;
+        }
+      }
+      if (dateTo) {
+        const to = new Date(dateTo);
+        if (!isNaN(to.getTime())) {
+          to.setHours(23, 59, 59, 999);
+          query.createdAt.$lte = to;
+        }
+      }
+      if (!Object.keys(query.createdAt).length) delete query.createdAt;
+    }
+
+    const searchTerm = typeof search === "string" ? search.trim() : "";
+    if (searchTerm) {
+      const orConditions = [
+        { customerName: { $regex: searchTerm, $options: "i" } },
+      ];
+      if (mongoose.Types.ObjectId.isValid(searchTerm)) {
+        orConditions.push({ _id: searchTerm });
+      } else {
+        orConditions.push({
+          $expr: {
+            $regexMatch: {
+              input: { $toString: "$_id" },
+              regex: searchTerm,
+              options: "i",
+            },
+          },
+        });
+      }
+      query.$or = orConditions;
+    }
+
+    if (ratingFilter === "RATED") {
+      query["rating.value"] = { $exists: true, $ne: null };
+    } else if (ratingFilter === "LOW") {
+      query["rating.value"] = { $exists: true, $lte: 2 };
+    }
+
     const skip = (page - 1) * limit;
 
-    const orders = await Order.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate("userId", "name email");
-
-    const totalOrders = await Order.countDocuments(query);
-    const totalPages = Math.ceil(totalOrders / limit);
+    const [orders, totalOrders] = await Promise.all([
+      Order.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("userId", "name email"),
+      Order.countDocuments(query),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalOrders / limit));
 
     return res.status(200).json({
       success: true,
@@ -508,14 +555,49 @@ exports.getRevenue = async (req, res) => {
 exports.getRevenueReport = async (req, res) => {
   try {
     const tenantId = req.user.tenantId;
+    let page = parseInt(req.query.page);
+    let limit = parseInt(req.query.limit);
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-    const orders = await Order.find(revenueMatchFilter(tenantId))
-      .sort({ createdAt: -1 })
-      .select(
-        "totalAmount orderStatus paymentStatus refundAmount refundStatus createdAt customerName"
-      )
-      .populate("userId", "name")
-      .lean();
+    if (isNaN(page) || page <= 0) page = 1;
+    if (isNaN(limit) || limit <= 0) limit = 25;
+    if (limit > 100) limit = 100;
+
+    const match = revenueMatchFilter(tenantId);
+    if (search) {
+      match.$or = [
+        { customerName: { $regex: search, $options: "i" } },
+        {
+          $expr: {
+            $regexMatch: {
+              input: { $toString: "$_id" },
+              regex: search,
+              options: "i",
+            },
+          },
+        },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [aggResult, totalOrders, orders] = await Promise.all([
+      Order.aggregate([
+        { $match: match },
+        netRevenueAddFieldsStage,
+        { $group: { _id: null, totalRevenue: { $sum: "$netRevenue" } } },
+      ]),
+      Order.countDocuments(match),
+      Order.find(match)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select(
+          "totalAmount orderStatus paymentStatus refundAmount refundStatus createdAt customerName"
+        )
+        .populate("userId", "name")
+        .lean(),
+    ]);
 
     const rows = orders.map((o) => {
       const net = getOrderNetRevenue(o);
@@ -532,14 +614,16 @@ exports.getRevenueReport = async (req, res) => {
       };
     });
 
-    const totalRevenue = Number(
-      rows.reduce((sum, r) => sum + r.amount, 0).toFixed(2)
-    );
+    const totalRevenue = Number((aggResult[0]?.totalRevenue ?? 0).toFixed(2));
+    const totalPages = Math.max(1, Math.ceil(totalOrders / limit));
 
     return res.status(200).json({
       success: true,
       totalRevenue,
-      orderCount: rows.length,
+      orderCount: totalOrders,
+      page,
+      limit,
+      totalPages,
       rows,
     });
   } catch (error) {

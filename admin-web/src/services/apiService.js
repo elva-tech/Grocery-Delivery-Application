@@ -33,9 +33,33 @@ api.interceptors.response.use(
   }
 );
 
+/* -------- QUERY HELPER -------- */
+function buildQuery(params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== "") {
+      qs.set(key, String(val));
+    }
+  });
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
+async function fetchAllPages(fetchPage, extractItems, getTotalPages) {
+  const all = [];
+  let page = 1;
+  let totalPages = 1;
+  while (page <= totalPages) {
+    const res = await fetchPage(page);
+    all.push(...extractItems(res));
+    totalPages = getTotalPages(res) || 1;
+    page += 1;
+  }
+  return all;
+}
+
 /* -------- API SERVICES -------- */
 export const apiService = {
-
   /* -------- PRODUCT APIs -------- */
 
   getProducts: async () => {
@@ -116,15 +140,33 @@ updateProduct: async (productId, payload) => {
 
   /* -------- ORDER APIs -------- */
 
-  getOrders: async () => {
-    const res = await api.get("/api/admin/orders?page=1&limit=100");
+  getOrders: async (params) => {
+    const query = params
+      ? buildQuery(params)
+      : "?page=1&limit=100";
+    const res = await api.get(`/api/admin/orders${query}`);
     return res.data;
   },
 
-  getRevenueReport: async () => {
-    const res = await api.get("/api/admin/revenue/report");
+  getAllOrders: async (params = {}) =>
+    fetchAllPages(
+      (page) => apiService.getOrders({ ...params, page, limit: 100 }),
+      (res) => res.orders || [],
+      (res) => res.totalPages,
+    ),
+
+  getRevenueReport: async (params) => {
+    const query = params ? buildQuery(params) : "";
+    const res = await api.get(`/api/admin/revenue/report${query}`);
     return res.data;
   },
+
+  getAllRevenueRows: async (params = {}) =>
+    fetchAllPages(
+      (page) => apiService.getRevenueReport({ ...params, page, limit: 100 }),
+      (res) => res.rows || [],
+      (res) => res.totalPages,
+    ),
 
   updateOrderStatus: async (orderId, status) => {
     const res = await api.put(`/api/admin/orders/${orderId}/status`, { status });
@@ -174,14 +216,22 @@ updateProduct: async (productId, payload) => {
 
   /* -------- GET INVENTORY -------- */
 /* -------- GET INVENTORY -------- */
-getInventory: async () => {
+getInventory: async (params) => {
   try {
-    const res = await api.get("/api/admin/inventory");
+    const query = params ? buildQuery(params) : "";
+    const res = await api.get(`/api/admin/inventory${query}`);
     return res.data;
   } catch (error) {
     throw error.response?.data || error;
   }
 },
+
+getAllInventory: async (params = {}) =>
+  fetchAllPages(
+    (page) => apiService.getInventory({ ...params, page, limit: 100 }),
+    (res) => res.data || [],
+    (res) => res.totalPages,
+  ),
 /* -------- UNIT APIs -------- */
 
 getUnits: async () => {

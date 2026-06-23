@@ -122,11 +122,16 @@ export default function OTP() {
       setLoading(true);
 
       try {
-        const fallbackSignupName = MOBILE_COPY.common.guestUser;
-        const signupName =
-          mode === "signup"
-            ? (name?.trim() || fallbackSignupName)
-            : undefined;
+        if (mode === "signup") {
+          const signupName = name?.trim() || "";
+          if (signupName.length < 2) {
+            showToast("error", "Name required", "Please enter your name on the sign up screen.");
+            router.replace("/auth/register");
+            return;
+          }
+        }
+
+        const signupName = mode === "signup" ? name.trim() : undefined;
 
         const result = await verifyOtp(phone as string, code, signupName, mode);
         await completeLogin(result);
@@ -141,7 +146,7 @@ export default function OTP() {
         }
       }
     },
-    [completeLogin, loading, mode, name, otp, phone]
+    [completeLogin, loading, mode, name, otp, phone, router]
   );
 
   const handleChange = (text: string, i: number) => {
