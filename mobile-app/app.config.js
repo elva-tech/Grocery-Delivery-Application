@@ -53,6 +53,10 @@ module.exports = () => {
       ? customer.config.slug
       : base.slug;
   const version = customer?.config.version || base.version;
+  const versionCode =
+    customer?.config.versionCode != null
+      ? Number(customer.config.versionCode)
+      : base.android?.versionCode;
   const urlScheme = customer?.config.urlScheme || base.scheme;
   const androidPackage =
     customer?.config.androidPackage || base.android?.package || 'com.elvatech.grocery';
@@ -98,6 +102,7 @@ module.exports = () => {
       android: {
         ...base.android,
         package: androidPackage,
+        ...(Number.isFinite(versionCode) && versionCode > 0 ? { versionCode } : {}),
         adaptiveIcon: {
           ...base.android?.adaptiveIcon,
           foregroundImage: adaptiveIcon,
