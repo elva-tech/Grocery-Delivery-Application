@@ -95,7 +95,7 @@ export default function OrdersScreen() {
   const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>('all');
   const [sortBy, setSortBy] = useState<OrderSortBy>('newest');
 
-  const fetchOrders = useCallback(async (isQuiet = false) => {
+  const fetchOrders = useCallback(async (isQuiet = false, options?: { skipRatingPrompt?: boolean }) => {
     if (!isQuiet) setLoading(true);
     try {
       const data = await getUserOrders();
@@ -106,6 +106,8 @@ export default function OrdersScreen() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       setOrders(normalizedData);
+
+      if (options?.skipRatingPrompt) return;
 
       // Auto-prompt rating for first unrated delivered order
       const unrated = normalizedData.find(
@@ -295,13 +297,28 @@ export default function OrdersScreen() {
 
   const submitRating = async () => {
     if (starValue === 0) return showToast('error', 'Select Stars', 'Please tap a star to rate.');
+    if (!ratingOrder) return;
+    const orderId = String(ratingOrder._id ?? ratingOrder.id);
     setIsSubmittingRating(true);
     try {
-      await rateOrderApi(ratingOrder._id ?? ratingOrder.id, starValue, ratingComment);
+      await rateOrderApi(orderId, starValue, ratingComment);
+      const ratingPayload = {
+        value: starValue,
+        comment: ratingComment.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      setOrders((prev) =>
+        prev.map((o) => {
+          const id = String(o._id ?? o.id);
+          return id === orderId ? { ...o, rating: ratingPayload } : o;
+        }),
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('success', 'Thank you!', 'Your feedback helps us improve.');
       setRatingOrder(null);
-      fetchOrders(true);
+      setStarValue(0);
+      setRatingComment('');
+      fetchOrders(true, { skipRatingPrompt: true });
     } catch (err: any) {
       showToast('error', 'Error', err.message || 'Could not submit rating.');
     } finally {

@@ -501,6 +501,14 @@ exports.getCustomerOrderHistory = async (req, res) => {
             }
           : null,
 
+      rating: order.rating?.value != null
+        ? {
+            value: order.rating.value,
+            comment: order.rating.comment || "",
+            createdAt: order.rating.createdAt || null,
+          }
+        : null,
+
       // ✅ SEND ITEMS PROPERLY
       items: order.items.map((item) => {
         const imageUrl = resolveOrderItemImageUrl(item);
