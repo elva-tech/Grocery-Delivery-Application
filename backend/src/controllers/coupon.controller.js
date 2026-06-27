@@ -1,5 +1,10 @@
 const Coupon = require("../models/Coupon.model");
 const Order = require("../models/Order.model");
+const {
+  INVALID_DATE_MESSAGE,
+  isValidCalendarDate,
+  parseCalendarDate,
+} = require("../utils/dateValidation.util");
 
 /* ─────────────────────────────────────────────
    CREATE COUPON  (Admin)
@@ -31,7 +36,14 @@ exports.createCoupon = async (req, res) => {
       return res.status(400).json({ message: "Percentage discount cannot exceed 100" });
     }
 
-    if (new Date(validFrom) >= new Date(validTo)) {
+    if (!isValidCalendarDate(validFrom) || !isValidCalendarDate(validTo)) {
+      return res.status(400).json({ message: INVALID_DATE_MESSAGE });
+    }
+
+    const parsedValidFrom = parseCalendarDate(validFrom);
+    const parsedValidTo = parseCalendarDate(validTo);
+
+    if (parsedValidFrom >= parsedValidTo) {
       return res.status(400).json({ message: "validTo must be after validFrom" });
     }
 
@@ -44,8 +56,8 @@ exports.createCoupon = async (req, res) => {
       minOrderValue: minOrderValue ?? 0,
       maxDiscount: discountType === "PERCENTAGE" ? (maxDiscount ?? null) : null,
       usageLimit: usageLimit ?? null,
-      validFrom: new Date(validFrom),
-      validTo: new Date(validTo),
+      validFrom: parsedValidFrom,
+      validTo: parsedValidTo,
       firstTimeUserOnly: firstTimeUserOnly ?? false,
       isActive: isActive ?? true,
     });
@@ -93,6 +105,24 @@ exports.updateCoupon = async (req, res) => {
     }
     // Code updates: enforce uppercase
     if (req.body.code) updates.code = req.body.code.trim().toUpperCase();
+
+    if (updates.validFrom !== undefined && !isValidCalendarDate(String(updates.validFrom))) {
+      return res.status(400).json({ message: INVALID_DATE_MESSAGE });
+    }
+    if (updates.validTo !== undefined && !isValidCalendarDate(String(updates.validTo))) {
+      return res.status(400).json({ message: INVALID_DATE_MESSAGE });
+    }
+    if (updates.validFrom !== undefined) updates.validFrom = parseCalendarDate(String(updates.validFrom));
+    if (updates.validTo !== undefined) updates.validTo = parseCalendarDate(String(updates.validTo));
+
+    const existing = await Coupon.findOne({ _id: id, tenantId });
+    if (!existing) return res.status(404).json({ message: "Coupon not found" });
+
+    const nextValidFrom = updates.validFrom ?? existing.validFrom;
+    const nextValidTo = updates.validTo ?? existing.validTo;
+    if (nextValidFrom >= nextValidTo) {
+      return res.status(400).json({ message: "validTo must be after validFrom" });
+    }
 
     const coupon = await Coupon.findOneAndUpdate(
       { _id: id, tenantId },

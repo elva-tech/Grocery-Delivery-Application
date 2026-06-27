@@ -38,15 +38,19 @@
   if (!apiBase || apiBase.indexOf("%VITE_") === 0) return;
 
   var host = (location.hostname || "").toLowerCase();
-  var tenantId = tenantIdFromHostname(host);
   var metaTenant = String(
     (document.querySelector('meta[name="tenant-id"]') || {}).content || ""
   )
     .trim()
     .toLowerCase();
 
-  if (!tenantId && (host === "localhost" || host === "127.0.0.1") && metaTenant) {
+  // localhost has no subdomain — use VITE_TENANT_ID from index.html meta, not "localhost"
+  var tenantId = "";
+  if (host === "localhost" || host === "127.0.0.1") {
     tenantId = metaTenant;
+  } else {
+    tenantId = tenantIdFromHostname(host);
+    if (!tenantId && metaTenant) tenantId = metaTenant;
   }
 
   if (!tenantId) return;

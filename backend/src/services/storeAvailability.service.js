@@ -1,6 +1,10 @@
 const Store  = require("../models/Store.model");
 const Tenant = require("../models/Tenant.model");
-const { getClosingSoonInfo } = require("../utils/storeClosingSoon");
+const {
+  getClosingSoonInfo,
+  resolveEffectiveScheduleWindow,
+  shouldStoreBeOpenForSchedule,
+} = require("../utils/storeClosingSoon");
 
 /* ─────────────────────────────────────────────
    GET STORE STATUS
@@ -8,6 +12,8 @@ const { getClosingSoonInfo } = require("../utils/storeClosingSoon");
 async function getStoreStatus(tenantId) {
   const store = await Store.findOne({ tenantId });
   if (!store) throw new Error("Store not found");
+
+  const now = new Date();
 
   // If tenant account is suspended, show as closed regardless of schedule
   const tenant = await Tenant.findOne({ tenantId }).select("status").lean();
@@ -26,23 +32,43 @@ async function getStoreStatus(tenantId) {
     };
   }
 
-  let reason = "SCHEDULE";
+  let isOpen = store.isOpen;
+  let reason = "We are currently not accepting orders.";
   let nextChange = null;
+  const hasSchedule = Boolean(store.schedule?.openTime && store.schedule?.closeTime);
 
   if (store.manualOverride) {
-    reason = "MANUAL";
-  } else if (store.schedule?.openTime && store.schedule?.closeTime) {
-    nextChange = store.isOpen ? store.schedule.closeTime : store.schedule.openTime;
+    isOpen = store.isOpen;
+    reason = isOpen
+      ? ""
+      : "This store is temporarily closed.";
+  } else if (hasSchedule) {
+    const shouldBeOpen = shouldStoreBeOpenForSchedule(store.schedule, now);
+    if (shouldBeOpen != null) {
+      isOpen = shouldBeOpen;
+      if (store.isOpen !== shouldBeOpen) {
+        await Store.updateOne({ _id: store._id }, { isOpen: shouldBeOpen });
+      }
+    }
+    const window = resolveEffectiveScheduleWindow(store.schedule, now);
+    if (window) {
+      nextChange = isOpen ? window.effectiveClose : window.effectiveOpen;
+    }
+    reason = isOpen
+      ? ""
+      : "We are currently closed based on our store hours.";
+  } else {
+    isOpen = store.isOpen;
   }
 
   const closing = getClosingSoonInfo({
-    isOpen: store.isOpen,
+    isOpen,
     manualOverride: store.manualOverride,
     schedule: store.schedule,
-  });
+  }, now);
 
   return {
-    isOpen:         store.isOpen,
+    isOpen,
     reason,
     nextChange:     nextChange ? nextChange.toISOString() : null,
     schedule:       store.schedule,
@@ -75,17 +101,21 @@ async function toggleStoreStatus(tenantId, isOpen) {
    SET SCHEDULE
 ───────────────────────────────────────────── */
 async function setStoreSchedule(tenantId, openTime, closeTime) {
+  const schedule = {
+    openTime: new Date(openTime),
+    closeTime: new Date(closeTime),
+  };
+  const shouldBeOpen = shouldStoreBeOpenForSchedule(schedule, new Date());
+
   const store = await Store.findOneAndUpdate(
     { tenantId },
     {
-      schedule: {
-        openTime:  new Date(openTime),
-        closeTime: new Date(closeTime),
-      },
+      schedule,
       manualOverride: false,
-      updatedAt:      new Date(),
+      ...(shouldBeOpen == null ? {} : { isOpen: shouldBeOpen }),
+      updatedAt: new Date(),
     },
-    { new: true }
+    { new: true },
   );
   if (!store) throw new Error("Store not found");
   return store;

@@ -15,7 +15,7 @@ import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
 import Addresses from './pages/Addresses';
 import LoginModal from './components/ui/LoginModal';
-import { getCartCalculation } from './api/ordersApi';
+import { computeCartBill, getCartBillingSettings, DEFAULT_CART_BILLING_SETTINGS, type CartBillingSettings } from './api/ordersApi';
 import {
   useGetProductsQuery,
   useGetStoreStatusQuery,
@@ -36,7 +36,12 @@ import Account from './pages/Account';
 import SavedAddresses from './pages/SavedAddresses';
 import LegalPage from './pages/LegalPage';
 import ContactUs from './pages/ContactUs';
-import { WEB_COPY, customerFacingDeliveryUnavailable } from './constants/copy';
+import {
+  WEB_COPY,
+  customerFacingDeliveryUnavailable,
+  customerFacingMapServiceError,
+  deliveryCheckWarningTitle,
+} from './constants/copy';
 import { requestPrecisePosition } from './utils/geolocation';
 import {
   checkDeliveryEligibility,
@@ -45,6 +50,7 @@ import {
 } from './api/deliveryEligibilityApi';
 import { geocodeApproxFromIndianPincode, isValidIndianPincode, sanitizeIndianPincode } from './utils/indiaPincode';
 import { parseAddressLatLng } from './utils/coordinates';
+import { storeNextChangeMessage } from './utils/storeHours';
 
 const TENANT_SCOPE_KEY = 'website_cart_tenant_scope';
 
@@ -78,10 +84,11 @@ function DeliveryEligibilityAlerts(props: {
   if (eligible === null && message) {
     return (
       <div className="mb-5 p-4 rounded-2xl border border-amber-200 bg-amber-50">
-        <p className="text-xs font-black uppercase tracking-widest text-amber-800">Delivery check unavailable</p>
-        <p className="text-sm font-semibold text-amber-900 mt-1">{message}</p>
-        <p className="text-[10px] font-bold text-amber-700/80 mt-2">
-          We could not reach the map service. Check your connection and try again, or pick a saved address.
+        <p className="text-xs font-black uppercase tracking-widest text-amber-800">
+          {deliveryCheckWarningTitle(message)}
+        </p>
+        <p className="text-sm font-semibold text-amber-900 mt-1">
+          {customerFacingMapServiceError(message)}
         </p>
       </div>
     );
@@ -109,6 +116,7 @@ const App = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showFreeToast, setShowFreeToast] = useState(false);
   const [wasFree, setWasFree] = useState(false);
+  const [cartBillingSettings, setCartBillingSettings] = useState<CartBillingSettings | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [deliveryEligibility, setDeliveryEligibility] = useState<{
     checking: boolean;
@@ -134,6 +142,15 @@ const App = () => {
   } = useGetProductsQuery(getTenantId());
   const { items } = useSelector((state: RootState) => state.cart);
 
+  useEffect(() => {
+    void getCartBillingSettings().then(setCartBillingSettings);
+  }, []);
+
+  const cartBill = useMemo(() => {
+    if (items.length === 0) return null;
+    return computeCartBill(items, cartBillingSettings ?? DEFAULT_CART_BILLING_SETTINGS);
+  }, [items, cartBillingSettings]);
+
   /** If tenant scope changes (env / host), cart + product cache must reset or checkout uses wrong product IDs. */
   useEffect(() => {
     const t = getTenantId();
@@ -154,7 +171,7 @@ const App = () => {
 
 
   const { data: storeStatus } = useGetStoreStatusQuery(undefined, {
-    pollingInterval: 30000 // Every 30 seconds: call API again → update UI automatically
+    pollingInterval: 15000,
   });
 
   const isClosed = BYPASS_STORE_CLOSED ? false : (storeStatus?.isClosed ?? false);
@@ -177,37 +194,34 @@ const App = () => {
   }, [location.pathname]);
 
   useEffect(() => {
-    const handleMilestone = async () => {
-      if (items.length === 0) {
-        setWasFree(false);
-        setShowFreeToast(false);
-        return;
+    if (items.length === 0) {
+      setWasFree(false);
+      setShowFreeToast(false);
+      return;
+    }
+    const isFreeDelivery = Boolean(cartBill?.isFreeDelivery);
+    if (isFreeDelivery) {
+      if (!wasFree) {
+        const duration = 3 * 1000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
+        const interval: ReturnType<typeof setInterval> = setInterval(function () {
+          const timeLeft = animationEnd - Date.now();
+          if (timeLeft <= 0) return clearInterval(interval);
+          const particleCount = 50 * (timeLeft / duration);
+          confetti({ ...defaults, particleCount, origin: { x: Math.random(), y: Math.random() - 0.2 }, colors: ['#4b6f9e', '#22c55e', '#ffffff'] });
+        }, 250);
+        setWasFree(true);
       }
-      const data = await getCartCalculation(items);
-      if (data.isFreeDelivery) {
-        if (!wasFree) {
-          const duration = 3 * 1000;
-          const animationEnd = Date.now() + duration;
-          const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
-          const interval: any = setInterval(function () {
-            const timeLeft = animationEnd - Date.now();
-            if (timeLeft <= 0) return clearInterval(interval);
-            const particleCount = 50 * (timeLeft / duration);
-            confetti({ ...defaults, particleCount, origin: { x: Math.random(), y: Math.random() - 0.2 }, colors: ['#4b6f9e', '#22c55e', '#ffffff'] });
-          }, 250);
-          setWasFree(true);
-        }
-        setShowFreeToast(true);
-        if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setShowFreeToast(false), 5000);
-      } else {
-        setWasFree(false);
-        setShowFreeToast(false);
-      }
-    };
-    handleMilestone();
+      setShowFreeToast(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setShowFreeToast(false), 5000);
+    } else {
+      setWasFree(false);
+      setShowFreeToast(false);
+    }
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [items, wasFree]);
+  }, [cartBill?.isFreeDelivery, items.length, wasFree]);
 
   // UPDATED FILTERING FOR NESTED CATEGORIES
   const filteredProducts = useMemo(() => {
@@ -368,7 +382,7 @@ const App = () => {
       setDeliveryEligibility({
         checking: false,
         eligible: null,
-        message: 'Enable location access to check delivery availability',
+        message: WEB_COPY.delivery.locationPermissionNeeded,
         details: null,
       });
       return () => {
@@ -387,8 +401,8 @@ const App = () => {
         const geo = err as GeolocationPositionError | undefined;
         const msg =
           geo && geo.code === 1
-            ? 'Location permission denied — allow access to check delivery for your area.'
-            : 'Could not detect your location — allow access or choose a saved address.';
+            ? WEB_COPY.delivery.locationPermissionDenied
+            : WEB_COPY.delivery.locationPermissionNeeded;
         setDeliveryEligibility({
           checking: false,
           eligible: null,
@@ -456,7 +470,7 @@ const App = () => {
                   Next update
                 </p>
                 <p className="text-sm text-red-600 mt-1">
-                  {storeStatus.nextChange}
+                  {storeNextChangeMessage(storeStatus.nextChange, isClosed)}
                 </p>
               </div>
             )}

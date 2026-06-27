@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../../store/store';
 import { addToCart, removeFromCart } from '../../store/slices/cartSlice';
-import { getCartCalculation } from '../../api/ordersApi';
+import { computeCartBill, getCartBillingSettings, DEFAULT_CART_BILLING_SETTINGS, type CartBillingSettings } from '../../api/ordersApi';
 import { X, ShoppingBasket, Trash2, Zap, Gift, Bike } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { resolveImageUrl } from '../../utils/resolveImageUrl';
@@ -11,29 +11,34 @@ import { WEB_COPY } from '../../constants/copy';
 const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
   const { items } = useSelector((state: RootState) => state.cart);
   const dispatch = useDispatch();
-  const [bill, setBill] = useState<any>(null);
-  const [wasFree, setWasFree] = useState(false);
+  const [billingSettings, setBillingSettings] = useState<CartBillingSettings | null>(null);
+  const wasFreeRef = useRef(false);
 
   useEffect(() => {
-    const updateCart = async () => {
-      if (items.length === 0) { setBill(null); setWasFree(false); return; }
-      try {
-        const data = await getCartCalculation(items);
-        
-        if (data.isFreeDelivery && !wasFree && isOpen) {
-          confetti({ 
-            particleCount: 60, spread: 60, origin: { x: 0.85, y: 0.5 },
-            zIndex: 1001, colors: ['#22c55e', '#4b6f9e', '#ffffff']
-          });
-          setWasFree(true);
-        } else if (!data.isFreeDelivery) {
-          setWasFree(false);
-        }
-        setBill(data);
-      } catch (e) { console.error(e); }
-    };
-    updateCart();
-  }, [items, isOpen, wasFree]);
+    void getCartBillingSettings().then(setBillingSettings);
+  }, []);
+
+  const bill = useMemo(() => {
+    if (items.length === 0) return null;
+    return computeCartBill(items, billingSettings ?? DEFAULT_CART_BILLING_SETTINGS);
+  }, [items, billingSettings]);
+
+  useEffect(() => {
+    if (!bill?.isFreeDelivery) {
+      wasFreeRef.current = false;
+      return;
+    }
+    if (!wasFreeRef.current && isOpen) {
+      confetti({
+        particleCount: 60,
+        spread: 60,
+        origin: { x: 0.85, y: 0.5 },
+        zIndex: 1001,
+        colors: ['#22c55e', '#4b6f9e', '#ffffff'],
+      });
+      wasFreeRef.current = true;
+    }
+  }, [bill?.isFreeDelivery, isOpen]);
 
   return (
     <div className={`fixed inset-0 z-[100] transition-all duration-500 ${isOpen ? 'visible' : 'invisible'}`}>

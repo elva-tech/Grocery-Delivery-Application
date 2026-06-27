@@ -46,7 +46,7 @@ import {
 import { checkDeliveryEligibility } from '@/api/deliveryEligibilityApi';
 import { parseAddressLatLng } from '@/utils/coordinates';
 import { formatDeliverToDisplay } from '@/utils/indiaPincode';
-import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
+import { MOBILE_COPY, customerFacingDeliveryUnavailable, customerFacingMapServiceError } from '@/src/constants/copy';
 import * as Location from 'expo-location';
 
 // Constants for UI consistency
@@ -216,7 +216,7 @@ export default function HomeScreen() {
           setDeliveryEligibility({
             checking: false,
             eligible: null,
-            message: MOBILE_COPY.home.deliveryNeedLocationPermission,
+            message: MOBILE_COPY.home.deliveryLocationPermissionDenied,
           });
           return;
         }
@@ -305,7 +305,7 @@ export default function HomeScreen() {
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
   const { data: allProducts = [] } = useGetProductsQuery();
-  const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 30000 });
+  const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 15000 });
   const isStoreClosed = storeStatus?.isClosed ?? false;
 
   const filteredProducts = useMemo(() => {
@@ -390,7 +390,9 @@ export default function HomeScreen() {
           <Ionicons name="information-circle-outline" size={18} color="#b45309" />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.deliveryBannerTitleWarn}>{MOBILE_COPY.home.deliveryCheckUnavailableTitle}</Text>
-            <Text style={styles.deliveryBannerSubWarn}>{deliveryEligibility.message}</Text>
+            <Text style={styles.deliveryBannerSubWarn}>
+              {customerFacingMapServiceError(deliveryEligibility.message)}
+            </Text>
           </View>
         </View>
       ) : null}

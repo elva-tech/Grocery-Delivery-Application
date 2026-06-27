@@ -127,8 +127,13 @@ export async function checkDeliveryEligibility(
   const points = await resolveDeliveryDestinationPoints();
 
   if (points.length === 0) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        '[delivery eligibility] Store hub missing — set storeLat/storeLng on tenant or VITE_STORE_LAT/LNG for local dev.',
+      );
+    }
     throw new Error(
-      'Store delivery hub is not configured. Set latitude/longitude for this tenant (super-admin onboarding or store admin Store profile), or use VITE_DELIVERY_POINTS_JSON / VITE_STORE_LAT+LNG for local overrides.',
+      "We couldn't confirm delivery for your area right now. Please try again or contact the store.",
     );
   }
 

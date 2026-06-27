@@ -17,6 +17,7 @@ import { hydrateCart } from '@/store/slices/cartSlice';
 import { CART_STORAGE_KEY } from '@/store/store';
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import StoreClosingSoonBanner from '@/components/StoreClosingSoonBanner';
+import { storeNextChangeMessage } from '@/src/utils/storeHours';
 import { extractTenantFromUrl, getActiveTenantId, isCustomerBuild, saveTenantId } from '@/src/utils/tenantStorage';
 import { TenantBrandingProvider, useTenantBranding } from '@/contexts/TenantBrandingContext';
 
@@ -33,7 +34,7 @@ function RootLayoutNav() {
   const { ready: brandingReady, loading: brandingLoading, logoUri } = useTenantBranding();
 
   // Store Status - fetched from backend
-  const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 30_000 });
+  const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 15_000 });
   const isClosed = storeStatus?.isClosed ?? false;
   const showClosingSoon =
     !isClosed &&
@@ -227,24 +228,12 @@ function RootLayoutNav() {
             <Text style={{ marginTop: 10, textAlign: 'center', color: '#555' }}>
               {storeStatus?.reason}
             </Text>
-  
-            {(storeStatus as any)?.type === "TIME" && (
-              <Text style={{ marginTop: 12, fontWeight: '600' }}>
-                {(storeStatus as any).startTime} - {(storeStatus as any).endTime}
+
+            {storeStatus?.nextChange ? (
+              <Text style={{ marginTop: 12, fontWeight: '600', textAlign: 'center', color: '#333' }}>
+                {storeNextChangeMessage(storeStatus.nextChange, true)}
               </Text>
-            )}
-  
-            {(storeStatus as any)?.type === "DATE" && (
-              <>
-                <Text style={{ marginTop: 12 }}>
-                  {(storeStatus as any).startDate} → {(storeStatus as any).endDate}
-                </Text>
-  
-                <Text style={{ marginTop: 4, fontWeight: '600' }}>
-                  {(storeStatus as any).startTime} - {(storeStatus as any).endTime}
-                </Text>
-              </>
-            )}
+            ) : null}
           </View>
         </View>
       )}

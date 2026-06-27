@@ -20,7 +20,11 @@ export const MOBILE_COPY = {
     nearPrefix: 'Near ',
     currentLocationDeliverTo: 'Current location',
     deliveryNeedLocationPermission: 'Allow location access to see if we deliver to your area.',
+    deliveryLocationPermissionDenied:
+      'Please allow location access so we can check if we deliver to your area.',
     deliveryCheckFailed: 'Could not verify delivery availability.',
+    deliveryCheckFailedDetail:
+      "We couldn't reach our delivery service. Please try again in a moment or choose a saved address.",
     deliveryCheckingLabel: 'Checking delivery availability…',
     deliveryAvailableHere: 'Service available — we deliver to this location.',
     deliveryUnavailableTitle: 'No delivery to this area',
@@ -113,6 +117,52 @@ export function customerFacingDeliveryUnavailable(apiMessage?: string | null): s
   }
 
   return (apiMessage ?? '').trim();
+}
+
+/** Map / delivery-check warnings — permission issues get their own copy. */
+export function customerFacingMapServiceError(apiMessage?: string | null): string {
+  const raw = (apiMessage ?? '').trim();
+  if (!raw) return MOBILE_COPY.home.deliveryCheckFailedDetail;
+
+  const m = raw.toLowerCase();
+
+  if (
+    m.includes('permission denied') ||
+    m.includes('allow location') ||
+    m.includes('location access') ||
+    raw === MOBILE_COPY.home.deliveryNeedLocationPermission ||
+    raw === MOBILE_COPY.home.deliveryLocationPermissionDenied
+  ) {
+    return m.includes('permission denied')
+      ? MOBILE_COPY.home.deliveryLocationPermissionDenied
+      : MOBILE_COPY.home.deliveryNeedLocationPermission;
+  }
+
+  if (
+    m.includes('tip:') ||
+    m.includes('vite_') ||
+    m.includes('map-service') ||
+    m.includes('localhost') ||
+    m.includes('same-origin') ||
+    m.includes('backend proxy') ||
+    m.includes('cors') ||
+    m.includes('onrender.com') ||
+    m.includes('store delivery hub is not configured')
+  ) {
+    return MOBILE_COPY.home.deliveryCheckFailedDetail;
+  }
+
+  if (m.includes('delivery eligibility check failed') || m.includes('unable to verify delivery')) {
+    return MOBILE_COPY.home.deliveryCheckFailedDetail;
+  }
+
+  const looksTechnical =
+    /configured|threshold|api\b|endpoint|payload|\benv\b|proxy|eligibility\s+check/i.test(raw);
+  if (looksTechnical) {
+    return MOBILE_COPY.home.deliveryCheckFailedDetail;
+  }
+
+  return raw;
 }
 
 /** Hide platform billing / vendor setup messages from shoppers at checkout. */
