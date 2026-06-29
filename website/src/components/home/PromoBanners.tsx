@@ -21,15 +21,14 @@ const PromoBanners = () => (
     >
       {PROMO_BANNERS.map((banner) => (
         <SwiperSlide key={banner.id}>
-          <div className="relative h-full w-full group">
+          <div className="relative h-full w-full overflow-hidden">
             <img 
-              src={banner.image} 
-              className="w-full h-full object-cover transition-transform duration-[5000ms] group-hover:scale-110" 
+              src={banner.imageWeb ?? banner.image} 
+              className="w-full h-full object-cover banner-slide-image" 
               alt={banner.title} 
             />
-            {/* High-Contrast Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/20 to-transparent p-10 md:p-16 flex flex-col justify-center">
-              <h2 className="text-white text-3xl md:text-5xl font-black max-w-md leading-[1.1] drop-shadow-2xl">
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/20 to-transparent p-10 md:p-16 flex flex-col justify-center banner-slide-overlay">
+              <h2 className="text-white text-3xl md:text-5xl font-black max-w-md leading-[1.1] drop-shadow-2xl banner-slide-title">
                 {banner.title}
               </h2>
               {/* <button className="mt-6 w-fit bg-white text-[#1e293b] px-8 py-3 rounded-2xl font-black text-sm shadow-xl hover:bg-[#4b6f9e] hover:text-white transition-all transform active:scale-95">
@@ -42,8 +41,23 @@ const PromoBanners = () => (
     </Swiper>
 
     <style>{`
-      .swiper-pagination-bullet { background: white !important; opacity: 0.5; }
+      .swiper-pagination-bullet { background: white !important; opacity: 0.5; transition: opacity 0.3s ease, width 0.3s ease; }
       .swiper-pagination-bullet-active { background: white !important; opacity: 1; width: 25px !important; border-radius: 4px !important; }
+      .swiper-slide-active .banner-slide-image { animation: bannerFadeIn 0.8s ease-out; }
+      .swiper-slide-active .banner-slide-overlay { animation: bannerOverlayIn 0.9s ease-out; }
+      .swiper-slide-active .banner-slide-title { animation: bannerTitleIn 0.7s ease-out 0.15s both; }
+      @keyframes bannerFadeIn {
+        from { opacity: 0.85; transform: scale(1.02); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes bannerOverlayIn {
+        from { opacity: 0.6; }
+        to { opacity: 1; }
+      }
+      @keyframes bannerTitleIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
     `}</style>
   </div>
 );
