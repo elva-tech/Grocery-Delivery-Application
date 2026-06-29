@@ -10,7 +10,12 @@ import { buildDeliveryAddressPayload, formatAddressSummary } from '../utils/indi
 import { loadRazorpay } from '../utils/loadRazorpay';
 import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
 import { useToast } from '../context/ToastContext';
-import { WEB_COPY, customerFacingCheckoutError, customerFacingDeliveryUnavailable } from '../constants/copy';
+import {
+  WEB_COPY,
+  customerFacingCheckoutError,
+  customerFacingDeliveryUnavailable,
+  customerFacingMapServiceError,
+} from '../constants/copy';
 import { fetchStorefrontCoupons, type StorefrontCoupon } from '../api/storefrontCouponsApi';
 
 const Checkout = ({ address, deliveryEligibility }: any) => {
@@ -463,7 +468,7 @@ const handlePlaceOrder = async () => {
               )}
               {!deliveryEligibility?.checking && deliveryEligibility?.eligible === null && deliveryEligibility?.message?.trim() && (
                 <p className="mt-3 text-xs font-bold text-amber-700 text-center leading-snug px-1">
-                  {deliveryEligibility.message}
+                  {customerFacingMapServiceError(deliveryEligibility.message)}
                 </p>
               )}
               

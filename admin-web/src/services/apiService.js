@@ -208,9 +208,11 @@ updateProduct: async (productId, payload) => {
   },
 
   assignRiderToOrder: async (riderId, orderId) => {
-    const res = await api.post(`/api/riders/${riderId}/assign-order`, {
-      orderId,
-    });
+    const res = await api.post(
+      `/api/riders/${riderId}/assign-order`,
+      { orderId },
+      { timeout: 30000 },
+    );
     return res.data;
   },
 

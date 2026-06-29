@@ -155,37 +155,52 @@ const OrderList = () => {
     ? riders.filter((r) => String(r.status || '').toLowerCase() === 'online')
     : [];
 
+  const orderAssignedToRider = (order, riderId, riderName) => {
+    if (!order) return false;
+    const status = String(order.status ?? order.orderStatus ?? '').toUpperCase();
+    if (status !== 'OUT_FOR_DELIVERY') return false;
+    const assignedRiderId = order.riderId?._id ?? order.riderId;
+    if (assignedRiderId && String(assignedRiderId) === String(riderId)) return true;
+    return riderName && order.riderName === riderName;
+  };
+
+  const verifyOrderAssignment = async (orderId, riderId, riderName) => {
+    try {
+      const data = await apiService.getOrders({ search: orderId, limit: 5, page: 1 });
+      const order = (data.orders || []).map(normalizeAdminOrderRow).find(
+        (o) => String(o.id) === String(orderId),
+      );
+      return orderAssignedToRider(order, riderId, riderName) ? order : null;
+    } catch {
+      return null;
+    }
+  };
+
   const handleSelectRider = async (riderId, riderName) => {
     if (assigningRiderId || !selectedOrderForAssign) return;
     const orderId = String(selectedOrderForAssign.id ?? '').trim();
     setAssigningRiderId(riderId);
     try {
-      const freshOrders = await loadOrders();
-      const fresh = (freshOrders || []).find((o) => String(o.id) === orderId);
-      const status = String(fresh?.status ?? '').toUpperCase();
-      if (!fresh || status !== 'CONFIRMED') {
-        showToast(
-          'error',
-          status === 'OUT_FOR_DELIVERY'
-            ? 'This order is already out for delivery.'
-            : status === 'PLACED'
-              ? 'Accept the order first, then assign a rider.'
-              : `Order status changed (${status || 'unknown'}). Try again.`,
-        );
-        setSelectedOrderForAssign(null);
-        return;
-      }
       await assignRider(orderId, riderId, riderName);
-      showToast('success', `Rider assigned — order is now out for delivery.`);
+      showToast('success', 'Rider assigned — order is now out for delivery.');
       setSelectedOrderForAssign(null);
       await loadOrders();
       refreshOrders({ silent: true });
     } catch (error) {
-      console.error("Failed to assign rider:", error);
+      console.error('Failed to assign rider:', error);
+      const verified = await verifyOrderAssignment(orderId, riderId, riderName);
+      if (verified) {
+        showToast('success', 'Rider assigned — order is now out for delivery.');
+        setSelectedOrderForAssign(null);
+        await loadOrders();
+        refreshOrders({ silent: true });
+        return;
+      }
       const apiStatus = error?.response?.data?.currentStatus;
       const msg =
         error?.response?.data?.message ||
         (apiStatus ? `Cannot assign — order is ${apiStatus}` : null) ||
+        error?.message ||
         'Failed to assign rider. Please try again.';
       showToast('error', msg);
     } finally {

@@ -50,6 +50,14 @@ export const WEB_COPY = {
   },
   delivery: {
     bannerTitle: 'We can’t deliver to this area',
+    checkUnavailableTitle: 'Delivery check unavailable',
+    locationPermissionTitle: 'Location access needed',
+    locationPermissionDenied:
+      'Please allow location access in your browser so we can check if we deliver to your area.',
+    locationPermissionNeeded:
+      'Turn on location access to see delivery availability, or choose a saved address.',
+    checkFailed:
+      "We couldn't reach our delivery service. Please try again in a moment or choose a saved address.",
     outsideDeliveryRadius:
       'This location looks outside our delivery area. Try picking an address a little closer to the store.',
     notEligibleGeneric:
@@ -89,6 +97,72 @@ export function customerFacingDeliveryUnavailable(apiMessage?: string | null): s
   }
 
   return (apiMessage ?? '').trim();
+}
+
+function isLocationPermissionIssue(apiMessage?: string | null): boolean {
+  const m = (apiMessage ?? '').trim().toLowerCase();
+  if (!m) return false;
+  return (
+    m.includes('permission denied') ||
+    m.includes('allow location') ||
+    m.includes('enable location') ||
+    m.includes('location access') ||
+    m.includes('turn on location') ||
+    m.includes('geolocation not supported')
+  );
+}
+
+/** Map / delivery-check warnings — permission issues get their own copy, not “check your connection”. */
+export function customerFacingMapServiceError(apiMessage?: string | null): string {
+  const raw = (apiMessage ?? '').trim();
+
+  if (isLocationPermissionIssue(raw)) {
+    if (raw.toLowerCase().includes('permission denied')) {
+      return WEB_COPY.delivery.locationPermissionDenied;
+    }
+    return WEB_COPY.delivery.locationPermissionNeeded;
+  }
+
+  if (!raw) return WEB_COPY.delivery.checkFailed;
+
+  const m = raw.toLowerCase();
+
+  if (m.includes('could not locate this pin') || m.includes('could not verify delivery for this pin')) {
+    return raw;
+  }
+
+  if (
+    m.includes('tip:') ||
+    m.includes('vite_') ||
+    m.includes('map-service') ||
+    m.includes('localhost') ||
+    m.includes('same-origin') ||
+    m.includes('backend proxy') ||
+    m.includes('cors') ||
+    m.includes('onrender.com') ||
+    m.includes('super-admin onboarding') ||
+    m.includes('store delivery hub is not configured')
+  ) {
+    return WEB_COPY.delivery.checkFailed;
+  }
+
+  if (m.includes('delivery eligibility check failed') || m.includes('unable to verify delivery availability')) {
+    return WEB_COPY.delivery.checkFailed;
+  }
+
+  const looksTechnical =
+    /configured|threshold|api\b|endpoint|payload|\benv\b|proxy|eligibility\s+check/i.test(raw);
+  if (looksTechnical) {
+    return WEB_COPY.delivery.checkFailed;
+  }
+
+  return raw;
+}
+
+export function deliveryCheckWarningTitle(apiMessage?: string | null): string {
+  return isLocationPermissionIssue(apiMessage)
+    ? WEB_COPY.delivery.locationPermissionTitle
+    : WEB_COPY.delivery.checkUnavailableTitle;
 }
 
 /** Hide platform billing / vendor setup messages from shoppers at checkout. */

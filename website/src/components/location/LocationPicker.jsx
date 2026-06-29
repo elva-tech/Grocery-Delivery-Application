@@ -173,9 +173,7 @@ function LocationPicker({
       const apiKey = await getOlaMapsApiKey();
 
       if (!apiKey) {
-        setError(
-          'Map is unavailable — Ola Maps API key is not configured. Redeploy with VITE_OLA_MAPS_API_KEY or set OLA_MAPS_API_KEY on the backend.',
-        );
+        setError('Map is unavailable right now. Please try again later or pick a saved address.');
         return;
       }
 

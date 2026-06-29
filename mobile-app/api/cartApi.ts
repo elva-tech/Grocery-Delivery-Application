@@ -29,19 +29,48 @@ export const calculateBillBackend = (
   };
 };
 
+/** Fetches delivery settings once per session, then reuses cache. */
+export type CartBillingSettings = {
+  freeDeliveryAbove: number;
+  deliveryCharge: number;
+};
+
+let cachedBillingSettings: CartBillingSettings | null = null;
+let billingSettingsPromise: Promise<CartBillingSettings> | null = null;
+
+export async function getCartBillingSettings(): Promise<CartBillingSettings> {
+  if (cachedBillingSettings) return cachedBillingSettings;
+  if (!billingSettingsPromise) {
+    billingSettingsPromise = (async () => {
+      try {
+        const res = await fetch(`${ACTIVE_API_URL}/api/settings`, {
+          headers: { 'x-tenant-id': await getActiveTenantId() },
+        });
+        if (!res.ok) throw new Error('settings fetch failed');
+        const s = await res.json();
+        cachedBillingSettings = {
+          freeDeliveryAbove: s.freeDeliveryAbove,
+          deliveryCharge: s.deliveryCharge,
+        };
+      } catch {
+        cachedBillingSettings = {
+          freeDeliveryAbove: CART_CONFIG.FREE_DELIVERY_THRESHOLD,
+          deliveryCharge: CART_CONFIG.DEFAULT_DELIVERY_FEE,
+        };
+      }
+      return cachedBillingSettings;
+    })().finally(() => {
+      billingSettingsPromise = null;
+    });
+  }
+  return billingSettingsPromise;
+}
+
 /** Fetches live delivery settings from backend, falls back to defaults */
 export const getCartCalculation = async (items: any[]) => {
-  try {
-    const res = await fetch(`${ACTIVE_API_URL}/api/settings`, {
-      headers: { 'x-tenant-id': await getActiveTenantId() },
-    });
-    if (!res.ok) throw new Error('settings fetch failed');
-    const s = await res.json();
-    return calculateBillBackend(items, {
-      freeDeliveryThreshold: s.freeDeliveryAbove,
-      deliveryCharge: s.deliveryCharge,
-    });
-  } catch {
-    return calculateBillBackend(items);
-  }
+  const settings = await getCartBillingSettings();
+  return calculateBillBackend(items, {
+    freeDeliveryThreshold: settings.freeDeliveryAbove,
+    deliveryCharge: settings.deliveryCharge,
+  });
 };

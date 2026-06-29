@@ -56,8 +56,13 @@ const Schedule = () => {
     let openISO, closeISO;
 
     if (type === 'TIME') {
-      // Use today's date + the chosen time
-      const today = new Date().toISOString().slice(0, 10);
+      // Anchor daily hours with today's local date (clock times repeat every day on the server).
+      const now = new Date();
+      const today = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0'),
+      ].join('-');
       openISO  = new Date(`${today}T${form.startTime}:00`).toISOString();
       closeISO = new Date(`${today}T${form.endTime}:00`).toISOString();
     } else {

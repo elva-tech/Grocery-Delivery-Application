@@ -16,7 +16,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
 import { addToCart, removeFromCart, setAppliedCartCoupon, clearAppliedCartCoupon } from '@/store/slices/cartSlice';
-import { getCartCalculation } from '@/api/cartApi';
+import { getCartBillingSettings, calculateBillBackend } from '@/api/cartApi';
 import { validateCouponApi } from '@/api/ordersApi';
 import { fetchStorefrontCoupons, type StorefrontCoupon } from '@/api/storefrontCouponsApi';
 import { Image } from 'expo-image';
@@ -40,8 +40,10 @@ export default function CartScreen() {
   const confettiRef = useRef<any>(null);
   const prevCartSig = useRef<string | null>(null);
 
-  const [bill, setBill] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [billingSettings, setBillingSettings] = useState<{
+    freeDeliveryAbove: number;
+    deliveryCharge: number;
+  } | null>(null);
   const [couponInput, setCouponInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
@@ -69,6 +71,20 @@ export default function CartScreen() {
     }
     prevCartSig.current = cartSig;
   }, [cartSig, appliedCoupon, dispatch]);
+
+  useEffect(() => {
+    void getCartBillingSettings().then(setBillingSettings);
+  }, []);
+
+  const bill = useMemo(() => {
+    if (items.length === 0) return null;
+    return calculateBillBackend(items, billingSettings
+      ? {
+          freeDeliveryThreshold: billingSettings.freeDeliveryAbove,
+          deliveryCharge: billingSettings.deliveryCharge,
+        }
+      : undefined);
+  }, [items, billingSettings]);
 
   const couponDiscount = appliedCoupon?.discountAmount ?? 0;
   const payableTotal = Math.max(0, (bill?.grandTotal ?? 0) - couponDiscount);
@@ -138,31 +154,22 @@ export default function CartScreen() {
     setCouponInput('');
   };
 
+  const prevFreeDelivery = useRef<boolean | null>(null);
   useEffect(() => {
-    const updateCart = async () => {
-      setLoading(true);
-      try {
-        const data = await getCartCalculation(items);
-
-        // Trigger Confetti ONLY when transitioning from NOT free to FREE
-        if (data.isFreeDelivery && !bill?.isFreeDelivery && items.length > 0) {
-          confettiRef.current?.start();
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-
-        setBill(data);
-      } catch (error) {
-        console.error("Calculation Error", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    updateCart();
-  }, [items]);
+    if (!bill) {
+      prevFreeDelivery.current = null;
+      return;
+    }
+    if (bill.isFreeDelivery && prevFreeDelivery.current === false && items.length > 0) {
+      confettiRef.current?.start();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    prevFreeDelivery.current = Boolean(bill.isFreeDelivery);
+  }, [bill?.isFreeDelivery, items.length]);
 
   /** Cart → delivery address → checkout (payment & place order). */
   const handleProceed = () => {
-    if (loading || items.length === 0) return;
+    if (items.length === 0) return;
     if (!token) {
       showToast('info', MOBILE_COPY.auth.loginToContinueTitle, MOBILE_COPY.auth.loginToContinueMessage);
       router.push('/auth/landing');
@@ -307,12 +314,12 @@ export default function CartScreen() {
                       autoCapitalize="characters"
                       returnKeyType="done"
                       onSubmitEditing={handleApplyCoupon}
-                      editable={!loading && Boolean(bill?.grandTotal)}
+                      editable={Boolean(bill?.grandTotal)}
                     />
                     <TouchableOpacity
-                      style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon || loading) && { opacity: 0.5 }]}
+                      style={[styles.couponApplyBtn, (!couponInput.trim() || isApplyingCoupon) && { opacity: 0.5 }]}
                       onPress={handleApplyCoupon}
-                      disabled={!couponInput.trim() || isApplyingCoupon || loading}
+                      disabled={!couponInput.trim() || isApplyingCoupon}
                     >
                       {isApplyingCoupon ? (
                         <ActivityIndicator size="small" color="#fff" />
@@ -325,7 +332,7 @@ export default function CartScreen() {
                 {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
 
                 {!appliedCoupon ? (
-                  <TouchableOpacity style={styles.viewOffersBtn} onPress={openOffersSheet} disabled={loading}>
+                  <TouchableOpacity style={styles.viewOffersBtn} onPress={openOffersSheet}>
                     <Ionicons name="gift-outline" size={18} color={BRAND_BLUE} />
                     <Text style={styles.viewOffersBtnText}>View available offers</Text>
                     <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
@@ -350,7 +357,7 @@ export default function CartScreen() {
       <View style={styles.actionFixed}>
         <View>
           <Text style={styles.actionPrice}>
-            ₹{loading ? '...' : appliedCoupon ? payableTotal : bill?.grandTotal ?? '...'}
+            ₹{appliedCoupon ? payableTotal : bill?.grandTotal ?? 0}
           </Text>
           <Text style={styles.actionSub}>
             {totalItemsCount} {totalItemsCount === 1 ? 'item' : 'items'}
@@ -358,11 +365,11 @@ export default function CartScreen() {
           </Text>
         </View>
         <TouchableOpacity
-          style={[styles.mainBtn, (loading || items.length === 0) && { opacity: 0.7 }]}
+          style={[styles.mainBtn, items.length === 0 && { opacity: 0.7 }]}
           onPress={handleProceed}
-          disabled={loading || items.length === 0}
+          disabled={items.length === 0}
         >
-          <Text style={styles.mainBtnText}>{loading ? 'Updating...' : 'Proceed'}</Text>
+          <Text style={styles.mainBtnText}>Proceed</Text>
           <Ionicons name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>

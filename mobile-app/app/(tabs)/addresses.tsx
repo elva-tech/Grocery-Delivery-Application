@@ -34,7 +34,7 @@ import {
   sanitizeIndianPincode,
 } from '@/utils/indiaPincode';
 import { checkDeliveryEligibility } from '@/api/deliveryEligibilityApi';
-import { MOBILE_COPY, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
+import { MOBILE_COPY, customerFacingDeliveryUnavailable, customerFacingMapServiceError } from '@/src/constants/copy';
 
 type OrderMode = 'self' | 'others';
 
@@ -526,7 +526,7 @@ export default function AddressesScreen() {
         showToast(
           'error',
           MOBILE_COPY.home.deliveryCheckUnavailableTitle,
-          deliveryEligibility.message,
+          customerFacingMapServiceError(deliveryEligibility.message),
         );
         return;
       }
@@ -960,7 +960,9 @@ export default function AddressesScreen() {
                     ) : deliveryEligibility.eligible === null && deliveryEligibility.message ? (
                       <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrWarn]}>
                         <Ionicons name="information-circle-outline" size={18} color="#b45309" />
-                        <Text style={styles.deliveryBannerAddrWarnText}>{deliveryEligibility.message}</Text>
+                        <Text style={styles.deliveryBannerAddrWarnText}>
+                          {customerFacingMapServiceError(deliveryEligibility.message)}
+                        </Text>
                       </View>
                     ) : null}
                   </>
@@ -1011,7 +1013,9 @@ export default function AddressesScreen() {
                   ) : deliveryEligibility.eligible === null && deliveryEligibility.message ? (
                     <View style={[styles.deliveryBannerAddr, styles.deliveryBannerAddrWarn]}>
                       <Ionicons name="information-circle-outline" size={18} color="#b45309" />
-                      <Text style={styles.deliveryBannerAddrWarnText}>{deliveryEligibility.message}</Text>
+                      <Text style={styles.deliveryBannerAddrWarnText}>
+                        {customerFacingMapServiceError(deliveryEligibility.message)}
+                      </Text>
                     </View>
                   ) : null}
                 </>

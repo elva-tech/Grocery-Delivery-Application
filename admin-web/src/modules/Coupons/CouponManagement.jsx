@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
   Tag, Plus, Pencil, ToggleLeft, ToggleRight,
-  X, Loader, AlertCircle, CheckCircle2, ChevronDown, ChevronUp
+  X, Loader, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Info
 } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 import { useToast } from '../../context/ToastContext';
+import {
+  INVALID_DATE_MESSAGE,
+  isValidCalendarDate,
+  getDateInputValidationError,
+} from '../../utils/dateValidation';
 
 const EMPTY_FORM = {
   code: '',
@@ -30,7 +35,7 @@ const toInputDate = (iso) => {
   return new Date(iso).toISOString().slice(0, 10);
 };
 
-const CouponManagement = () => {
+export default function CouponManagement() {
   const { showToast } = useToast();
   const [coupons, setCoupons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,6 +46,7 @@ const CouponManagement = () => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
+  const [dateErrors, setDateErrors] = useState({ validFrom: '', validTo: '' });
   const [formSuccess, setFormSuccess] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -65,6 +71,7 @@ const CouponManagement = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setFormError('');
+    setDateErrors({ validFrom: '', validTo: '' });
     setFormSuccess('');
     setShowForm(true);
   };
@@ -85,6 +92,7 @@ const CouponManagement = () => {
       isActive: coupon.isActive,
     });
     setFormError('');
+    setDateErrors({ validFrom: '', validTo: '' });
     setFormSuccess('');
     setShowForm(true);
   };
@@ -99,6 +107,21 @@ const CouponManagement = () => {
     setFormError('');
   };
 
+  const handleDateChange = (key, event) => {
+    const { value } = event.target;
+    const err = getDateInputValidationError(value, event.target);
+    setDateErrors(prev => ({ ...prev, [key]: err }));
+    if (!err) handleFieldChange(key, value);
+    else setForm(prev => ({ ...prev, [key]: value }));
+    setFormError('');
+  };
+
+  const handleDateBlur = (key, event) => {
+    const { value } = event.target;
+    const err = getDateInputValidationError(value, event.target);
+    setDateErrors(prev => ({ ...prev, [key]: err }));
+  };
+
   const handleSave = async () => {
     setFormError('');
     setFormSuccess('');
@@ -107,6 +130,14 @@ const CouponManagement = () => {
     if (!form.code.trim()) return setFormError('Coupon code is required');
     if (!form.discountValue || Number(form.discountValue) <= 0) return setFormError('Discount value must be > 0');
     if (!form.validFrom || !form.validTo) return setFormError('Valid From and Valid To are required');
+
+    const fromErr = dateErrors.validFrom || (!isValidCalendarDate(form.validFrom) ? INVALID_DATE_MESSAGE : '');
+    const toErr = dateErrors.validTo || (!isValidCalendarDate(form.validTo) ? INVALID_DATE_MESSAGE : '');
+    if (fromErr || toErr) {
+      setDateErrors({ validFrom: fromErr, validTo: toErr });
+      return setFormError(fromErr || toErr);
+    }
+
     if (new Date(form.validFrom) >= new Date(form.validTo)) return setFormError('Valid To must be after Valid From');
 
     setIsSaving(true);
@@ -276,7 +307,10 @@ const CouponManagement = () => {
 
             {/* Usage Limit */}
             <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">Usage Limit (blank = unlimited)</label>
+              <label className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">
+                Total Usage Limit
+                <span className="normal-case font-semibold text-gray-400">(blank = unlimited)</span>
+              </label>
               <input
                 type="number" min="1"
                 value={form.usageLimit}
@@ -284,6 +318,13 @@ const CouponManagement = () => {
                 placeholder="e.g. 100"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D]"
               />
+              <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-gray-500">
+                <Info size={13} className="mt-0.5 shrink-0 text-[#0F2C1D]/70" aria-hidden />
+                <span>
+                  Maximum times this coupon can be used <strong className="font-bold text-gray-600">across all customers</strong>,
+                  not per user. Example: 100 means the first 100 orders that apply this code - then it stops for everyone.
+                </span>
+              </p>
             </div>
 
             {/* Valid From */}
@@ -292,9 +333,15 @@ const CouponManagement = () => {
               <input
                 type="date"
                 value={form.validFrom}
-                onChange={e => handleFieldChange('validFrom', e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D]"
+                onChange={e => handleDateChange('validFrom', e)}
+                onBlur={e => handleDateBlur('validFrom', e)}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D] ${
+                  dateErrors.validFrom ? 'border-red-400' : 'border-gray-200'
+                }`}
               />
+              {dateErrors.validFrom ? (
+                <p className="mt-1.5 text-xs font-bold text-red-500">{dateErrors.validFrom}</p>
+              ) : null}
             </div>
 
             {/* Valid To */}
@@ -303,22 +350,33 @@ const CouponManagement = () => {
               <input
                 type="date"
                 value={form.validTo}
-                onChange={e => handleFieldChange('validTo', e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D]"
+                onChange={e => handleDateChange('validTo', e)}
+                onBlur={e => handleDateBlur('validTo', e)}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D] ${
+                  dateErrors.validTo ? 'border-red-400' : 'border-gray-200'
+                }`}
               />
+              {dateErrors.validTo ? (
+                <p className="mt-1.5 text-xs font-bold text-red-500">{dateErrors.validTo}</p>
+              ) : null}
             </div>
 
             {/* Toggles */}
-            <div className="flex items-center gap-8 sm:col-span-2 lg:col-span-3 pt-2">
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <div
-                  onClick={() => handleFieldChange('firstTimeUserOnly', !form.firstTimeUserOnly)}
-                  className={`relative w-11 h-6 rounded-full transition-colors ${form.firstTimeUserOnly ? 'bg-[#0F2C1D]' : 'bg-gray-200'}`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${form.firstTimeUserOnly ? 'left-6' : 'left-1'}`} />
-                </div>
-                <span className="text-xs font-bold text-gray-600">First-time users only</span>
-              </label>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:col-span-2 lg:col-span-3 pt-2">
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div
+                    onClick={() => handleFieldChange('firstTimeUserOnly', !form.firstTimeUserOnly)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${form.firstTimeUserOnly ? 'bg-[#0F2C1D]' : 'bg-gray-200'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${form.firstTimeUserOnly ? 'left-6' : 'left-1'}`} />
+                  </div>
+                  <span className="text-xs font-bold text-gray-600">First-time users only</span>
+                </label>
+                <p className="mt-1.5 ml-14 text-[10px] text-gray-400 leading-snug max-w-sm">
+                  Limits who can use the coupon (first order only). Separate from the total usage limit above.
+                </p>
+              </div>
 
               <label className="flex items-center gap-3 cursor-pointer select-none">
                 <div
@@ -481,6 +539,4 @@ const CouponManagement = () => {
       )}
     </div>
   );
-};
-
-export default CouponManagement;
+}

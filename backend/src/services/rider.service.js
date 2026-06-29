@@ -96,6 +96,13 @@ exports.assignOrderToRider = async (orderId, riderId, tenantId) => {
         throw err;
       }
       const status = String(current.orderStatus || "").trim().toUpperCase();
+      // Concurrent/retry: assignment already applied for this rider
+      if (
+        status === "OUT_FOR_DELIVERY" &&
+        String(current.riderId || "") === riderIdStr
+      ) {
+        return { updatedOrder: current, updatedRider: rider };
+      }
       const err = new Error(
         status === "OUT_FOR_DELIVERY"
           ? "This order is already out for delivery"
@@ -108,11 +115,15 @@ exports.assignOrderToRider = async (orderId, riderId, tenantId) => {
       throw err;
     }
 
-    await notifyOutForDeliverySafe(updatedOrder);
+    void notifyOutForDeliverySafe(updatedOrder);
 
-    rider.activeOrders = (rider.activeOrders || 0) + 1;
-    rider.lastOnlineAt = new Date();
-    await rider.save();
+    try {
+      rider.activeOrders = (rider.activeOrders || 0) + 1;
+      rider.lastOnlineAt = new Date();
+      await rider.save();
+    } catch (riderErr) {
+      console.error("rider stats update failed (order already assigned):", riderErr);
+    }
 
     return { updatedOrder, updatedRider: rider };
   } catch (error) {

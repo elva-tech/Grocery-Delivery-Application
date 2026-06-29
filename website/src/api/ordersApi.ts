@@ -8,33 +8,64 @@ const ORDERS_KEY = '@enandi_orders_v1';
 const ORDER_COUNTER_KEY = '@enandi_order_counter';
 const LAST_ORDER_KEY = '@last_order_id';
 
-const storage = {
-  getItem: (key: string) => localStorage.getItem(key),
-  setItem: (key: string, value: string) => localStorage.setItem(key, value),
+export type CartBillingSettings = {
+  deliveryCharge: number;
+  freeDeliveryAbove: number;
+  discountType: string;
+  discountValue: number;
 };
-export const getCartCalculation = async (items: any[]) => {
-  const subtotal = items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
 
-  const settingsRes = await axios.get(`${API_BASE_URL}/api/settings`, {
-    headers: { 'x-tenant-id': getTenantId() },
-  });
-  const s = settingsRes.data;
+let cachedCartBillingSettings: CartBillingSettings | null = null;
+let cartBillingSettingsPromise: Promise<CartBillingSettings> | null = null;
 
-  const deliveryCharge: number = s.deliveryCharge;
-  const freeDeliveryAbove: number = s.freeDeliveryAbove;
-  const discountType: string = s.discountType ?? 'NONE';
-  const discountValue: number = s.discountValue ?? 0;
+export const DEFAULT_CART_BILLING_SETTINGS: CartBillingSettings = {
+  deliveryCharge: 40,
+  freeDeliveryAbove: 500,
+  discountType: 'NONE',
+  discountValue: 0,
+};
 
-  const isFreeDelivery = subtotal >= freeDeliveryAbove;
-  const finalDelivery = (subtotal === 0 || isFreeDelivery) ? 0 : deliveryCharge;
-  const amountToFree = isFreeDelivery ? 0 : freeDeliveryAbove - subtotal;
-  const progress = Math.min(subtotal / freeDeliveryAbove, 1);
+export async function getCartBillingSettings(): Promise<CartBillingSettings> {
+  if (cachedCartBillingSettings) return cachedCartBillingSettings;
+  if (!cartBillingSettingsPromise) {
+    cartBillingSettingsPromise = axios
+      .get(`${API_BASE_URL}/api/settings`, {
+        headers: { 'x-tenant-id': getTenantId() },
+      })
+      .then((settingsRes) => {
+        const s = settingsRes.data;
+        cachedCartBillingSettings = {
+          deliveryCharge: s.deliveryCharge,
+          freeDeliveryAbove: s.freeDeliveryAbove,
+          discountType: s.discountType ?? 'NONE',
+          discountValue: s.discountValue ?? 0,
+        };
+        return cachedCartBillingSettings;
+      })
+      .catch(() => {
+        cachedCartBillingSettings = { ...DEFAULT_CART_BILLING_SETTINGS };
+        return cachedCartBillingSettings;
+      })
+      .finally(() => {
+        cartBillingSettingsPromise = null;
+      });
+  }
+  return cartBillingSettingsPromise;
+}
+
+export function computeCartBill(items: any[], s: CartBillingSettings) {
+  const subtotal = items.reduce((acc: number, item: any) => acc + item.price * item.quantity, 0);
+
+  const isFreeDelivery = subtotal >= s.freeDeliveryAbove;
+  const finalDelivery = subtotal === 0 || isFreeDelivery ? 0 : s.deliveryCharge;
+  const amountToFree = isFreeDelivery ? 0 : s.freeDeliveryAbove - subtotal;
+  const progress = Math.min(subtotal / s.freeDeliveryAbove, 1);
 
   let discount = 0;
-  if (discountType === 'PERCENTAGE' && discountValue > 0) {
-    discount = Math.round((subtotal * discountValue) / 100);
-  } else if (discountType === 'FLAT' && discountValue > 0) {
-    discount = discountValue;
+  if (s.discountType === 'PERCENTAGE' && s.discountValue > 0) {
+    discount = Math.round((subtotal * s.discountValue) / 100);
+  } else if (s.discountType === 'FLAT' && s.discountValue > 0) {
+    discount = s.discountValue;
   }
   discount = Math.min(discount, subtotal);
 
@@ -48,8 +79,17 @@ export const getCartCalculation = async (items: any[]) => {
     deliveryCharge: finalDelivery,
     grandTotal,
     discount,
-    saved: (isFreeDelivery ? deliveryCharge : 0) + discount,
+    saved: (isFreeDelivery ? s.deliveryCharge : 0) + discount,
   };
+}
+
+const storage = {
+  getItem: (key: string) => localStorage.getItem(key),
+  setItem: (key: string, value: string) => localStorage.setItem(key, value),
+};
+export const getCartCalculation = async (items: any[]) => {
+  const settings = await getCartBillingSettings();
+  return computeCartBill(items, settings);
 };
 
 export const generateBackendOrderId = async (): Promise<string> => {

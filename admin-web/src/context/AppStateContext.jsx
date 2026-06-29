@@ -400,12 +400,12 @@ export const AppStateProvider = ({ children }) => {
     if (!normalizedOrderId || !normalizedRiderId) {
       throw new Error('Order and rider are required');
     }
+    await apiService.assignRiderToOrder(normalizedRiderId, normalizedOrderId);
     try {
-      await apiService.assignRiderToOrder(normalizedRiderId, normalizedOrderId);
       await fetchOrders({ silent: true });
-    } catch (error) {
-      console.error("Assign rider failed:", error);
-      throw error;
+      await fetchRiders({ silent: true });
+    } catch (refreshErr) {
+      console.warn('Assign succeeded but list refresh failed:', refreshErr);
     }
   };
 
