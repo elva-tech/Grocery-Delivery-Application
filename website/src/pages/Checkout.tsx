@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2, Banknote, CreditCard, Gift } from 'lucide-react';
 import type { RootState } from '../store/store';
 import { logout } from '../store/slices/authSlice';
-import { useCalculateCartMutation } from '../api/apiSlice';
+import { useCalculateCartMutation, useGetAppSettingsQuery, isCodPaymentEnabled, isOnlinePaymentEnabled } from '../api/apiSlice';
 import { placeOrderApi, validateCouponApi } from '../api/ordersApi';
 import { buildDeliveryAddressPayload, formatAddressSummary } from '../utils/indiaPincode';
 import { loadRazorpay } from '../utils/loadRazorpay';
@@ -51,6 +51,15 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
   const [selectingOfferCode, setSelectingOfferCode] = useState<string | null>(null);
 
   const [getCalculation] = useCalculateCartMutation();
+  const { data: appSettings } = useGetAppSettingsQuery();
+  const showCod = isCodPaymentEnabled(appSettings);
+  const showOnline = isOnlinePaymentEnabled(appSettings);
+
+  useEffect(() => {
+    if (!appSettings) return;
+    if (showOnline && !showCod) setPaymentMethod('ONLINE');
+    else if (showCod && !showOnline) setPaymentMethod('COD');
+  }, [appSettings, showCod, showOnline]);
 
   useEffect(() => {
     const fetchBill = async () => {
@@ -401,8 +410,10 @@ const handlePlaceOrder = async () => {
               </div>
 
               {/* Payment Method Selector */}
+              {(showCod || showOnline) && (
               <div className="mb-6 space-y-2">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Payment Method</p>
+                {showOnline && (
                 <button
                   onClick={() => setPaymentMethod('ONLINE')}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all ${
@@ -418,7 +429,9 @@ const handlePlaceOrder = async () => {
                   </div>
                   {paymentMethod === 'ONLINE' && <CheckCircle2 size={16} className="text-[#4b6f9e]" />}
                 </button>
+                )}
 
+                {showCod && (
                 <button
                   onClick={() => setPaymentMethod('COD')}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all ${
@@ -434,7 +447,9 @@ const handlePlaceOrder = async () => {
                   </div>
                   {paymentMethod === 'COD' && <CheckCircle2 size={16} className="text-emerald-500" />}
                 </button>
+                )}
               </div>
+              )}
 
               <button 
                 onClick={handlePlaceOrder} 

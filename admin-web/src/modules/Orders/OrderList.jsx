@@ -164,6 +164,43 @@ const OrderList = () => {
     return riderName && order.riderName === riderName;
   };
 
+  const syncOrderPaidInList = (orderId) => {
+    const id = String(orderId);
+    setOrderRows((prev) =>
+      prev.map((o) =>
+        String(o.id) === id || String(o._id) === id
+          ? { ...o, paymentStatus: 'PAID' }
+          : o,
+      ),
+    );
+    setViewingOrder((prev) =>
+      prev && (String(prev.id) === id || String(prev._id) === id)
+        ? { ...prev, paymentStatus: 'PAID' }
+        : prev,
+    );
+  };
+
+  const handleMarkCODPaid = async (orderId) => {
+    const id = String(orderId ?? '').trim();
+    if (!id) return;
+    try {
+      const result = await markCODPaid(id);
+      syncOrderPaidInList(id);
+      showToast(
+        'success',
+        result?.alreadyPaid ? 'This order was already marked as paid.' : 'COD order marked as paid.',
+      );
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to mark as paid.';
+      if (String(msg).toLowerCase().includes('already marked as paid')) {
+        syncOrderPaidInList(id);
+        showToast('success', msg);
+        return;
+      }
+      showToast('error', msg);
+    }
+  };
+
   const verifyOrderAssignment = async (orderId, riderId, riderName) => {
     try {
       const data = await apiService.getOrders({ search: orderId, limit: 5, page: 1 });
@@ -564,13 +601,7 @@ const OrderList = () => {
               {/* COD: Mark Paid button — show for any COD order still PENDING */}
               {(row.paymentMode === 'COD' || row.paymentMode === 'cod') && (row.paymentStatus || 'PENDING').toUpperCase() === 'PENDING' && status !== 'CANCELLED' && (
                 <button
-                  onClick={async () => {
-                    try {
-                      await markCODPaid(row.id);
-                    } catch {
-                      showToast('error', 'Failed to mark as paid. Please try again.');
-                    }
-                  }}
+                  onClick={() => handleMarkCODPaid(row.id)}
                   className="flex items-center gap-1 bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-600 transition-all shadow-sm"
                 >
                   <Banknote size={14} /> Mark Paid
@@ -801,10 +832,7 @@ const OrderList = () => {
                   onClick={async () => {
                     setMarkingPaid(true);
                     try {
-                      await markCODPaid(viewingOrder.id);
-                      setViewingOrder(prev => ({ ...prev, paymentStatus: 'PAID' }));
-                    } catch {
-                      showToast('error', 'Failed to mark as paid. Please try again.');
+                      await handleMarkCODPaid(viewingOrder.id);
                     } finally {
                       setMarkingPaid(false);
                     }

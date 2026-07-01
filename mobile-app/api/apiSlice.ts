@@ -22,6 +22,25 @@ export interface AppSettings {
   allowRefunds: boolean;
   allowReportIssue: boolean;
   allowOrderCancellation: boolean;
+  customerPaymentMethods: 'BOTH' | 'COD_ONLY' | 'ONLINE_ONLY';
+}
+
+export function normalizeCustomerPaymentMethods(
+  raw: unknown,
+): AppSettings['customerPaymentMethods'] {
+  const v = String(raw ?? 'BOTH').trim().toUpperCase();
+  if (v === 'COD_ONLY' || v === 'ONLINE_ONLY') return v;
+  return 'BOTH';
+}
+
+export function isCodPaymentEnabled(settings?: Pick<AppSettings, 'customerPaymentMethods'> | null) {
+  const mode = settings?.customerPaymentMethods ?? 'BOTH';
+  return mode === 'BOTH' || mode === 'COD_ONLY';
+}
+
+export function isOnlinePaymentEnabled(settings?: Pick<AppSettings, 'customerPaymentMethods'> | null) {
+  const mode = settings?.customerPaymentMethods ?? 'BOTH';
+  return mode === 'BOTH' || mode === 'ONLINE_ONLY';
 }
 
 export interface ProductVariant {
@@ -48,6 +67,7 @@ export interface Product {
   variants?: ProductVariant[];
   variantCount?: number;
   defaultVariantId?: string;
+  returnAllowed?: boolean;
 }
 
 export interface Category {
@@ -96,6 +116,7 @@ const normalizeProduct = (p: any): Product => {
     variants: variants.length ? variants : undefined,
     variantCount: variants.length || undefined,
     defaultVariantId: def?.variantId,
+    returnAllowed: p.returnAllowed !== false,
   };
 };
 
@@ -160,13 +181,15 @@ export const apiSlice = createApi({
               allowRefunds: s.allowRefunds ?? true,
               allowReportIssue: s.allowReportIssue ?? true,
               allowOrderCancellation: s.allowOrderCancellation ?? true,
+              customerPaymentMethods: normalizeCustomerPaymentMethods(s.customerPaymentMethods),
             },
           };
         } catch (e: unknown) {
           logApiError('getAppSettings', e);
-          return { data: { allowRefunds: true, allowReportIssue: true, allowOrderCancellation: true } };
+          return { error: { status: 'FETCH_ERROR', error: String(e) } };
         }
       },
+      keepUnusedDataFor: 30,
     }),
 
     /* ----------- CATEGORIES (derived from products) ----------- */

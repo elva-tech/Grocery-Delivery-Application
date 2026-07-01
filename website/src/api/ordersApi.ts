@@ -13,6 +13,7 @@ export type CartBillingSettings = {
   freeDeliveryAbove: number;
   discountType: string;
   discountValue: number;
+  maxDiscount: number;
 };
 
 let cachedCartBillingSettings: CartBillingSettings | null = null;
@@ -23,6 +24,7 @@ export const DEFAULT_CART_BILLING_SETTINGS: CartBillingSettings = {
   freeDeliveryAbove: 500,
   discountType: 'NONE',
   discountValue: 0,
+  maxDiscount: 0,
 };
 
 export async function getCartBillingSettings(): Promise<CartBillingSettings> {
@@ -39,6 +41,7 @@ export async function getCartBillingSettings(): Promise<CartBillingSettings> {
           freeDeliveryAbove: s.freeDeliveryAbove,
           discountType: s.discountType ?? 'NONE',
           discountValue: s.discountValue ?? 0,
+          maxDiscount: s.maxDiscount ?? 0,
         };
         return cachedCartBillingSettings;
       })
@@ -64,6 +67,9 @@ export function computeCartBill(items: any[], s: CartBillingSettings) {
   let discount = 0;
   if (s.discountType === 'PERCENTAGE' && s.discountValue > 0) {
     discount = Math.round((subtotal * s.discountValue) / 100);
+    if (s.maxDiscount > 0) {
+      discount = Math.min(discount, s.maxDiscount);
+    }
   } else if (s.discountType === 'FLAT' && s.discountValue > 0) {
     discount = s.discountValue;
   }
@@ -157,6 +163,8 @@ export const getUserOrders = async () => {
       adminNote: order.adminNote,
       returnReason: order.returnReason,
       returnEvidence: order.returnEvidence,
+      hasReturnableItems: order.hasReturnableItems,
+      nonReturnableItemNames: order.nonReturnableItemNames ?? [],
       items: order.items || [],
       rating: order.rating,
     }));

@@ -14,6 +14,7 @@ import type { ProductVariant } from '../api/apiSlice';
 import ProductCard from '../components/products/ProductCard';
 import { resolveImageGallery } from '../utils/resolveImageUrl';
 import { buildCartPayload, cartLineId, getDefaultVariant } from '../utils/productVariants';
+import { WEB_COPY } from '../constants/copy';
 
 const ProductDetail = () => {
   const { productId } = useParams();
@@ -192,6 +193,11 @@ const ProductDetail = () => {
               <p className="text-slate-600 text-sm leading-relaxed font-medium">
                 {product.description || `Freshly sourced ${product.name}. Undergoes rigorous quality checks to ensure you receive only the best produce.`}
               </p>
+              {product.returnAllowed === false && (
+                <p className="text-[10px] text-slate-400 mt-4 pt-3 border-t border-slate-200/70 leading-relaxed">
+                  {WEB_COPY.product.nonReturnableFootnote}
+                </p>
+              )}
             </div>
 
             <div className="mt-auto flex items-center gap-4">

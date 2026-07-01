@@ -8,13 +8,21 @@ const DISCOUNT_TYPES = [
   { value: 'FLAT', label: 'Flat Amount (₹)' },
 ];
 
+const PAYMENT_METHOD_OPTIONS = [
+  { value: 'BOTH', label: 'Both — Cash on Delivery & Online Payment', description: 'Customers can choose either option at checkout' },
+  { value: 'COD_ONLY', label: 'Cash on Delivery only', description: 'Hide online payment on website and mobile app' },
+  { value: 'ONLINE_ONLY', label: 'Online Payment only', description: 'Hide cash on delivery on website and mobile app' },
+];
+
 const SettingsPage = () => {
   const [form, setForm] = useState({
     deliveryCharge: 40,
     freeDeliveryAbove: 500,
     discountType: 'NONE',
     discountValue: 0,
+    maxDiscount: 0,
     thresholdDistance: 10,
+    customerPaymentMethods: 'BOTH',
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +38,9 @@ const SettingsPage = () => {
           freeDeliveryAbove: data.freeDeliveryAbove ?? 500,
           discountType: data.discountType ?? 'NONE',
           discountValue: data.discountValue ?? 0,
+          maxDiscount: data.maxDiscount ?? 0,
           thresholdDistance: data.thresholdDistance ?? 10,
+          customerPaymentMethods: data.customerPaymentMethods ?? 'BOTH',
         });
       } catch (err) {
         console.error('Failed to load settings:', err);
@@ -56,7 +66,9 @@ const SettingsPage = () => {
         freeDeliveryAbove: Number(form.freeDeliveryAbove),
         discountType: form.discountType,
         discountValue: Number(form.discountValue),
+        maxDiscount: form.discountType === 'PERCENTAGE' ? Number(form.maxDiscount) || 0 : 0,
         thresholdDistance: Number(form.thresholdDistance),
+        customerPaymentMethods: form.customerPaymentMethods,
       });
       setStatus('success');
     } catch (err) {
@@ -160,7 +172,7 @@ const SettingsPage = () => {
         </div>
 
         {/* DISCOUNT SECTION */}
-        <div className="px-8 py-6">
+        <div className="px-8 py-6 border-b border-gray-100">
           <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-5">
             Discount
           </h2>
@@ -197,6 +209,25 @@ const SettingsPage = () => {
                 />
               </div>
             )}
+
+            {form.discountType === 'PERCENTAGE' && (
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wider">
+                  Upto Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.maxDiscount}
+                  onChange={e => handleChange('maxDiscount', e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D]"
+                  placeholder="0 = no cap"
+                />
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  Maximum discount in rupees (e.g. 10% upto ₹100)
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Preview */}
@@ -205,11 +236,48 @@ const SettingsPage = () => {
               <p className="text-xs font-bold text-emerald-700">
                 Preview: Customers will receive{' '}
                 {form.discountType === 'PERCENTAGE'
-                  ? `${form.discountValue}% off their subtotal`
+                  ? `${form.discountValue}% off their subtotal${
+                      Number(form.maxDiscount) > 0 ? ` (upto ₹${form.maxDiscount})` : ''
+                    }`
                   : `₹${form.discountValue} off their order`}
               </p>
             </div>
           )}
+        </div>
+
+        {/* PAYMENT METHODS SECTION */}
+        <div className="px-8 py-6">
+          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-5">
+            Customer Payment Methods
+          </h2>
+          <p className="text-[10px] text-gray-400 mb-4">
+            Choose which payment options customers see at checkout on your website and mobile app.
+          </p>
+          <div className="space-y-3">
+            {PAYMENT_METHOD_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                  form.customerPaymentMethods === opt.value
+                    ? 'border-[#0F2C1D] bg-emerald-50/50'
+                    : 'border-gray-100 hover:border-gray-200'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="customerPaymentMethods"
+                  value={opt.value}
+                  checked={form.customerPaymentMethods === opt.value}
+                  onChange={() => handleChange('customerPaymentMethods', opt.value)}
+                  className="mt-1 accent-[#0F2C1D]"
+                />
+                <div>
+                  <p className="text-sm font-bold text-gray-800">{opt.label}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{opt.description}</p>
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* FOOTER */}

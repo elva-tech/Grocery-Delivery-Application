@@ -431,6 +431,7 @@ const ProductList = () => {
                 threshold: def?.threshold ?? 10,
                 images: imagesPayload,
                 imageUrl: imagesPayload[0]?.url || '',
+                returnAllowed: v.returnAllowed !== false,
               };
 
               if (editingItem) {

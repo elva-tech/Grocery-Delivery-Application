@@ -1,6 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { updateTenantDetails, uploadLogo } from '../api/superApi';
 import StoreHubMapPicker from './StoreHubMapPicker';
+import {
+  sanitizeIndianPincode,
+  isValidIndianPincode,
+  lookupIndianPincode,
+  formatStoreAddressFromParts,
+} from '../utils/indiaPincode';
 
 const PLANS = ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'];
 
@@ -47,6 +53,20 @@ function deriveStoreAddressParts(storeAddressText, hubPinDigits, seedParts) {
   return { line1, line2, landmark, city, state, pincode };
 }
 
+function seedAddressFromTenant(tenant) {
+  const parts = tenant.storeAddressParts || {};
+  const hubPin = String(parts.pincode || '').replace(/\D/g, '').slice(0, 6);
+  const derived = deriveStoreAddressParts(tenant.storeAddress || '', hubPin, parts);
+  return {
+    addressLine1: derived.line1 || '',
+    addressLine2: derived.line2 || '',
+    landmark: derived.landmark || '',
+    city: derived.city || '',
+    state: derived.state || '',
+    pincode: derived.pincode || hubPin || '',
+  };
+}
+
 function InputField({ label, field, type = 'text', placeholder, required, hint, value, onChange }) {
   return (
     <div>
@@ -66,11 +86,10 @@ function InputField({ label, field, type = 'text', placeholder, required, hint, 
 }
 
 export default function EditStoreModal({ tenant, onClose, onUpdated }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     storeName:    tenant.name         || '',
     ownerName:    tenant.ownerName    || '',
     phoneNumber:  tenant.phoneNumber  || '',
-    storeAddress: tenant.storeAddress || '',
     contactEmail: tenant.contactEmail || '',
     tagline:      tenant.tagline      || '',
     heroBadge:    tenant.heroBadge    || '',
@@ -78,7 +97,8 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
     heroSubtitle: tenant.heroSubtitle || '',
     newPassword:  '',
     confirmPassword: '',
-  });
+    ...seedAddressFromTenant(tenant),
+  }));
   const [logoPreview, setLogoPreview] = useState(tenant.logo || '');
   const [logoUrl, setLogoUrl]         = useState(tenant.logo || '');
   const [logoUploading, setLogoUploading] = useState(false);
@@ -91,12 +111,43 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
   const [storeLng, setStoreLng]       = useState(
     typeof tenant.storeLng === 'number' && Number.isFinite(tenant.storeLng) ? tenant.storeLng : null,
   );
-  const parts                         = tenant.storeAddressParts || {};
-  const [hubPincode, setHubPincode]   = useState(() =>
-    String(parts.pincode || '').replace(/\D/g, '').slice(0, 6),
-  );
+  const [pinLookup, setPinLookup]     = useState('idle');
+  const [pinMessage, setPinMessage]   = useState('');
+  const pincode                       = sanitizeIndianPincode(form.pincode);
+  const skipInitialPinLookup          = useRef(true);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  useEffect(() => {
+    if (skipInitialPinLookup.current) {
+      skipInitialPinLookup.current = false;
+      return;
+    }
+    if (!isValidIndianPincode(pincode)) {
+      setPinLookup('idle');
+      setPinMessage('');
+      return;
+    }
+    let cancelled = false;
+    setPinLookup('loading');
+    setPinMessage('Looking up PIN…');
+    const t = window.setTimeout(async () => {
+      const r = await lookupIndianPincode(pincode);
+      if (cancelled) return;
+      if (r.ok) {
+        setForm((f) => ({ ...f, city: r.city, state: r.state, pincode: r.pincode }));
+        setPinLookup('ok');
+        setPinMessage('City and state filled from PIN.');
+      } else {
+        setPinLookup('error');
+        setPinMessage('Could not resolve this PIN. Enter city and state manually.');
+      }
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [pincode]);
 
   const handleLogoChange = async (e) => {
     const file = e.target.files?.[0];
@@ -125,6 +176,10 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
       return 'Email format is invalid';
     if (form.newPassword && form.newPassword.length < 8) return 'New password must be at least 8 characters';
     if (form.newPassword && form.newPassword !== form.confirmPassword) return 'Passwords do not match';
+    if (!form.addressLine1.trim()) return 'Address line 1 is required';
+    if (!isValidIndianPincode(form.pincode)) return 'PIN code must be 6 digits';
+    if (!form.city.trim()) return 'City is required';
+    if (!form.state.trim()) return 'State is required';
     if (logoUploading) return 'Logo upload is still in progress, please wait';
     return null;
   };
@@ -137,11 +192,20 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
 
     setLoading(true);
     try {
+      const storeAddressParts = {
+        line1: form.addressLine1.trim(),
+        line2: form.addressLine2.trim(),
+        landmark: form.landmark.trim(),
+        city: form.city.trim(),
+        state: form.state.trim(),
+        pincode: sanitizeIndianPincode(form.pincode),
+      };
       const payload = {
         storeName:    form.storeName,
         ownerName:    form.ownerName,
         phoneNumber:  form.phoneNumber,
-        storeAddress: form.storeAddress,
+        storeAddress: formatStoreAddressFromParts(storeAddressParts),
+        storeAddressParts,
         contactEmail: form.contactEmail,
         logo:         logoUrl,
         newPassword:  form.newPassword || undefined,
@@ -154,8 +218,6 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
         payload.storeLat = storeLat;
         payload.storeLng = storeLng;
       }
-      const hubPin = hubPincode.replace(/\D/g, '').slice(0, 6);
-      payload.storeAddressParts = deriveStoreAddressParts(form.storeAddress, hubPin, parts);
 
       const updated = await updateTenantDetails(tenant._id, payload);
       onUpdated(updated);
@@ -229,24 +291,41 @@ export default function EditStoreModal({ tenant, onClose, onUpdated }) {
             <InputField label="Hero badge (optional)" field="heroBadge" placeholder="e.g. Shop local" value={form.heroBadge} onChange={set('heroBadge')} />
             <InputField label="Hero title (optional)" field="heroTitle" placeholder="Homepage headline" value={form.heroTitle} onChange={set('heroTitle')} />
             <InputField label="Hero subtitle (optional)" field="heroSubtitle" placeholder="Supporting line" value={form.heroSubtitle} onChange={set('heroSubtitle')} />
-            <InputField label="Store Address" field="storeAddress" placeholder="123 Main St, City, State" value={form.storeAddress} onChange={set('storeAddress')} />
+            <div className="space-y-3 pt-2 border-t border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Store address</p>
+              <InputField label="Address line 1" field="addressLine1" placeholder="Door / street / area" required value={form.addressLine1} onChange={set('addressLine1')} />
+              <InputField label="Address line 2" field="addressLine2" placeholder="Apartment, suite (optional)" value={form.addressLine2} onChange={set('addressLine2')} />
+              <InputField label="Landmark" field="landmark" placeholder="Near … (optional)" value={form.landmark} onChange={set('landmark')} />
+              <InputField
+                label="PIN code"
+                field="pincode"
+                type="tel"
+                placeholder="6 digits"
+                required
+                value={form.pincode}
+                onChange={(e) => setForm((f) => ({ ...f, pincode: sanitizeIndianPincode(e.target.value) }))}
+              />
+              {(pinLookup === 'loading' || pinLookup === 'ok' || pinLookup === 'error') && pinMessage && (
+                <p
+                  className={`text-xs font-medium ${
+                    pinLookup === 'ok' ? 'text-green-600' : pinLookup === 'error' ? 'text-amber-700' : 'text-gray-500'
+                  }`}
+                >
+                  {pinMessage}
+                </p>
+              )}
+              <InputField label="City" field="city" placeholder="Auto-filled from PIN when possible" required value={form.city} onChange={set('city')} />
+              <InputField label="State" field="state" placeholder="Auto-filled from PIN when possible" required value={form.state} onChange={set('state')} />
+            </div>
             <div className="space-y-2 pt-2 border-t border-gray-100">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Delivery hub (map)</p>
               <p className="text-[11px] text-gray-500">
                 Drag the pin or use PIN lookup — OpenStreetMap only; coordinates sync to tenant hub for customer radius.
               </p>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">PIN for “Centre from PIN” (optional)</label>
-              <input
-                type="tel"
-                value={hubPincode}
-                onChange={(e) => setHubPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="6-digit PIN"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[140px]"
-              />
               <StoreHubMapPicker
                 lat={typeof storeLat === 'number' ? storeLat : undefined}
                 lng={typeof storeLng === 'number' ? storeLng : undefined}
-                pincode={hubPincode}
+                pincode={form.pincode}
                 onChange={({ lat, lng }) => {
                   setStoreLat(lat);
                   setStoreLng(lng);

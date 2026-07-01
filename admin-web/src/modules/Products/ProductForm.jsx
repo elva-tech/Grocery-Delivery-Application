@@ -222,6 +222,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted, sav
           image: normalizeImagesForForm(
             initialValues?.images ?? initialValues?.image ?? []
           ),
+          returnAllowed: initialValues?.returnAllowed !== false,
         }}
 
         validationSchema={productSchema}
@@ -564,6 +565,22 @@ const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted, sav
                         className="w-full border p-3 rounded-xl mt-1 h-24 resize-none focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                       />
 
+                    </div>
+
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <Field
+                          type="checkbox"
+                          name="returnAllowed"
+                          className="mt-1 accent-[#0F2C1D]"
+                        />
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">Allow returns for this product</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Turn off for items that cannot be returned after delivery (e.g. fresh produce).
+                          </p>
+                        </div>
+                      </label>
                     </div>
 
                     <ProductVariantsFields values={values} errors={errors} setFieldValue={setFieldValue} />

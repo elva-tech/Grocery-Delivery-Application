@@ -27,10 +27,12 @@ exports.updateSettings = async (req, res) => {
       freeDeliveryAbove,
       discountType,
       discountValue,
+      maxDiscount,
       thresholdDistance,
       allowRefunds,
       allowReportIssue,
       allowOrderCancellation,
+      customerPaymentMethods,
     } = req.body;
 
     if (deliveryCharge !== undefined && deliveryCharge < 0) {
@@ -42,8 +44,18 @@ exports.updateSettings = async (req, res) => {
     if (discountValue !== undefined && discountValue < 0) {
       return res.status(400).json({ message: "discountValue must be >= 0" });
     }
+    if (maxDiscount !== undefined && maxDiscount < 0) {
+      return res.status(400).json({ message: "maxDiscount must be >= 0" });
+    }
     if (thresholdDistance !== undefined && thresholdDistance < 0) {
       return res.status(400).json({ message: "thresholdDistance must be >= 0" });
+    }
+    const VALID_PAYMENT_METHODS = ["BOTH", "COD_ONLY", "ONLINE_ONLY"];
+    if (
+      customerPaymentMethods !== undefined &&
+      !VALID_PAYMENT_METHODS.includes(customerPaymentMethods)
+    ) {
+      return res.status(400).json({ message: "Invalid customerPaymentMethods" });
     }
 
     const settings = await Settings.findOneAndUpdate(
@@ -54,10 +66,12 @@ exports.updateSettings = async (req, res) => {
           freeDeliveryAbove,
           discountType,
           discountValue,
+          maxDiscount: discountType === "PERCENTAGE" ? (maxDiscount ?? 0) : 0,
           thresholdDistance,
           allowRefunds,
           allowReportIssue,
           allowOrderCancellation,
+          customerPaymentMethods,
         },
       },
       { new: true, upsert: true, runValidators: true }

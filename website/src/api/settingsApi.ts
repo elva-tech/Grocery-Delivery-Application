@@ -8,6 +8,7 @@ export interface AppSettings {
   freeDeliveryAbove: number;
   discountType: "NONE" | "PERCENTAGE" | "FLAT";
   discountValue: number;
+  maxDiscount?: number;
   thresholdDistance: number;
 }
 
@@ -45,6 +46,9 @@ export function calculateBill(
   let discount = 0;
   if (settings.discountType === "PERCENTAGE" && settings.discountValue > 0) {
     discount = Math.round((subtotal * settings.discountValue) / 100);
+    if ((settings.maxDiscount ?? 0) > 0) {
+      discount = Math.min(discount, settings.maxDiscount ?? 0);
+    }
   } else if (settings.discountType === "FLAT" && settings.discountValue > 0) {
     discount = settings.discountValue;
   }

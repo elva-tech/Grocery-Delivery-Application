@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store/store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,7 +31,7 @@ import { buildDeliveryAddressPayload } from '@/utils/indiaPincode';
 import { RAZORPAY_KEY_ID } from '@/src/config/constants';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 import { MOBILE_COPY, customerFacingCheckoutError, customerFacingDeliveryUnavailable } from '@/src/constants/copy';
-import { useGetStoreStatusQuery } from '@/api/apiSlice';
+import { useGetStoreStatusQuery, useGetAppSettingsQuery, isCodPaymentEnabled, isOnlinePaymentEnabled } from '@/api/apiSlice';
 
 export default function CheckoutScreen() {
   const { storeName } = useTenantBranding();
@@ -54,7 +54,26 @@ export default function CheckoutScreen() {
   const orderPlacedRef = useRef(false);
 
   const { data: storeStatus } = useGetStoreStatusQuery();
+  const {
+    data: appSettings,
+    isLoading: settingsLoading,
+    refetch: refetchAppSettings,
+  } = useGetAppSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
   const isStoreClosed = storeStatus?.isClosed ?? false;
+  const showCod = Boolean(appSettings) && isCodPaymentEnabled(appSettings);
+  const showOnline = Boolean(appSettings) && isOnlinePaymentEnabled(appSettings);
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchAppSettings();
+    }, [refetchAppSettings]),
+  );
+
+  useEffect(() => {
+    if (!appSettings) return;
+    if (showOnline && !showCod) setPaymentMethod('ONLINE');
+    else if (showCod && !showOnline) setPaymentMethod('COD');
+  }, [appSettings, showCod, showOnline]);
 
   const completeOrderSuccess = async (orderId: string) => {
     orderPlacedRef.current = true;
@@ -338,9 +357,14 @@ export default function CheckoutScreen() {
           )}
         </View>
 
+        {(settingsLoading || showCod || showOnline) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Method</Text>
+          {settingsLoading ? (
+            <ActivityIndicator color="#4b6f9e" style={{ marginVertical: 12 }} />
+          ) : (
           <View style={styles.paymentOptions}>
+            {showOnline && (
             <TouchableOpacity
               style={[styles.paymentOption, paymentMethod === 'ONLINE' && styles.paymentOptionSelected]}
               onPress={() => setPaymentMethod('ONLINE')}
@@ -361,7 +385,9 @@ export default function CheckoutScreen() {
               </View>
               {paymentMethod === 'ONLINE' && <Ionicons name="checkmark-circle" size={18} color="#4b6f9e" />}
             </TouchableOpacity>
+            )}
 
+            {showCod && (
             <TouchableOpacity
               style={[styles.paymentOption, paymentMethod === 'COD' && styles.paymentOptionSelectedCOD]}
               onPress={() => setPaymentMethod('COD')}
@@ -382,8 +408,11 @@ export default function CheckoutScreen() {
               </View>
               {paymentMethod === 'COD' && <Ionicons name="checkmark-circle" size={18} color="#16a34a" />}
             </TouchableOpacity>
+            )}
           </View>
+          )}
         </View>
+        )}
       </ScrollView>
 
       {paymentMethod === 'COD' && (

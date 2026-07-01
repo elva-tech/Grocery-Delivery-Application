@@ -75,6 +75,7 @@ const fetchProductsFromApi = async (tenantId: string): Promise<Product[]> => {
       variants: variants.length ? variants : undefined,
       variantCount: variants.length || undefined,
       defaultVariantId: def?.variantId,
+      returnAllowed: p.returnAllowed !== false,
     };
   }).filter((p) => p.id.length > 0);
 
@@ -97,6 +98,17 @@ export interface AppSettings {
   allowRefunds: boolean;
   allowReportIssue: boolean;
   allowOrderCancellation: boolean;
+  customerPaymentMethods?: 'BOTH' | 'COD_ONLY' | 'ONLINE_ONLY';
+}
+
+export function isCodPaymentEnabled(settings?: Pick<AppSettings, 'customerPaymentMethods'> | null) {
+  const mode = settings?.customerPaymentMethods ?? 'BOTH';
+  return mode === 'BOTH' || mode === 'COD_ONLY';
+}
+
+export function isOnlinePaymentEnabled(settings?: Pick<AppSettings, 'customerPaymentMethods'> | null) {
+  const mode = settings?.customerPaymentMethods ?? 'BOTH';
+  return mode === 'BOTH' || mode === 'ONLINE_ONLY';
 }
 
 export interface ProductVariant {
@@ -124,6 +136,7 @@ export interface Product {
   variants?: ProductVariant[];
   variantCount?: number;
   defaultVariantId?: string;
+  returnAllowed?: boolean;
 }
 
 export interface Category {
@@ -159,6 +172,7 @@ export const apiSlice = createApi({
               allowRefunds: s.allowRefunds ?? true,
               allowReportIssue: s.allowReportIssue ?? true,
               allowOrderCancellation: s.allowOrderCancellation ?? true,
+              customerPaymentMethods: s.customerPaymentMethods ?? 'BOTH',
             },
           };
         } catch {
@@ -167,6 +181,7 @@ export const apiSlice = createApi({
               allowRefunds: true,
               allowReportIssue: true,
               allowOrderCancellation: true,
+              customerPaymentMethods: 'BOTH' as const,
             },
           };
         }
@@ -329,6 +344,7 @@ export const apiSlice = createApi({
           const freeDeliveryAbove: number = s.freeDeliveryAbove;
           const discountType: string = s.discountType ?? 'NONE';
           const discountValue: number = s.discountValue ?? 0;
+          const maxDiscount: number = s.maxDiscount ?? 0;
           let discount = 0;
 
           const isFreeDelivery = subtotal >= freeDeliveryAbove;
@@ -337,6 +353,9 @@ export const apiSlice = createApi({
 
           if (discountType === 'PERCENTAGE' && discountValue > 0) {
             discount = Math.round((subtotal * discountValue) / 100);
+            if (maxDiscount > 0) {
+              discount = Math.min(discount, maxDiscount);
+            }
           } else if (discountType === 'FLAT' && discountValue > 0) {
             discount = discountValue;
           }

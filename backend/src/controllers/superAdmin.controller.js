@@ -262,19 +262,43 @@ exports.updateTenantDetails = async (req, res) => {
       };
     }
 
+    const existingTenant = await Tenant.findById(id).select("tenantId phoneNumber").lean();
+    if (!existingTenant) {
+      return res.status(404).json({ success: false, message: "Tenant not found" });
+    }
+
+    const newPhone = tenantUpdates.phoneNumber;
+    if (newPhone && newPhone !== existingTenant.phoneNumber) {
+      const adminUser = await User.findOne({
+        tenantId: existingTenant.tenantId,
+        role: "ADMIN",
+      }).select("_id phoneNumber");
+
+      if (adminUser && adminUser.phoneNumber !== newPhone) {
+        const phoneTaken = await User.findOne({
+          tenantId: existingTenant.tenantId,
+          phoneNumber: newPhone,
+          _id: { $ne: adminUser._id },
+        }).select("_id");
+
+        if (phoneTaken) {
+          return res.status(409).json({
+            success: false,
+            message: "This phone number is already in use by another user for this store",
+          });
+        }
+      }
+    }
+
     // Hash and update password only if a new one was supplied
     if (newPassword && newPassword.trim()) {
       const hashed = await bcrypt.hash(newPassword.trim(), 12);
       tenantUpdates.adminPassword = hashed;
 
-      // Also update the admin User record for this tenant
-      const tenant = await Tenant.findById(id).lean();
-      if (tenant) {
-        await User.updateOne(
-          { tenantId: tenant.tenantId, role: "ADMIN" },
-          { $set: { password: hashed } }
-        );
-      }
+      await User.updateOne(
+        { tenantId: existingTenant.tenantId, role: "ADMIN" },
+        { $set: { password: hashed } }
+      );
     }
 
     const updated = await Tenant.findByIdAndUpdate(id, tenantUpdates, { new: true })
@@ -291,10 +315,25 @@ exports.updateTenantDetails = async (req, res) => {
     }
 
     if (tenantUpdates.phoneNumber) {
-      await User.updateOne(
-        { tenantId: updated.tenantId, role: "ADMIN" },
-        { $set: { phoneNumber: tenantUpdates.phoneNumber } }
-      );
+      const adminUser = await User.findOne({
+        tenantId: updated.tenantId,
+        role: "ADMIN",
+      }).select("_id phoneNumber");
+
+      if (adminUser && adminUser.phoneNumber !== tenantUpdates.phoneNumber) {
+        const phoneTaken = await User.findOne({
+          tenantId: updated.tenantId,
+          phoneNumber: tenantUpdates.phoneNumber,
+          _id: { $ne: adminUser._id },
+        }).select("_id");
+
+        if (!phoneTaken) {
+          await User.updateOne(
+            { _id: adminUser._id },
+            { $set: { phoneNumber: tenantUpdates.phoneNumber } }
+          );
+        }
+      }
     }
 
     return res.json({ success: true, tenant: updated });

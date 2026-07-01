@@ -31,6 +31,19 @@ export const WEB_COPY = {
     deliveryFeeSaved: 'Delivery fee saved',
     emptyCart: 'Your cart is empty',
   },
+  product: {
+    nonReturnable:
+      'This item is non-returnable. Refunds or returns are not available after delivery.',
+    nonReturnableFootnote: 'This item is non-returnable after delivery.',
+  },
+  orders: {
+    nonReturnableOrder:
+      'Return is not available for this order — it contains only non-returnable items.',
+    nonReturnableOrderNamed: (names: string[]) =>
+      names.length === 1
+        ? `Return is not available for "${names[0]}". This product is non-returnable.`
+        : `Return is not available for: ${names.join(', ')}. These products are non-returnable.`,
+  },
   /** Customer-facing delivery eligibility (avoid showing raw MapService / admin jargon). */
   store: {
     closingSoonTitle: 'Closing soon',

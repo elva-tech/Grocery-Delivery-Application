@@ -75,6 +75,12 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    /** When false, customers cannot request a return for this product after delivery. */
+    returnAllowed: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

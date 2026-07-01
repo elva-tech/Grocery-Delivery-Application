@@ -18,6 +18,7 @@ import {
   type OrderStatusFilter,
 } from '../utils/customerOrderList';
 import { cartLineId } from '../utils/productVariants';
+import { WEB_COPY } from '../constants/copy';
 
 const Orders = ({ openCart }: { openCart: () => void }) => {
   const navigate = useNavigate();
@@ -425,11 +426,30 @@ const loadOrders = async () => {
 
                       {/* REPORT ISSUE TOGGLE */}
                       {(settings?.allowReportIssue || settings?.allowRefunds) &&
+                        selectedOrder.hasReturnableItems !== false &&
                         !['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder.status) && (
                         <button onClick={() => setIsReportModalOpen(true)} className="flex items-center justify-center gap-2 border-2 border-orange-100 text-orange-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 transition-all">
                           <AlertCircle size={14} /> Return / Report Issue
                         </button>
                       )}
+                      {(settings?.allowReportIssue || settings?.allowRefunds) &&
+                        selectedOrder.hasReturnableItems === false && (() => {
+                          const names =
+                            selectedOrder.nonReturnableItemNames?.length
+                              ? selectedOrder.nonReturnableItemNames
+                              : (selectedOrder.items || [])
+                                  .filter((i: { returnAllowed?: boolean }) => i.returnAllowed === false)
+                                  .map((i: { name?: string }) => String(i.name || '').trim())
+                                  .filter(Boolean);
+                          return (
+                        <div className="col-span-2 flex items-start gap-2 border-2 border-amber-100 bg-amber-50 text-amber-800 px-4 py-3 rounded-2xl text-[10px] font-bold leading-relaxed">
+                          <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                          {names.length
+                            ? WEB_COPY.orders.nonReturnableOrderNamed(names)
+                            : WEB_COPY.orders.nonReturnableOrder}
+                        </div>
+                          );
+                        })()}
                     </>
                   )}
 
