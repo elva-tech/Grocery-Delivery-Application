@@ -110,6 +110,7 @@ export const placeOrderBackend = async (
       addressUrl?: string;
     };
     couponCode?: string | null;
+    deliveryType?: 'STANDARD' | 'EXPRESS';
   },
   token: string,
 ) => {

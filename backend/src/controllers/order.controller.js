@@ -116,6 +116,29 @@ function formatDeliveryAddressForCustomer(da) {
 
 const PAYMENT_MODES = ["COD", "ONLINE"];
 
+function isExpressDeliveryChoiceEnabled(settings) {
+  return Number(settings?.expressDeliveryCharge) > 0;
+}
+
+function qualifiesForFreeStandardDelivery(subtotal, freeDeliveryAbove) {
+  const threshold = Number(freeDeliveryAbove) || 0;
+  if (threshold <= 0 || subtotal <= 0) return false;
+  return subtotal > threshold;
+}
+
+function standardDeliveryChargeForOrder(subtotal, deliveryCharge, freeDeliveryAbove) {
+  if (subtotal <= 0) return 0;
+  if (qualifiesForFreeStandardDelivery(subtotal, freeDeliveryAbove)) return 0;
+  return Number(deliveryCharge) || 0;
+}
+
+function resolveDeliveryType(settings, requested) {
+  if (isExpressDeliveryChoiceEnabled(settings) && requested === "EXPRESS") {
+    return "EXPRESS";
+  }
+  return "STANDARD";
+}
+
 function isCustomerPaymentModeAllowed(customerPaymentMethods, paymentMode) {
   const mode = customerPaymentMethods || "BOTH";
   if (mode === "BOTH") return true;
@@ -316,9 +339,18 @@ exports.placeCustomerOrder = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    const deliveryType = resolveDeliveryType(settings, req.body?.deliveryType);
+
     const subtotal = totalAmount;
-    const isFreeDelivery = subtotal >= settings.freeDeliveryAbove;
-    const deliveryCharge = isFreeDelivery ? 0 : settings.deliveryCharge;
+    const standardDeliveryCharge = standardDeliveryChargeForOrder(
+      subtotal,
+      settings.deliveryCharge,
+      settings.freeDeliveryAbove
+    );
+    const deliveryCharge =
+      deliveryType === "EXPRESS"
+        ? Number(settings.expressDeliveryCharge || 0)
+        : standardDeliveryCharge;
 
     let discount = 0;
     if (settings.discountType === "PERCENTAGE" && settings.discountValue > 0) {
@@ -411,6 +443,7 @@ exports.placeCustomerOrder = async (req, res) => {
       items: orderItems,
       totalAmount: grandTotal,
       deliveryCharge,
+      deliveryType,
       discount,
       couponCode: appliedCoupon ? appliedCoupon.code : null,
       couponDiscount,
@@ -444,6 +477,7 @@ exports.placeCustomerOrder = async (req, res) => {
       totalAmount: order.totalAmount,
       orderStatus: order.orderStatus,
       paymentStatus: order.paymentStatus,
+      deliveryType: order.deliveryType,
       createdAt: order.createdAt,
     });
   } catch (error) {
@@ -496,6 +530,7 @@ exports.getCustomerOrderHistory = async (req, res) => {
       totalAmount: order.totalAmount,
       paymentStatus: order.paymentStatus,
       paymentMode: order.paymentMode,
+      deliveryType: order.deliveryType || "STANDARD",
       refundStatus: order.refundStatus || "NONE",
       refundedAt: order.refundedAt,
       refundAmount: order.refundAmount,

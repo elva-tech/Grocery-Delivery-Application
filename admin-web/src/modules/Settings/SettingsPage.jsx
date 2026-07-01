@@ -17,6 +17,8 @@ const PAYMENT_METHOD_OPTIONS = [
 const SettingsPage = () => {
   const [form, setForm] = useState({
     deliveryCharge: 40,
+    expressDeliveryCharge: 0,
+    expressDeliveryDescription: '',
     freeDeliveryAbove: 500,
     discountType: 'NONE',
     discountValue: 0,
@@ -35,6 +37,8 @@ const SettingsPage = () => {
         const data = await apiService.getSettings();
         setForm({
           deliveryCharge: data.deliveryCharge ?? 40,
+          expressDeliveryCharge: data.expressDeliveryCharge ?? 0,
+          expressDeliveryDescription: data.expressDeliveryDescription ?? '',
           freeDeliveryAbove: data.freeDeliveryAbove ?? 500,
           discountType: data.discountType ?? 'NONE',
           discountValue: data.discountValue ?? 0,
@@ -63,6 +67,8 @@ const SettingsPage = () => {
     try {
       await apiService.updateSettings({
         deliveryCharge: Number(form.deliveryCharge),
+        expressDeliveryCharge: Number(form.expressDeliveryCharge),
+        expressDeliveryDescription: form.expressDeliveryDescription,
         freeDeliveryAbove: Number(form.freeDeliveryAbove),
         discountType: form.discountType,
         discountValue: Number(form.discountValue),
@@ -129,6 +135,40 @@ const SettingsPage = () => {
 
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wider">
+                Express Delivery Charge (₹)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.expressDeliveryCharge}
+                onChange={e => handleChange('expressDeliveryCharge', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D]"
+                placeholder="e.g. 80"
+              />
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                When set, customers can choose Express delivery at checkout
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wider">
+                Express Delivery Description
+              </label>
+              <textarea
+                rows={3}
+                maxLength={240}
+                value={form.expressDeliveryDescription}
+                onChange={e => handleChange('expressDeliveryDescription', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0F2C1D]/20 focus:border-[#0F2C1D] resize-none"
+                placeholder="e.g. Faster delivery within 60 minutes"
+              />
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                Shown to customers when they choose delivery type
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wider">
                 Free Delivery Above (₹)
               </label>
               <input
@@ -140,7 +180,7 @@ const SettingsPage = () => {
                 placeholder="e.g. 500"
               />
               <p className="text-[10px] text-gray-400 mt-1.5">
-                Orders at or above this amount get free delivery
+                Orders above this amount get free standard delivery
               </p>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { ACTIVE_API_URL} from '@/src/config/constants';
 import { getActiveTenantId } from '@/src/utils/tenantStorage';
+import { isExpressDeliveryChoiceEnabled as isExpressDeliveryChoiceEnabledUtil } from '@/utils/deliveryBilling';
 
 const BASE = ACTIVE_API_URL;
 
@@ -23,6 +24,13 @@ export interface AppSettings {
   allowReportIssue: boolean;
   allowOrderCancellation: boolean;
   customerPaymentMethods: 'BOTH' | 'COD_ONLY' | 'ONLINE_ONLY';
+  deliveryCharge: number;
+  freeDeliveryAbove: number;
+  expressDeliveryCharge: number;
+  expressDeliveryDescription: string;
+  discountType: 'NONE' | 'PERCENTAGE' | 'FLAT';
+  discountValue: number;
+  maxDiscount: number;
 }
 
 export function normalizeCustomerPaymentMethods(
@@ -41,6 +49,12 @@ export function isCodPaymentEnabled(settings?: Pick<AppSettings, 'customerPaymen
 export function isOnlinePaymentEnabled(settings?: Pick<AppSettings, 'customerPaymentMethods'> | null) {
   const mode = settings?.customerPaymentMethods ?? 'BOTH';
   return mode === 'BOTH' || mode === 'ONLINE_ONLY';
+}
+
+export function isExpressDeliveryChoiceEnabled(
+  settings?: Pick<AppSettings, 'deliveryCharge' | 'expressDeliveryCharge'> | null,
+) {
+  return isExpressDeliveryChoiceEnabledUtil(settings);
 }
 
 export interface ProductVariant {
@@ -182,6 +196,13 @@ export const apiSlice = createApi({
               allowReportIssue: s.allowReportIssue ?? true,
               allowOrderCancellation: s.allowOrderCancellation ?? true,
               customerPaymentMethods: normalizeCustomerPaymentMethods(s.customerPaymentMethods),
+              deliveryCharge: Number(s.deliveryCharge ?? 40),
+              freeDeliveryAbove: Number(s.freeDeliveryAbove ?? 500),
+              expressDeliveryCharge: Number(s.expressDeliveryCharge ?? 0),
+              expressDeliveryDescription: String(s.expressDeliveryDescription ?? ''),
+              discountType: (String(s.discountType ?? 'NONE').toUpperCase() as AppSettings['discountType']) || 'NONE',
+              discountValue: Number(s.discountValue ?? 0),
+              maxDiscount: Number(s.maxDiscount ?? 0),
             },
           };
         } catch (e: unknown) {

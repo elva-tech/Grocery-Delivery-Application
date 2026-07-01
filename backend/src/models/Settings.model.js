@@ -13,6 +13,17 @@ const settingsSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    expressDeliveryCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    expressDeliveryDescription: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 240,
+    },
     freeDeliveryAbove: {
       type: Number,
       default: 500,

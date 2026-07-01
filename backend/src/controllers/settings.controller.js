@@ -24,6 +24,8 @@ exports.updateSettings = async (req, res) => {
     const tenantId = req.user?.tenantId;
     const {
       deliveryCharge,
+      expressDeliveryCharge,
+      expressDeliveryDescription,
       freeDeliveryAbove,
       discountType,
       discountValue,
@@ -37,6 +39,9 @@ exports.updateSettings = async (req, res) => {
 
     if (deliveryCharge !== undefined && deliveryCharge < 0) {
       return res.status(400).json({ message: "deliveryCharge must be >= 0" });
+    }
+    if (expressDeliveryCharge !== undefined && expressDeliveryCharge < 0) {
+      return res.status(400).json({ message: "expressDeliveryCharge must be >= 0" });
     }
     if (freeDeliveryAbove !== undefined && freeDeliveryAbove < 0) {
       return res.status(400).json({ message: "freeDeliveryAbove must be >= 0" });
@@ -63,6 +68,11 @@ exports.updateSettings = async (req, res) => {
       {
         $set: {
           deliveryCharge,
+          expressDeliveryCharge,
+          expressDeliveryDescription:
+            expressDeliveryDescription === undefined
+              ? undefined
+              : String(expressDeliveryDescription).trim(),
           freeDeliveryAbove,
           discountType,
           discountValue,

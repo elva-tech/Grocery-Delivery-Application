@@ -15,6 +15,11 @@ const OrderSuccess = () => {
 
   useEffect(() => {
     dispatch(clearCart());
+    try {
+      sessionStorage.removeItem('website_checkout_address');
+    } catch {
+      /* private mode */
+    }
 
     const id = location.state?.orderId || localStorage.getItem('@last_order_id') || '';
     if (id) {
