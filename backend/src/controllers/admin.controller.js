@@ -686,7 +686,13 @@ exports.markCODPaid = async (req, res) => {
     }
 
     if (order.paymentStatus === "PAID") {
-      return res.status(400).json({ success: false, message: "Order is already marked as paid" });
+      return res.status(200).json({
+        success: true,
+        message: "Order is already marked as paid",
+        alreadyPaid: true,
+        orderId: order._id,
+        paymentStatus: order.paymentStatus,
+      });
     }
 
     order.paymentStatus = "PAID";

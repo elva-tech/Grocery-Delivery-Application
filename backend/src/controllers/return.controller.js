@@ -65,6 +65,31 @@ exports.createReturnRequest = async (req, res) => {
       });
     }
 
+    const hasReturnableItems = (order.items || []).some(
+      (item) => item.returnAllowed !== false
+    );
+    const nonReturnableNames = (order.items || [])
+      .filter((item) => item.returnAllowed === false)
+      .map((item) => String(item.name || "").trim())
+      .filter(Boolean);
+
+    if (!hasReturnableItems) {
+      let message;
+      if (nonReturnableNames.length === 1) {
+        message = `Return is not available for "${nonReturnableNames[0]}". This product is non-returnable.`;
+      } else if (nonReturnableNames.length > 1) {
+        message = `Return is not available for these products: ${nonReturnableNames.join(", ")}. They are non-returnable.`;
+      } else {
+        message = "Return is not available — all items in this order are non-returnable.";
+      }
+      return res.status(400).json({
+        success: false,
+        message,
+        code: "NO_RETURNABLE_ITEMS",
+        nonReturnableItems: nonReturnableNames,
+      });
+    }
+
     const existingReturn = await ReturnRequest.findOne({ orderId });
     if (existingReturn) {
       return res.status(400).json({

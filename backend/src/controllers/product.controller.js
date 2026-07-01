@@ -203,6 +203,7 @@ function formatAdminInventoryRow(product, inventories) {
     isAvailable: product.isAvailable,
     availableQty: totalStock,
     thresholdQty: def?.thresholdQty ?? 10,
+    returnAllowed: product.returnAllowed !== false,
   };
 }
 
@@ -280,6 +281,7 @@ const addProduct = async (req, res) => {
       })),
       images: initialImages,
       isAvailable: normalized.some((v) => v.stock > 0),
+      returnAllowed: body.returnAllowed !== false && body.returnAllowed !== "false",
     });
 
     await syncInventoriesForVariants(tenantId, product, normalized);
@@ -358,12 +360,17 @@ const updateProductFromAdmin = async (req, res) => {
       "subcategory",
       "description",
       "unit",
+      "returnAllowed",
     ];
     const updateData = {};
 
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) updateData[field] = req.body[field];
     });
+    if (req.body.returnAllowed !== undefined) {
+      updateData.returnAllowed =
+        req.body.returnAllowed !== false && req.body.returnAllowed !== "false";
+    }
 
     if (req.body.images !== undefined) {
       let raw = req.body.images;

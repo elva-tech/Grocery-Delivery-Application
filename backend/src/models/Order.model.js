@@ -38,6 +38,7 @@ const orderSchema = new mongoose.Schema(
         },
         unit: { type: String, default: "pcs" },
         imageUrl: { type: String, default: "" },
+        returnAllowed: { type: Boolean, default: true },
       },
     ],
 

@@ -63,7 +63,7 @@ export default function OrdersScreen() {
   const { token } = useSelector((state: RootState) => state.auth);
   
   // INTEGRATED: Fetch remote settings
-  const { data: settings } = useGetAppSettingsQuery();
+  const { data: settings } = useGetAppSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
 
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -281,8 +281,12 @@ export default function OrdersScreen() {
       setSelectedOrder(null);
       resetIssueReportFields();
       fetchOrders(true);
-    } catch (err) {
-      showToast('error', 'Error', 'Submission failed.');
+    } catch (err: unknown) {
+      const apiMsg =
+        err instanceof Error
+          ? err.message
+          : (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showToast('error', 'Return not available', apiMsg || 'Submission failed.');
     } finally {
       setIsSubmittingReport(false);
     }
@@ -679,6 +683,7 @@ export default function OrdersScreen() {
               {/* INTEGRATED: REPORT ISSUE BUTTON TOGGLE */}
               {selectedOrder?.status === 'DELIVERED' &&
                 (settings?.allowReportIssue || settings?.allowRefunds) &&
+                selectedOrder?.hasReturnableItems !== false &&
                 !['ISSUE_REPORTED', 'REFUND_APPROVED', 'REFUND_REJECTED'].includes(selectedOrder?.status) && (
                 <TouchableOpacity
                   style={styles.reportBtn}
@@ -691,6 +696,27 @@ export default function OrdersScreen() {
                   <Text style={styles.reportBtnText}>Report Issue / Refund</Text>
                 </TouchableOpacity>
               )}
+              {selectedOrder?.status === 'DELIVERED' &&
+                (settings?.allowReportIssue || settings?.allowRefunds) &&
+                selectedOrder?.hasReturnableItems === false && (() => {
+                  const names =
+                    selectedOrder.nonReturnableItemNames?.length
+                      ? selectedOrder.nonReturnableItemNames
+                      : (selectedOrder.items || [])
+                          .filter((i: { returnAllowed?: boolean }) => i.returnAllowed === false)
+                          .map((i: { name?: string }) => String(i.name || '').trim())
+                          .filter(Boolean);
+                  return (
+                <View style={styles.nonReturnableOrderNote}>
+                  <Ionicons name="information-circle-outline" size={16} color="#b45309" />
+                  <Text style={styles.nonReturnableOrderText}>
+                    {names.length
+                      ? MOBILE_COPY.orders.nonReturnableOrderNamed(names)
+                      : MOBILE_COPY.orders.nonReturnableOrder}
+                  </Text>
+                </View>
+                  );
+                })()}
             </View>
           </View>
         </View>
@@ -1011,6 +1037,18 @@ const styles = StyleSheet.create({
   downloadSummaryBtnText: { color: '#059669', fontWeight: '800', fontSize: 15 },
   reportBtn: { marginTop: 12, backgroundColor: '#fff', height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   reportBtnText: { color: '#f59e0b', fontWeight: '800', fontSize: 15 },
+  nonReturnableOrderNote: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  nonReturnableOrderText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 18 },
   
   label: { fontSize: 14, fontWeight: '800', color: '#64748b', marginTop: 20, marginBottom: 12 },
   reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

@@ -99,8 +99,10 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
       });
       onSuccess(); 
       setStep(2);
-    } catch (err) {
-      setError("Failed to submit report. Please try again.");
+    } catch (err: unknown) {
+      const apiMsg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(apiMsg || 'Failed to submit report. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -121,8 +123,8 @@ const ReportIssueModal = ({ isOpen, onClose, order, onSuccess }: any) => {
 
             <div className="space-y-6">
               {error && (
-                <div className="bg-red-50 text-red-500 p-4 rounded-2xl flex items-center gap-3 text-xs font-black uppercase animate-in slide-in-from-top-2">
-                  <AlertCircle size={16} /> {error}
+                <div className="bg-red-50 text-red-600 p-4 rounded-2xl flex items-start gap-3 text-xs font-semibold leading-relaxed animate-in slide-in-from-top-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" /> {error}
                 </div>
               )}
 

@@ -173,6 +173,13 @@ export default function ProductDetailScreen() {
           <Text style={styles.name}>{product.name}</Text>
           <Text style={styles.unitDetail}>{displayUnit} • {MOBILE_COPY.product.packedForDelivery}</Text>
 
+          {product.returnAllowed === false && (
+            <View style={styles.nonReturnableBanner}>
+              <Ionicons name="information-circle-outline" size={18} color="#b45309" />
+              <Text style={styles.nonReturnableText}>{MOBILE_COPY.product.nonReturnable}</Text>
+            </View>
+          )}
+
           {variantOptions.length > 1 && (
             <View style={styles.variantPickerWrap}>
               <Text style={styles.variantPickerLabel}>Select option</Text>
@@ -327,6 +334,18 @@ const styles = StyleSheet.create({
 
   name: { fontSize: 28, fontWeight: '800', color: '#2c3e50', marginTop: 12 },
   unitDetail: { fontSize: 14, color: '#94a3b8', marginTop: 4, fontWeight: '600' },
+  nonReturnableBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  nonReturnableText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 18 },
 
   metaRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   stockBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },

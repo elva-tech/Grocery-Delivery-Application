@@ -86,6 +86,16 @@ export const MOBILE_COPY = {
     featureFreshQuality: 'Fresh Quality',
     featureQualityAssured: 'Quality Assured',
     addedToCartBanner: 'Added to your cart',
+    nonReturnable:
+      'This item is non-returnable. Refunds or returns are not available after delivery.',
+  },
+  orders: {
+    nonReturnableOrder:
+      'Return is not available for this order — it contains only non-returnable items.',
+    nonReturnableOrderNamed: (names: string[]) =>
+      names.length === 1
+        ? `Return is not available for "${names[0]}". This product is non-returnable.`
+        : `Return is not available for: ${names.join(', ')}. These products are non-returnable.`,
   },
 } as const;
 

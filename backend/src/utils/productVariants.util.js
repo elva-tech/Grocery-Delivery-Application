@@ -219,6 +219,7 @@ function formatProductForCustomer(product, inventoryRows) {
     availableQty: def.availableQty,
     images: imagesNorm,
     imageUrl: imagesNorm[0]?.url || "",
+    returnAllowed: product.returnAllowed !== false,
   };
 }
 

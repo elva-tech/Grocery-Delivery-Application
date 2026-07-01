@@ -10,7 +10,7 @@ const settingsSchema = new mongoose.Schema(
     },
     deliveryCharge: {
       type: Number,
-      default: 40,
+      default: 0,
       min: 0,
     },
     freeDeliveryAbove: {
@@ -28,6 +28,12 @@ const settingsSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    /** Caps PERCENTAGE store discount (₹). 0 = no cap — same semantics as coupon maxDiscount. */
+    maxDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     thresholdDistance: {
       type: Number,
       default: 10,
@@ -36,6 +42,12 @@ const settingsSchema = new mongoose.Schema(
     allowRefunds: { type: Boolean, default: true },
     allowReportIssue: { type: Boolean, default: true },
     allowOrderCancellation: { type: Boolean, default: true },
+    /** BOTH | COD_ONLY | ONLINE_ONLY — which payment options customers see at checkout */
+    customerPaymentMethods: {
+      type: String,
+      enum: ["BOTH", "COD_ONLY", "ONLINE_ONLY"],
+      default: "BOTH",
+    },
   },
   { timestamps: true }
 );

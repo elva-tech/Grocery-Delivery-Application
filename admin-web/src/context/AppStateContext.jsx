@@ -71,6 +71,7 @@ const normaliseProduct = p => {
   subcategory:      p.subcategory,
   parentCategoryId: toCatId(p.category || 'uncategorized'),
   subCategoryId:    p.subcategory ? toSubId(p.subcategory) : null,
+  returnAllowed:    p.returnAllowed !== false,
 };
 };
 
@@ -507,12 +508,13 @@ export const AppStateProvider = ({ children }) => {
       updateOrderStatus,
       retryOrderRefund,
       markCODPaid: async (orderId) => {
-        await apiService.markCODPaid(orderId);
+        const data = await apiService.markCODPaid(orderId);
         setOrders(prev => prev.map(o =>
           (o.id === orderId || o._id === orderId)
             ? { ...o, paymentStatus: 'PAID' }
             : o
         ));
+        return data;
       },
       addRider,
       toggleRiderStatus,

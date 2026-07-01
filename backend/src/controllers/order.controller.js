@@ -116,6 +116,14 @@ function formatDeliveryAddressForCustomer(da) {
 
 const PAYMENT_MODES = ["COD", "ONLINE"];
 
+function isCustomerPaymentModeAllowed(customerPaymentMethods, paymentMode) {
+  const mode = customerPaymentMethods || "BOTH";
+  if (mode === "BOTH") return true;
+  if (mode === "COD_ONLY") return paymentMode === "COD";
+  if (mode === "ONLINE_ONLY") return paymentMode === "ONLINE";
+  return true;
+}
+
 /** Map link from storefront `/api/map/process` — sanitized client string only (no extra paid calls on server). */
 function sanitizeMapLinkFromClient(v) {
   const s = String(v ?? "").trim();
@@ -165,6 +173,13 @@ exports.placeCustomerOrder = async (req, res) => {
 
     if (!PAYMENT_MODES.includes(paymentMode)) {
       return res.status(400).json({ message: "Invalid payment mode" });
+    }
+
+    const storeSettings = await Settings.findOne({ tenantId })
+      .select("customerPaymentMethods")
+      .lean();
+    if (!isCustomerPaymentModeAllowed(storeSettings?.customerPaymentMethods, paymentMode)) {
+      return res.status(400).json({ message: "This payment method is not available for this store" });
     }
 
     const line1 = String(deliveryAddress?.line1 || "").trim();
@@ -280,6 +295,7 @@ exports.placeCustomerOrder = async (req, res) => {
         price: variant.price,
         unit: variant.label || "pcs",
         imageUrl: resolveProductImageUrl(product),
+        returnAllowed: product.returnAllowed !== false,
       });
 
       totalAmount += variant.price * item.qty;
@@ -307,6 +323,9 @@ exports.placeCustomerOrder = async (req, res) => {
     let discount = 0;
     if (settings.discountType === "PERCENTAGE" && settings.discountValue > 0) {
       discount = Math.round((subtotal * settings.discountValue) / 100);
+      if (settings.maxDiscount > 0) {
+        discount = Math.min(discount, settings.maxDiscount);
+      }
     } else if (settings.discountType === "FLAT" && settings.discountValue > 0) {
       discount = settings.discountValue;
     }
@@ -485,6 +504,11 @@ exports.getCustomerOrderHistory = async (req, res) => {
       returnEvidence: returnReq?.evidenceImage || null,
       returnStatus: returnReq?.status || null,
       adminNote: returnReq?.resolutionNote || null,
+      hasReturnableItems: (order.items || []).some((item) => item.returnAllowed !== false),
+      nonReturnableItemNames: (order.items || [])
+        .filter((item) => item.returnAllowed === false)
+        .map((item) => String(item.name || "").trim())
+        .filter(Boolean),
 
       // ✅ ADD THESE (you already store them)
       address: formatDeliveryAddressForCustomer(order.deliveryAddress),
@@ -521,6 +545,7 @@ exports.getCustomerOrderHistory = async (req, res) => {
           unit: item.unit || "pcs",
           imageUrl,
           image: imageUrl,
+          returnAllowed: item.returnAllowed !== false,
         };
       }),
     };

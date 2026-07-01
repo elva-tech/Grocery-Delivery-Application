@@ -159,10 +159,27 @@ const ReportsPage = () => {
         ? orderTotal
         : inventoryTotal;
 
-  const formatDate = (date) => {
+  const formatExportDate = (date) => {
     if (!date) return 'N/A';
     const d = new Date(date);
-    return Number.isNaN(d.getTime()) ? 'N/A' : d.toISOString().split('T')[0];
+    if (Number.isNaN(d.getTime())) return 'N/A';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const escapeCsv = (value) => {
+    const s = String(value ?? '');
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+
+  /** Excel formula string — stops auto date parse and ######## in narrow columns. */
+  const csvDate = (date) => {
+    const formatted = formatExportDate(date);
+    if (formatted === 'N/A') return escapeCsv('N/A');
+    return `"=""${formatted}"""`;
   };
 
   const exportToCSV = async () => {
@@ -181,18 +198,26 @@ const ReportsPage = () => {
               status === 'REFUND_APPROVED' || row.paymentStatus === 'REFUNDED'
                 ? `REFUNDED`
                 : status;
-            return `${formatDate(row.date)},${row.customer},${row.amount},${row.grossAmount},${displayStatus}`;
+            return `${csvDate(row.date)},${escapeCsv(row.customer)},${row.amount},${row.grossAmount},${displayStatus}`;
           })
           .join('\n');
       } else if (activeTab === 'ORDERS') {
         const allOrders = await apiService.getAllOrders({ search: searchParam });
         const normalized = allOrders.map(normalizeAdminOrderRow);
-        headers = 'Order ID,Customer,Total Amount,Status,Date\n';
+        headers = 'Order ID,Customer,Customer Location,Order Details,Total Amount,Status,Date\n';
         rows = normalized
           .map((o) => {
             const displayStatus =
               o.status?.toUpperCase() === 'DELIVERED' ? 'PAID' : o.status;
-            return `${o.id},${o.customerName || 'N/A'},${o.totalAmount || 0},${displayStatus},${formatDate(o.date)}`;
+            return [
+              escapeCsv(o.id),
+              escapeCsv(o.customerName || 'N/A'),
+              escapeCsv(o.address?.full || 'N/A'),
+              escapeCsv(o.itemsText || 'N/A'),
+              escapeCsv(o.totalAmount || 0),
+              escapeCsv(displayStatus),
+              csvDate(o.date || o.createdAt),
+            ].join(',');
           })
           .join('\n');
       } else {
@@ -209,7 +234,8 @@ const ReportsPage = () => {
           .join('\n');
       }
 
-      const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + headers + rows], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -256,9 +282,36 @@ const ReportsPage = () => {
       columns: [
         { header: 'Order ID', accessor: 'id' },
         {
+          header: 'Date',
+          accessor: 'date',
+          render: (_, row) => (
+            <span className="text-xs text-slate-600 whitespace-nowrap">
+              {formatExportDate(row.date || row.createdAt)}
+            </span>
+          ),
+        },
+        {
           header: 'Customer',
           accessor: 'customerName',
           render: (_, row) => row.customerName || row.customer || 'Unknown',
+        },
+        {
+          header: 'Customer Location',
+          accessor: 'address',
+          render: (_, row) => (
+            <span className="text-xs text-slate-600 whitespace-normal break-words max-w-xs block">
+              {row.address?.full || 'N/A'}
+            </span>
+          ),
+        },
+        {
+          header: 'Order Details',
+          accessor: 'itemsText',
+          render: (v) => (
+            <span className="text-xs text-slate-600 whitespace-normal break-words max-w-sm block">
+              {v || 'N/A'}
+            </span>
+          ),
         },
         {
           header: 'Status',
