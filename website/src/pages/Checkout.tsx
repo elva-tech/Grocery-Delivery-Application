@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, MapPin, ArrowLeft, Phone, Map, Loader2, Tag, X, CheckCircle2, Banknote, CreditCard, Gift } from 'lucide-react';
 import type { RootState } from '../store/store';
 import { logout } from '../store/slices/authSlice';
-import { useCalculateCartMutation, useGetAppSettingsQuery, isCodPaymentEnabled, isOnlinePaymentEnabled } from '../api/apiSlice';
+import { useCalculateCartMutation, useGetAppSettingsQuery, isCodPaymentEnabled, isOnlinePaymentEnabled, isExpressDeliveryChoiceEnabled } from '../api/apiSlice';
+import { formatDeliveryPrice, standardDeliveryPriceLabel } from '../utils/deliveryBilling';
 import { placeOrderApi, validateCouponApi } from '../api/ordersApi';
 import { buildDeliveryAddressPayload, formatAddressSummary } from '../utils/indiaPincode';
 import { loadRazorpay } from '../utils/loadRazorpay';
@@ -36,6 +37,8 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
     amountToFree: 0,
   });
 
+  const [deliveryType, setDeliveryType] = useState<'STANDARD' | 'EXPRESS'>('STANDARD');
+
   // Payment method
   const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
 
@@ -54,6 +57,14 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
   const { data: appSettings } = useGetAppSettingsQuery();
   const showCod = isCodPaymentEnabled(appSettings);
   const showOnline = isOnlinePaymentEnabled(appSettings);
+  const showDeliveryTypeChoice = isExpressDeliveryChoiceEnabled(appSettings);
+  const effectiveDeliveryType = showDeliveryTypeChoice ? deliveryType : 'STANDARD';
+
+  useEffect(() => {
+    if (!showDeliveryTypeChoice && deliveryType !== 'STANDARD') {
+      setDeliveryType('STANDARD');
+    }
+  }, [showDeliveryTypeChoice, deliveryType]);
 
   useEffect(() => {
     if (!appSettings) return;
@@ -64,14 +75,14 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
   useEffect(() => {
     const fetchBill = async () => {
       try {
-        const response = await getCalculation(items).unwrap();
+        const response = await getCalculation({ items, deliveryType: effectiveDeliveryType }).unwrap();
         setBill(response);
       } catch (error) {
         console.error("Backend calculation failed", error);
       }
     };
     if (items.length > 0) fetchBill();
-  }, [items, getCalculation]);
+  }, [items, effectiveDeliveryType, getCalculation]);
 
 const applyCouponCode = async (rawCode: string, opts?: { closeOffers?: boolean }) => {
   const code = rawCode.trim().toUpperCase();
@@ -131,6 +142,8 @@ const handleRemoveCoupon = () => {
 
 const couponDiscount = appliedCoupon?.discountAmount ?? 0;
 const finalTotal = bill.grandTotal - couponDiscount;
+const expressDeliveryDescription =
+  appSettings?.expressDeliveryDescription?.trim() || 'Faster delivery from the store';
 
 const deliveryBlocksPay =
   Boolean(deliveryEligibility?.checking) ||
@@ -165,6 +178,7 @@ const handlePlaceOrder = async () => {
       qty: item.quantity,
     })),
     paymentMode: paymentMethod,
+    deliveryType: effectiveDeliveryType,
     deliveryAddress: {
       ...buildDeliveryAddressPayload(address || {}),
       addressUrl: mapLinkFromEligibility,
@@ -314,25 +328,77 @@ const handlePlaceOrder = async () => {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl sticky top-10">
-              <h3 className="font-black text-sm uppercase tracking-widest text-slate-800 mb-8 text-center">Summary</h3>
-              <div className="space-y-4 mb-8 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="bg-white p-5 sm:p-6 rounded-[2rem] border border-slate-100 shadow-xl sticky top-10">
+              <h3 className="font-black text-sm uppercase tracking-widest text-slate-800 mb-4 text-center">Summary</h3>
+              <div className="space-y-3 mb-4 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
                 {items.map(item => (
-                  <div key={item.id} className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-500">{item.quantity}x {item.name}</span>
-                    <span className="text-xs font-black text-slate-800">₹{item.price * item.quantity}</span>
+                  <div key={item.id} className="flex justify-between items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500 truncate">{item.quantity}x {item.name}</span>
+                    <span className="text-xs font-black text-slate-800 shrink-0">₹{item.price * item.quantity}</span>
                   </div>
                 ))}
               </div>
               
-              <div className="border-t border-slate-100 pt-6 space-y-3 mb-8">
+              <div className="border-t border-slate-100 pt-4 space-y-2.5 mb-5">
+                {showDeliveryTypeChoice && appSettings && (
+                  <div className="pb-1">
+                    <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryType('STANDARD')}
+                        className={`rounded-lg py-2 px-2 text-center transition-all ${
+                          deliveryType === 'STANDARD'
+                            ? 'bg-white shadow-sm ring-1 ring-[#4b6f9e]/30'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        <span className={`block text-[10px] font-black uppercase tracking-wide ${deliveryType === 'STANDARD' ? 'text-[#4b6f9e]' : ''}`}>
+                          Standard
+                        </span>
+                        <span className="block text-[10px] font-bold text-slate-600 mt-0.5">
+                          {standardDeliveryPriceLabel(bill.subtotal, appSettings)}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryType('EXPRESS')}
+                        className={`rounded-lg py-2 px-2 text-center transition-all ${
+                          deliveryType === 'EXPRESS'
+                            ? 'bg-white shadow-sm ring-1 ring-indigo-200'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        <span className={`block text-[10px] font-black uppercase tracking-wide ${deliveryType === 'EXPRESS' ? 'text-indigo-600' : ''}`}>
+                          Express
+                        </span>
+                        <span className="block text-[10px] font-bold text-slate-600 mt-0.5">
+                          {formatDeliveryPrice(appSettings.expressDeliveryCharge)}
+                        </span>
+                      </button>
+                    </div>
+                    {deliveryType === 'EXPRESS' && expressDeliveryDescription && (
+                      <p
+                        className="text-[9px] text-slate-400 mt-1.5 text-center line-clamp-1 px-1"
+                        title={expressDeliveryDescription}
+                      >
+                        {expressDeliveryDescription}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="flex justify-between text-xs font-bold text-slate-400">
                   <span>Subtotal</span>
                   <span>₹{bill.subtotal}</span>
                 </div>
                 <div className="flex justify-between text-xs font-bold text-green-500">
                   <span>Delivery</span>
-                  <span>{bill.isFreeDelivery ? 'FREE' : `₹${bill.deliveryCharge}`}</span>
+                  <span>
+                    {bill.deliveryCharge > 0
+                      ? `₹${bill.deliveryCharge}`
+                      : bill.isFreeDelivery
+                        ? 'FREE'
+                        : '₹0'}
+                  </span>
                 </div>
                 {bill.discount > 0 && (
                   <div className="flex justify-between text-xs font-bold text-emerald-500">
@@ -346,14 +412,14 @@ const handlePlaceOrder = async () => {
                     <span>-₹{couponDiscount}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-baseline pt-4 border-t border-slate-100">
+                <div className="flex justify-between items-baseline pt-3 border-t border-slate-100">
                   <span className="font-black text-slate-900 uppercase text-xs">Total</span>
-                  <span className="text-3xl font-black text-slate-900 tracking-tighter">₹{finalTotal}</span>
+                  <span className="text-2xl font-black text-slate-900 tracking-tighter">₹{finalTotal}</span>
                 </div>
               </div>
 
               {/* Coupon input */}
-              <div className="mb-6">
+              <div className="mb-4">
                 {appliedCoupon ? (
                   <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -398,7 +464,7 @@ const handlePlaceOrder = async () => {
                       <button
                         type="button"
                         onClick={() => void openOffersSheet()}
-                        className="mt-3 w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-purple-50 hover:border-purple-200 transition-colors text-left"
+                        className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-purple-50 hover:border-purple-200 transition-colors text-left"
                       >
                         <Gift size={16} className="text-purple-600 shrink-0" />
                         <span className="text-xs font-black text-slate-700 flex-1">View available offers</span>
@@ -411,12 +477,12 @@ const handlePlaceOrder = async () => {
 
               {/* Payment Method Selector */}
               {(showCod || showOnline) && (
-              <div className="mb-6 space-y-2">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Payment Method</p>
+              <div className="mb-4 space-y-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Payment Method</p>
                 {showOnline && (
                 <button
                   onClick={() => setPaymentMethod('ONLINE')}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all ${
                     paymentMethod === 'ONLINE'
                       ? 'border-[#4b6f9e] bg-blue-50'
                       : 'border-slate-100 bg-white hover:border-slate-200'
@@ -434,7 +500,7 @@ const handlePlaceOrder = async () => {
                 {showCod && (
                 <button
                   onClick={() => setPaymentMethod('COD')}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all ${
                     paymentMethod === 'COD'
                       ? 'border-emerald-500 bg-emerald-50'
                       : 'border-slate-100 bg-white hover:border-slate-200'
@@ -458,7 +524,7 @@ const handlePlaceOrder = async () => {
                   items.length === 0 ||
                   deliveryBlocksPay
                 } 
-                className={`w-full text-white h-16 rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:cursor-not-allowed ${
+                className={`w-full text-white h-14 rounded-xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:bg-slate-200 disabled:cursor-not-allowed ${
                   paymentMethod === 'COD'
                     ? 'bg-emerald-600 hover:bg-emerald-700'
                     : 'bg-[#1e293b] hover:bg-[#4b6f9e]'

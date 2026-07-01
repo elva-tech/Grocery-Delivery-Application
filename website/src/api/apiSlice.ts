@@ -1,5 +1,10 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { API_BASE_URL, getTenantId } from '../config';
+import {
+  amountToFreeDelivery,
+  isExpressDeliveryChoiceEnabled as isExpressDeliveryChoiceEnabledUtil,
+  resolveDeliveryFee,
+} from '../utils/deliveryBilling';
 
 /* -------- helpers -------- */
 const toCatId = (name: string) =>
@@ -99,6 +104,10 @@ export interface AppSettings {
   allowReportIssue: boolean;
   allowOrderCancellation: boolean;
   customerPaymentMethods?: 'BOTH' | 'COD_ONLY' | 'ONLINE_ONLY';
+  deliveryCharge: number;
+  freeDeliveryAbove: number;
+  expressDeliveryCharge: number;
+  expressDeliveryDescription: string;
 }
 
 export function isCodPaymentEnabled(settings?: Pick<AppSettings, 'customerPaymentMethods'> | null) {
@@ -109,6 +118,13 @@ export function isCodPaymentEnabled(settings?: Pick<AppSettings, 'customerPaymen
 export function isOnlinePaymentEnabled(settings?: Pick<AppSettings, 'customerPaymentMethods'> | null) {
   const mode = settings?.customerPaymentMethods ?? 'BOTH';
   return mode === 'BOTH' || mode === 'ONLINE_ONLY';
+}
+
+/** Show Standard vs Express choice only when both delivery charges are configured. */
+export function isExpressDeliveryChoiceEnabled(
+  settings?: Pick<AppSettings, 'deliveryCharge' | 'expressDeliveryCharge'> | null,
+) {
+  return isExpressDeliveryChoiceEnabledUtil(settings);
 }
 
 export interface ProductVariant {
@@ -173,6 +189,10 @@ export const apiSlice = createApi({
               allowReportIssue: s.allowReportIssue ?? true,
               allowOrderCancellation: s.allowOrderCancellation ?? true,
               customerPaymentMethods: s.customerPaymentMethods ?? 'BOTH',
+              deliveryCharge: Number(s.deliveryCharge ?? 40),
+              freeDeliveryAbove: Number(s.freeDeliveryAbove ?? 500),
+              expressDeliveryCharge: Number(s.expressDeliveryCharge ?? 0),
+              expressDeliveryDescription: String(s.expressDeliveryDescription ?? ''),
             },
           };
         } catch {
@@ -182,6 +202,10 @@ export const apiSlice = createApi({
               allowReportIssue: true,
               allowOrderCancellation: true,
               customerPaymentMethods: 'BOTH' as const,
+              deliveryCharge: 40,
+              freeDeliveryAbove: 500,
+              expressDeliveryCharge: 0,
+              expressDeliveryDescription: '',
             },
           };
         }
@@ -328,9 +352,11 @@ export const apiSlice = createApi({
       amountToFree: number;
       discount: number;
       saved: number;
-    }, any[]>({
-      queryFn: async (items) => {
+    }, any[] | { items: any[]; deliveryType?: 'STANDARD' | 'EXPRESS' }>({
+      queryFn: async (arg) => {
         try {
+          const items = Array.isArray(arg) ? arg : arg.items;
+          const deliveryType = Array.isArray(arg) ? 'STANDARD' : (arg.deliveryType ?? 'STANDARD');
           const subtotal = items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
 
           // Fetch live settings — no hardcoded fallbacks; fail loudly if unavailable
@@ -340,16 +366,22 @@ export const apiSlice = createApi({
           if (!settingsRes.ok) throw new Error('Failed to fetch store settings');
           const s = await settingsRes.json();
 
-          const deliveryCharge: number = s.deliveryCharge;
-          const freeDeliveryAbove: number = s.freeDeliveryAbove;
+          const billingSettings = {
+            deliveryCharge: Number(s.deliveryCharge ?? 0),
+            expressDeliveryCharge: Number(s.expressDeliveryCharge ?? 0),
+            freeDeliveryAbove: Number(s.freeDeliveryAbove ?? 0),
+          };
           const discountType: string = s.discountType ?? 'NONE';
           const discountValue: number = s.discountValue ?? 0;
           const maxDiscount: number = s.maxDiscount ?? 0;
           let discount = 0;
 
-          const isFreeDelivery = subtotal >= freeDeliveryAbove;
-          const finalDelivery = (subtotal === 0 || isFreeDelivery) ? 0 : deliveryCharge;
-          const amountToFree = isFreeDelivery ? 0 : freeDeliveryAbove - subtotal;
+          const { deliveryFee: finalDelivery, isFreeDelivery } = resolveDeliveryFee(
+            subtotal,
+            billingSettings,
+            deliveryType,
+          );
+          const amountToFree = amountToFreeDelivery(subtotal, billingSettings.freeDeliveryAbove);
 
           if (discountType === 'PERCENTAGE' && discountValue > 0) {
             discount = Math.round((subtotal * discountValue) / 100);
@@ -362,7 +394,8 @@ export const apiSlice = createApi({
           discount = Math.min(discount, subtotal);
 
           const grandTotal = subtotal + finalDelivery - discount;
-          const saved = (isFreeDelivery ? deliveryCharge : 0) + discount;
+          const saved =
+            (isFreeDelivery ? billingSettings.deliveryCharge : 0) + discount;
 
           return {
             data: {

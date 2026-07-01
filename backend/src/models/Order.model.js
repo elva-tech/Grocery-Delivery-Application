@@ -52,6 +52,12 @@ const orderSchema = new mongoose.Schema(
       default: 0,
     },
 
+    deliveryType: {
+      type: String,
+      enum: ["STANDARD", "EXPRESS"],
+      default: "STANDARD",
+    },
+
     discount: {
       type: Number,
       default: 0,

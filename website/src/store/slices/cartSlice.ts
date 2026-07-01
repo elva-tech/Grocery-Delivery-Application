@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { clearPersistedCart, loadPersistedCart } from '../../utils/cartStorage';
 
 export interface CartItem {
   id: string;
@@ -17,15 +18,25 @@ interface CartState {
   totalAmount: number;
 }
 
+const persisted = loadPersistedCart();
+
 const initialState: CartState = {
-  items: [],
-  totalAmount: 0,
+  items: persisted.items,
+  totalAmount: persisted.totalAmount,
 };
 
 const cartSlice = createSlice({
   name: 'cart',
   initialState,
   reducers: {
+    hydrateCart: (state, action: PayloadAction<{ items?: CartItem[]; totalAmount?: number }>) => {
+      const items = Array.isArray(action.payload.items) ? action.payload.items : [];
+      state.items = items;
+      state.totalAmount =
+        typeof action.payload.totalAmount === 'number'
+          ? action.payload.totalAmount
+          : items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    },
     addToCart: (state, action: PayloadAction<CartItem>) => {
       const existingItem = state.items.find(item => item.id === action.payload.id);
       if (existingItem) {
@@ -49,9 +60,10 @@ const cartSlice = createSlice({
     clearCart: (state) => {
       state.items = [];
       state.totalAmount = 0;
+      clearPersistedCart();
     },
   },
 });
 
-export const { addToCart, removeFromCart, clearCart } = cartSlice.actions;
+export const { hydrateCart, addToCart, removeFromCart, clearCart } = cartSlice.actions;
 export default cartSlice.reducer;

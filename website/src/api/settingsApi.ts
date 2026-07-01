@@ -1,5 +1,10 @@
 import axios from "axios";
 import { API_BASE_URL, getTenantId } from "../config";
+import {
+  amountToFreeDelivery,
+  qualifiesForFreeStandardDelivery,
+  standardDeliveryFee,
+} from "../utils/deliveryBilling";
 
 const SETTINGS_URL = `${API_BASE_URL}/api/settings`;
 
@@ -39,9 +44,13 @@ export function calculateBill(
   settings: AppSettings
 ) {
   const subtotal = items.reduce((acc, i) => acc + i.price * i.quantity, 0);
-  const isFreeDelivery = subtotal >= settings.freeDeliveryAbove;
-  const deliveryCharge = isFreeDelivery ? 0 : settings.deliveryCharge;
-  const amountToFree = isFreeDelivery ? 0 : settings.freeDeliveryAbove - subtotal;
+  const deliveryCharge = standardDeliveryFee(
+    subtotal,
+    settings.deliveryCharge,
+    settings.freeDeliveryAbove,
+  );
+  const isFreeDelivery = qualifiesForFreeStandardDelivery(subtotal, settings.freeDeliveryAbove);
+  const amountToFree = amountToFreeDelivery(subtotal, settings.freeDeliveryAbove);
 
   let discount = 0;
   if (settings.discountType === "PERCENTAGE" && settings.discountValue > 0) {

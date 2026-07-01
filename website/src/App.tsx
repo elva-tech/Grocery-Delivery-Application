@@ -26,6 +26,7 @@ import type { RootState } from './store/store';
 import { BYPASS_STORE_CLOSED } from './config';
 import { getTenantId } from './utils/getTenantId';
 import { clearCart } from './store/slices/cartSlice';
+import { clearPersistedCart } from './utils/cartStorage';
 import { AlertCircle, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import Pagination from './components/ui/Pagination';
 import confetti from 'canvas-confetti';
@@ -53,6 +54,7 @@ import { parseAddressLatLng } from './utils/coordinates';
 import { storeNextChangeMessage } from './utils/storeHours';
 
 const TENANT_SCOPE_KEY = 'website_cart_tenant_scope';
+const CHECKOUT_ADDRESS_KEY = 'website_checkout_address';
 
 function DeliveryEligibilityAlerts(props: {
   deliveryEligibility: {
@@ -109,6 +111,8 @@ const App = () => {
 
   const [selectedAddress, setSelectedAddress] = useState<any>(() => {
     try {
+      const draft = sessionStorage.getItem(CHECKOUT_ADDRESS_KEY);
+      if (draft) return JSON.parse(draft);
       const saved = JSON.parse(localStorage.getItem('user_addresses') || '[]');
       return saved[0] || null;
     } catch { return null; }
@@ -158,6 +162,7 @@ const App = () => {
       const prev = sessionStorage.getItem(TENANT_SCOPE_KEY);
       if (prev && prev !== t) {
         dispatch(clearCart());
+        clearPersistedCart();
         invalidateProductsCache();
         dispatch(apiSlice.util.resetApiState());
       }
@@ -269,6 +274,11 @@ const App = () => {
 
   const applyDeliveryAddress = useCallback((addr: Record<string, unknown>) => {
     setSelectedAddress(addr);
+    try {
+      sessionStorage.setItem(CHECKOUT_ADDRESS_KEY, JSON.stringify(addr));
+    } catch {
+      /* private mode */
+    }
     try {
       const raw = localStorage.getItem('user_addresses');
       const parsed = JSON.parse(raw || '[]');

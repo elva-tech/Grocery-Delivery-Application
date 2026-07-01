@@ -1,5 +1,11 @@
 import axios from "axios";
 import { API_BASE_URL, getTenantId } from "../config";
+import {
+  amountToFreeDelivery,
+  freeDeliveryProgress,
+  qualifiesForFreeStandardDelivery,
+  resolveDeliveryFee,
+} from "../utils/deliveryBilling";
 
 const API_URL = `${API_BASE_URL}/api/orders`;
 const COUPONS_URL = `${API_BASE_URL}/api/coupons`;
@@ -14,6 +20,7 @@ export type CartBillingSettings = {
   discountType: string;
   discountValue: number;
   maxDiscount: number;
+  expressDeliveryCharge: number;
 };
 
 let cachedCartBillingSettings: CartBillingSettings | null = null;
@@ -25,6 +32,7 @@ export const DEFAULT_CART_BILLING_SETTINGS: CartBillingSettings = {
   discountType: 'NONE',
   discountValue: 0,
   maxDiscount: 0,
+  expressDeliveryCharge: 0,
 };
 
 export async function getCartBillingSettings(): Promise<CartBillingSettings> {
@@ -37,11 +45,12 @@ export async function getCartBillingSettings(): Promise<CartBillingSettings> {
       .then((settingsRes) => {
         const s = settingsRes.data;
         cachedCartBillingSettings = {
-          deliveryCharge: s.deliveryCharge,
-          freeDeliveryAbove: s.freeDeliveryAbove,
+          deliveryCharge: Number(s.deliveryCharge ?? 0),
+          freeDeliveryAbove: Number(s.freeDeliveryAbove ?? 0),
           discountType: s.discountType ?? 'NONE',
           discountValue: s.discountValue ?? 0,
           maxDiscount: s.maxDiscount ?? 0,
+          expressDeliveryCharge: Number(s.expressDeliveryCharge ?? 0),
         };
         return cachedCartBillingSettings;
       })
@@ -59,10 +68,13 @@ export async function getCartBillingSettings(): Promise<CartBillingSettings> {
 export function computeCartBill(items: any[], s: CartBillingSettings) {
   const subtotal = items.reduce((acc: number, item: any) => acc + item.price * item.quantity, 0);
 
-  const isFreeDelivery = subtotal >= s.freeDeliveryAbove;
-  const finalDelivery = subtotal === 0 || isFreeDelivery ? 0 : s.deliveryCharge;
-  const amountToFree = isFreeDelivery ? 0 : s.freeDeliveryAbove - subtotal;
-  const progress = Math.min(subtotal / s.freeDeliveryAbove, 1);
+  const { deliveryFee: finalDelivery, isFreeDelivery } = resolveDeliveryFee(subtotal, {
+    deliveryCharge: s.deliveryCharge,
+    expressDeliveryCharge: s.expressDeliveryCharge,
+    freeDeliveryAbove: s.freeDeliveryAbove,
+  });
+  const amountToFree = amountToFreeDelivery(subtotal, s.freeDeliveryAbove);
+  const progress = freeDeliveryProgress(subtotal, s.freeDeliveryAbove);
 
   let discount = 0;
   if (s.discountType === 'PERCENTAGE' && s.discountValue > 0) {
@@ -85,7 +97,7 @@ export function computeCartBill(items: any[], s: CartBillingSettings) {
     deliveryCharge: finalDelivery,
     grandTotal,
     discount,
-    saved: (isFreeDelivery ? s.deliveryCharge : 0) + discount,
+    saved: (qualifiesForFreeStandardDelivery(subtotal, s.freeDeliveryAbove) ? s.deliveryCharge : 0) + discount,
   };
 }
 
@@ -265,6 +277,7 @@ export const placeOrderApi = async (payload: {
     addressUrl?: string;
   };
   couponCode?: string | null;
+  deliveryType?: 'STANDARD' | 'EXPRESS';
 }) => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('Unauthorized');
