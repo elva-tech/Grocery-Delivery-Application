@@ -50,7 +50,7 @@ export function loadPersistedCart(): { items: CartItem[]; totalAmount: number } 
   }
 }
 
-export function savePersistedCart(items: CartItem[], totalAmount: number): void {
+export function savePersistedCart(items: CartItem[]): void {
   try {
     const payload: PersistedCart = {
       tenantId: getTenantId(),

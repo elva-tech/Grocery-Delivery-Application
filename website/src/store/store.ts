@@ -20,7 +20,7 @@ store.subscribe(() => {
   const snapshot = JSON.stringify(cart);
   if (snapshot === lastCartSnapshot) return;
   lastCartSnapshot = snapshot;
-  savePersistedCart(cart.items, cart.totalAmount);
+  savePersistedCart(cart.items);
 });
 
 // These MUST be exported for Orders.tsx to work
