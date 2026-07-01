@@ -116,3 +116,5 @@ Automated workload tracking ensures accurate delivery assignment:
 ## ✅ Design Philosophy
 
 Enandi Admin is built for **speed, scale, and safety** — prioritizing admin efficiency, predictable data relationships, and a UI that stays clean even as the business grows.
+
+updating Banners
