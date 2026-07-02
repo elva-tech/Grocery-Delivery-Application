@@ -10,6 +10,7 @@ import { sendOtp, verifyOtp } from "@/api/authApi";
 import { showToast } from "@/utils/toast";
 import { getActiveTenantId } from "@/src/utils/tenantStorage";
 import { MOBILE_COPY } from "@/src/constants/copy";
+import { OTP_RESEND_COOLDOWN_SECONDS } from "@/src/config/constants";
 
 function splitOtpDigits(value: string): string[] {
   const digits = value.replace(/[^0-9]/g, "").slice(0, 6).split("");
@@ -27,7 +28,7 @@ export default function OTP() {
   const autoSend = params.autoSend === "1";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [timer, setTimer] = useState(30);
+  const [timer, setTimer] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(autoSend);
   const inputs = useRef<(TextInput | null)[]>([]);
@@ -43,7 +44,7 @@ export default function OTP() {
       setSendingOtp(true);
       try {
         await sendOtp(phone);
-        setTimer(30);
+        setTimer(OTP_RESEND_COOLDOWN_SECONDS);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to send OTP";
         showToast("error", "Error", msg);
@@ -187,7 +188,7 @@ export default function OTP() {
     try {
       await sendOtp(phone as string, { resend: true });
       setOtp(["", "", "", "", "", ""]);
-      setTimer(30);
+      setTimer(OTP_RESEND_COOLDOWN_SECONDS);
       verifySucceeded.current = false;
       inputs.current[0]?.focus();
     } catch {

@@ -14,3 +14,6 @@ export const BYPASS_STORE_CLOSED: boolean =
 export const TENANT_ID: string = getTenantId();
 
 export { getTenantId };
+
+/** Seconds before "Resend OTP" is enabled after a successful send. */
+export const OTP_RESEND_COOLDOWN_SECONDS = 150;

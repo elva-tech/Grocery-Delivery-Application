@@ -36,7 +36,10 @@ export interface UpdateProfileResponse {
 /**
  * Send OTP to phone number
  */
-export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => {
+export const sendOtp = async (
+  phoneNumber: string,
+  options: { resend?: boolean } = {},
+): Promise<SendOtpResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
       method: 'POST',
@@ -48,6 +51,7 @@ export const sendOtp = async (phoneNumber: string): Promise<SendOtpResponse> => 
       body: JSON.stringify({
         phoneNumber,
         brandId: getNotifyBrandId(),
+        ...(options.resend ? { resend: true } : {}),
       }),
     });
 
