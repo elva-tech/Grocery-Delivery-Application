@@ -4,6 +4,7 @@ import { X, User, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-r
 import { setCredentials } from '../../store/slices/authSlice';
 import { sendOtp, verifyOtp } from '../../api/authApi';
 import { getTenantId } from '../../utils/getTenantId';
+import { OTP_RESEND_COOLDOWN_SECONDS } from '../../config';
 import { WEB_COPY } from '../../constants/copy';
 
 interface LoginModalProps {
@@ -19,7 +20,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [timer, setTimer] = useState(30);
+  const [timer, setTimer] = useState(0);
   const [error, setError] = useState('');
 
   const otpInputs = useRef<Array<HTMLInputElement | null>>([]);
@@ -58,6 +59,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
       const response = await sendOtp(phone);
       if (response.success) {
         setStep('otp');
+        setTimer(OTP_RESEND_COOLDOWN_SECONDS);
       } else {
         setError(response.message || 'Failed to send OTP');
       }
@@ -72,9 +74,9 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     setError('');
     setLoading(true);
     try {
-      const response = await sendOtp(phone);
+      const response = await sendOtp(phone, { resend: true });
       if (response.success) {
-        setTimer(30);
+        setTimer(OTP_RESEND_COOLDOWN_SECONDS);
         setOtp(['', '', '', '', '', '']);
       } else {
         setError(response.message || 'Failed to resend OTP');
@@ -186,7 +188,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     setPhone('');
     setOtp(['', '', '', '', '', '']);
     setError('');
-    setTimer(30);
+    setTimer(0);
   };
 
 

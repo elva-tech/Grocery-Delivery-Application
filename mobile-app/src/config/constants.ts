@@ -241,3 +241,6 @@ export const VALIDATION = {
   MIN_PASSWORD_LENGTH: 6,
   MIN_NAME_LENGTH: 2,
 };
+
+/** Seconds before "Resend OTP" is enabled after a successful send. */
+export const OTP_RESEND_COOLDOWN_SECONDS = 150;
