@@ -1,0 +1,11 @@
+{
+  "appName": "ApnaKart",
+  "tenantId": "apnakart",
+  "androidPackage": "com.elvatech.apnakart",
+  "urlScheme": "apnakart",
+  "slug": "apna-kart",
+  "notifyBrandId": "apnakart",
+  "version": "1.0.0",
+  "splashBackgroundColor": "#0B1D37",
+  "adaptiveIconBackgroundColor": "#0B1D37"
+}

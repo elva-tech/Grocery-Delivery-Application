@@ -54,6 +54,22 @@
         "EXPO_PUBLIC_TENANT_ID": "enandi",
         "EXPO_PUBLIC_NOTIFY_BRAND_ID": "enandi"
       }
+    },
+    "apnakart-preview": {
+      "extends": "generic-preview",
+      "env": {
+        "CUSTOMER": "apnakart",
+        "EXPO_PUBLIC_TENANT_ID": "apnakart",
+        "EXPO_PUBLIC_NOTIFY_BRAND_ID": "apnakart"
+      }
+    },
+    "apnakart-production": {
+      "extends": "generic-production",
+      "env": {
+        "CUSTOMER": "apnakart",
+        "EXPO_PUBLIC_TENANT_ID": "apnakart",
+        "EXPO_PUBLIC_NOTIFY_BRAND_ID": "apnakart"
+      }
     }
   }
 }
