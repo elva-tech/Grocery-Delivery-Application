@@ -4,6 +4,7 @@ const {
   notifyOutForDeliverySafe,
   notifyOrderDeliveredSafe,
 } = require("./notify.service");
+const { emitOrderUpdated } = require("../socket/orderEvents");
 
 /**
  * Validate if rider is available for order assignment
@@ -117,6 +118,8 @@ exports.assignOrderToRider = async (orderId, riderId, tenantId) => {
 
     void notifyOutForDeliverySafe(updatedOrder);
 
+    void emitOrderUpdated(tenant, updatedOrder);
+
     try {
       rider.activeOrders = (rider.activeOrders || 0) + 1;
       rider.lastOnlineAt = new Date();
@@ -161,6 +164,8 @@ exports.completeDelivery = async (riderId, orderId, tenantId, location = {}) => 
     await order.save();
 
     await notifyOrderDeliveredSafe(order);
+
+    void emitOrderUpdated(tenantId, order);
 
     // Update rider
     const rider = await Rider.findByIdAndUpdate(

@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { LogOut, X, AlertTriangle, Mail, ChevronRight, ShieldOff } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 import { useTenantBranding } from '../../context/TenantBrandingContext';
+import { primeNotificationAudio } from '../../utils/playNotificationSound';
 
 /* ── Full-page suspended screen ── */
 const SuspendedScreen = ({ superAdminEmail, onLogout }) => (
@@ -71,6 +72,21 @@ const AdminLayout = () => {
           setSuperAdminEmail(body.superAdminEmail || '');
         }
       });
+  }, []);
+
+  // Browsers block sound until the user interacts with the page once
+  useEffect(() => {
+    const prime = () => {
+      primeNotificationAudio();
+      window.removeEventListener('click', prime);
+      window.removeEventListener('keydown', prime);
+    };
+    window.addEventListener('click', prime, { once: true });
+    window.addEventListener('keydown', prime, { once: true });
+    return () => {
+      window.removeEventListener('click', prime);
+      window.removeEventListener('keydown', prime);
+    };
   }, []);
 
   const initials =

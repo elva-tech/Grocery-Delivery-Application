@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppStateProvider, useAppState } from './context/AppStateContext';
 import { ToastProvider } from './context/ToastContext';
+import { SocketProvider } from './context/SocketContext';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import AdminLayout from './components/layout/AdminLayout';
 import Login from './modules/Auth/Login';
@@ -67,11 +68,13 @@ const ReturnManagementWrapper = () => {
 function App() {
   return (
     <ToastProvider>
-      <AppStateProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AppStateProvider>
+      <SocketProvider>
+        <AppStateProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AppStateProvider>
+      </SocketProvider>
     </ToastProvider>
   );
 }
