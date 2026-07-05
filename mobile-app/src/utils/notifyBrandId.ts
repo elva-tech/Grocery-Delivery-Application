@@ -5,6 +5,7 @@ import { getActiveTenantId, getBundledTenantId } from './tenantStorage';
 const TENANT_TO_NOTIFY_BRAND: Record<string, string> = {
   sales: 'elva-sales',
   enandi: 'enandi',
+  apnakart: 'apnakart',
 };
 
 function resolveFromTenant(tenant: string): string {

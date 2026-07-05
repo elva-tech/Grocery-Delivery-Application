@@ -85,6 +85,7 @@ exports.getAllOrdersForAdmin = async (req, res) => {
     if (searchTerm) {
       const orConditions = [
         { customerName: { $regex: searchTerm, $options: "i" } },
+        { customerPhone: { $regex: searchTerm, $options: "i" } },
       ];
       if (mongoose.Types.ObjectId.isValid(searchTerm)) {
         orConditions.push({ _id: searchTerm });
@@ -115,7 +116,7 @@ exports.getAllOrdersForAdmin = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("userId", "name email"),
+        .populate("userId", "name email phoneNumber"),
       Order.countDocuments(query),
     ]);
     const totalPages = Math.max(1, Math.ceil(totalOrders / limit));

@@ -33,6 +33,24 @@ const STATUS_FILTER_OPTIONS = [
   { value: ORDER_STATUS.CANCELLED, label: 'Cancelled' },
 ];
 
+const renderCustomerPhone = (phone) => {
+  const value = String(phone || '').trim();
+  if (!value) {
+    return <span className="text-[10px] text-gray-400 font-semibold">Not available</span>;
+  }
+  const tel = value.replace(/\s+/g, '');
+  return (
+    <a
+      href={`tel:${tel}`}
+      className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900"
+      title={`Call ${value}`}
+    >
+      <Phone size={13} className="shrink-0" />
+      {value}
+    </a>
+  );
+};
+
 const OrderList = () => {
   const { showToast } = useToast();
   const {
@@ -273,6 +291,10 @@ const OrderList = () => {
   const columns = [
     { header: 'Order ID', accessor: 'id' },
     { header: 'Customer', render: (_, row) => row.customerName || row.customer || 'Guest User' },
+    {
+      header: 'Phone',
+      render: (_, row) => renderCustomerPhone(row.customerPhone),
+    },
     {
       header: 'Address',
       render: (_, row) => {
@@ -765,6 +787,16 @@ const OrderList = () => {
                   <div>
                     <p className="text-[10px] uppercase font-bold text-gray-400">Customer Name</p>
                     <p className="font-bold text-slate-800 text-lg">{viewingOrder.customerName || viewingOrder.customer}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-2xl flex items-center justify-center"><Smartphone size={24} /></div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400">Customer Phone</p>
+                    <div className="font-bold text-slate-800 text-lg">
+                      {renderCustomerPhone(viewingOrder.customerPhone)}
+                    </div>
                   </div>
                 </div>
 

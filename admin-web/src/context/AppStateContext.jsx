@@ -108,6 +108,7 @@ export function normalizeAdminOrderRow(o) {
     assignment: o.riderId?.name || o.riderName || 'Pending',
     customer: o.customerName || o.userId?.name || 'Guest User',
     customerName: o.customerName || o.userId?.name || 'Guest User',
+    customerPhone: String(o.customerPhone || o.userId?.phoneNumber || '').trim(),
     address: {
       full: formatDeliveryAddressSummary(da),
       addressUrl: typeof da?.addressUrl === 'string' ? da.addressUrl.trim() : '',

@@ -64,6 +64,11 @@ module.exports = () => {
     customer?.config.iosBundleIdentifier || androidPackage;
   const tenantId = customer?.config.tenantId || customer?.id || null;
   const notifyBrandId = customer?.config.notifyBrandId || null;
+  const splashBackgroundColor =
+    customer?.config.splashBackgroundColor || base.splash?.backgroundColor;
+  const adaptiveIconBackgroundColor =
+    customer?.config.adaptiveIconBackgroundColor ||
+    base.android?.adaptiveIcon?.backgroundColor;
   const easProjectId =
     customer?.config.easProjectId || base.extra?.eas?.projectId || EAS_PROJECT_ID;
 
@@ -90,6 +95,7 @@ module.exports = () => {
       splash: {
         ...base.splash,
         image: splashIcon,
+        backgroundColor: splashBackgroundColor,
       },
       ios: {
         ...base.ios,
@@ -97,6 +103,7 @@ module.exports = () => {
         splash: {
           ...base.ios?.splash,
           image: splashIcon,
+          backgroundColor: splashBackgroundColor,
         },
       },
       android: {
@@ -106,10 +113,12 @@ module.exports = () => {
         adaptiveIcon: {
           ...base.android?.adaptiveIcon,
           foregroundImage: adaptiveIcon,
+          backgroundColor: adaptiveIconBackgroundColor,
         },
         splash: {
           ...base.android?.splash,
           image: splashIcon,
+          backgroundColor: splashBackgroundColor,
         },
       },
       web: {
@@ -122,7 +131,11 @@ module.exports = () => {
           plugin[0] === 'expo-splash-screen' &&
           plugin[1]
         ) {
-          return [plugin[0], { ...plugin[1], image: splashIcon }];
+          return [plugin[0], {
+            ...plugin[1],
+            image: splashIcon,
+            backgroundColor: splashBackgroundColor,
+          }];
         }
         return plugin;
       }),
