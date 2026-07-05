@@ -1,7 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppState, normalizeAdminOrderRow } from '../../context/AppStateContext';
 import { useToast } from '../../context/ToastContext';
+import { useSocket } from '../../hooks/useSocket';
 import { apiService } from '../../services/apiService';
+import { dashboardService } from '../../services/dashboardApi';
+import { playNewOrderSound } from '../../utils/playNotificationSound';
 import DataTable from '../../components/shared/DataTable';
 import Pagination from '../../components/shared/Pagination';
 import { ORDER_STATUS } from '../../config/constants';
@@ -51,8 +54,55 @@ const renderCustomerPhone = (phone) => {
   );
 };
 
+/** Returns true when a socket order belongs in the current filtered list. */
+function orderMatchesListFilters(order, filters) {
+  const status = String(order.status ?? order.orderStatus ?? '').toUpperCase();
+  const {
+    statusFilter,
+    debouncedSearch,
+    dateFrom,
+    dateTo,
+    ratingFilter,
+  } = filters;
+
+  if (statusFilter !== 'ALL' && status !== statusFilter) return false;
+
+  const q = debouncedSearch.trim().toLowerCase();
+  if (q) {
+    const idMatch = String(order.id ?? order._id ?? '').toLowerCase().includes(q);
+    const nameMatch = String(order.customerName || order.customer || '')
+      .toLowerCase()
+      .includes(q);
+    if (!idMatch && !nameMatch) return false;
+  }
+
+  if (dateFrom || dateTo) {
+    const created = new Date(order.date || order.createdAt);
+    if (!Number.isNaN(created.getTime())) {
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        from.setHours(0, 0, 0, 0);
+        if (created < from) return false;
+      }
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        if (created > to) return false;
+      }
+    }
+  }
+
+  if (ratingFilter === 'RATED' && !order.rating?.value) return false;
+  if (ratingFilter === 'LOW' && (!order.rating?.value || order.rating.value > 2)) {
+    return false;
+  }
+
+  return true;
+}
+
 const OrderList = () => {
   const { showToast } = useToast();
+  const { subscribe, onReconnect, isConnected, connectionError } = useSocket();
   const {
     riders,
     ridersLoading,
@@ -83,7 +133,12 @@ const OrderList = () => {
   const [pageSize, setPageSize] = useState(25);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [highlightedIds, setHighlightedIds] = useState(() => new Set());
   const listRequestRef = useRef(0);
+  const highlightTimersRef = useRef(new Map());
+  /** Prevents duplicate socket deliveries from incrementing totals twice */
+  const processedNewOrderIdsRef = useRef(new Set());
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
@@ -124,9 +179,156 @@ const OrderList = () => {
     }
   }, [currentPage, pageSize, statusFilter, debouncedSearch, dateFrom, dateTo, ratingFilter]);
 
+  const loadPendingCount = useCallback(async () => {
+    try {
+      const data = await dashboardService.getPendingOrders();
+      setPendingCount(data.pendingOrders ?? 0);
+    } catch {
+      // Non-blocking — counter still updates via socket events
+    }
+  }, []);
+
+  const highlightOrderRow = useCallback((orderId) => {
+    const id = String(orderId);
+    setHighlightedIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+
+    const existing = highlightTimersRef.current.get(id);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      setHighlightedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      highlightTimersRef.current.delete(id);
+    }, 5000);
+
+    highlightTimersRef.current.set(id, timer);
+  }, []);
+
   useEffect(() => {
     loadOrders();
-  }, [loadOrders]);
+    loadPendingCount();
+  }, [loadOrders, loadPendingCount]);
+
+  // Cleanup highlight timers on unmount
+  useEffect(() => {
+    const timers = highlightTimersRef.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
+  // Real-time: new orders and status updates
+  useEffect(() => {
+    const filterSnapshot = () => ({
+      statusFilter,
+      debouncedSearch,
+      dateFrom,
+      dateTo,
+      ratingFilter,
+    });
+
+    const handleNewOrder = (rawOrder) => {
+      const normalized = normalizeAdminOrderRow(rawOrder);
+      const orderId = normalized.id;
+
+      // Same event can reach two listeners briefly (re-subscribe on connect) — process once
+      if (processedNewOrderIdsRef.current.has(orderId)) return;
+      processedNewOrderIdsRef.current.add(orderId);
+
+      showToast('success', 'New Order Received');
+      playNewOrderSound();
+      highlightOrderRow(orderId);
+
+      if (normalized.status === ORDER_STATUS.PLACED) {
+        setPendingCount((count) => count + 1);
+      }
+
+      setTotalOrders((total) => total + 1);
+
+      setOrderRows((prev) => {
+        if (prev.some((o) => o.id === orderId)) return prev;
+        if (currentPage !== 1) return prev;
+        if (!orderMatchesListFilters(normalized, filterSnapshot())) return prev;
+        return [normalized, ...prev].slice(0, pageSize);
+      });
+    };
+
+    const handleOrderUpdated = (rawOrder) => {
+      const normalized = normalizeAdminOrderRow(rawOrder);
+      const orderId = normalized.id;
+
+      setOrderRows((prev) => {
+        const idx = prev.findIndex((o) => o.id === orderId);
+        if (idx === -1) return prev;
+
+        const previous = prev[idx];
+        const prevStatus = String(previous.status ?? previous.orderStatus ?? '').toUpperCase();
+        const nextStatus = normalized.status;
+
+        if (prevStatus === ORDER_STATUS.PLACED && nextStatus !== ORDER_STATUS.PLACED) {
+          setPendingCount((count) => Math.max(0, count - 1));
+        } else if (prevStatus !== ORDER_STATUS.PLACED && nextStatus === ORDER_STATUS.PLACED) {
+          setPendingCount((count) => count + 1);
+        }
+
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...normalized };
+        return next;
+      });
+
+      setViewingOrder((prev) => {
+        if (!prev || prev.id !== orderId) return prev;
+        return { ...prev, ...normalized };
+      });
+    };
+
+    const unsubNew = subscribe('new-order', handleNewOrder);
+    const unsubUpdated = subscribe('order-updated', handleOrderUpdated);
+
+    return () => {
+      unsubNew();
+      unsubUpdated();
+    };
+  }, [
+    subscribe,
+    showToast,
+    highlightOrderRow,
+    currentPage,
+    pageSize,
+    statusFilter,
+    debouncedSearch,
+    dateFrom,
+    dateTo,
+    ratingFilter,
+  ]);
+
+  // After reconnect, resync via REST to avoid missing events while offline
+  useEffect(() => {
+    return onReconnect(() => {
+      loadOrders();
+      loadPendingCount();
+      refreshOrders({ silent: true });
+    });
+  }, [onReconnect, loadOrders, loadPendingCount, refreshOrders]);
+
+  // Sync once when socket first connects (covers any gap before listeners were live)
+  useEffect(() => {
+    const onSocketReady = () => {
+      loadOrders();
+      loadPendingCount();
+      refreshOrders({ silent: true });
+    };
+    window.addEventListener('admin-socket-connected', onSocketReady);
+    return () => window.removeEventListener('admin-socket-connected', onSocketReady);
+  }, [loadOrders, loadPendingCount, refreshOrders]);
 
   useEffect(() => {
     if (selectedOrderForAssign) {
@@ -415,6 +617,31 @@ const OrderList = () => {
               {totalOrders} order{totalOrders !== 1 ? 's' : ''}
               {hasActiveFilters && <span className="text-emerald-600"> (filtered)</span>}
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+                  Pending orders
+                </span>
+                <span className="min-w-[1.5rem] text-center px-2 py-0.5 rounded-lg bg-amber-500 text-white text-xs font-black">
+                  {pendingCount}
+                </span>
+              </div>
+              <div
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${
+                  isConnected
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}
+                title={connectionError || (isConnected ? 'Live updates active' : 'Reconnecting…')}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                  }`}
+                />
+                {isConnected ? 'Live' : 'Offline'}
+              </div>
+            </div>
           </div>
           {hasActiveFilters && (
             <button
@@ -560,6 +787,11 @@ const OrderList = () => {
     <DataTable
         columns={columns}
         data={orderRows}
+        getRowClassName={(row) =>
+          highlightedIds.has(String(row.id))
+            ? 'bg-emerald-50 ring-2 ring-emerald-300 ring-inset animate-pulse'
+            : ''
+        }
         actions={(row) => {
           const status = row.status?.toUpperCase();
           return (

@@ -19,6 +19,7 @@ const {
   netRevenueAddFieldsStage,
   getOrderNetRevenue,
 } = require("../utils/orderRevenue");
+const { emitOrderUpdated } = require("../socket/orderEvents");
 
 const allowedStatuses = [
   "PLACED",
@@ -263,6 +264,9 @@ exports.updateOrderStatus = async (req, res) => {
     } else if (status === "DELIVERED") {
       await notifyOrderDeliveredSafe(refreshedOrder || order);
     }
+
+    // Real-time: push status change to tenant admin room
+    void emitOrderUpdated(req.user.tenantId, refreshedOrder || order);
 
     const response = {
       success: true,

@@ -1,6 +1,6 @@
 import React from 'react';
 
-const DataTable = ({ columns, data, actions }) => {
+const DataTable = ({ columns, data, actions, getRowClassName }) => {
   return (
     <div className="overflow-x-auto bg-white rounded-xl shadow-sm border border-gray-200">
       <table className="w-full text-left border-collapse">
@@ -26,7 +26,10 @@ const DataTable = ({ columns, data, actions }) => {
             const rowKey = row.id || `row-${rowIndex}`;
             
             return (
-              <tr key={rowKey} className="hover:bg-gray-50 transition-colors">
+              <tr
+                key={rowKey}
+                className={`hover:bg-gray-50 transition-colors ${getRowClassName?.(row) || ''}`}
+              >
                 {columns.map((col, colIndex) => {
                   const cellValue = row[col.accessor];
                   

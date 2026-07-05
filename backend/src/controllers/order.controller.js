@@ -29,6 +29,7 @@ const {
   streamGeneratedInvoicePdf,
 } = require("../services/invoice.service");
 const { notifyOrderPlacedSafe, notifyOrderDeliveredSafe } = require("../services/notify.service");
+const { emitNewOrder, emitOrderUpdated } = require("../socket/orderEvents");
 
 function isInvoiceAssetPdf(invoiceAsset) {
   if (!invoiceAsset || !invoiceAsset.imageUrl) return false;
@@ -471,6 +472,9 @@ exports.placeCustomerOrder = async (req, res) => {
       void notifyOrderPlacedSafe(order);
     }
 
+    // Real-time: notify tenant admins without page refresh
+    void emitNewOrder(tenantId, order);
+
     res.status(201).json({
       message: "Order placed successfully",
       orderId: order._id,
@@ -650,6 +654,8 @@ exports.markOrderDelivered = async (req, res) => {
     await order.save();
 
     await notifyOrderDeliveredSafe(order);
+
+    void emitOrderUpdated(tenantId, order);
 
     res.status(200).json({
       message: "Order delivered successfully",
@@ -892,6 +898,8 @@ exports.cancelOrder = async (req, res) => {
     await order.save();
 
     const refreshedOrder = await Order.findById(order._id);
+
+    void emitOrderUpdated(tenantId, refreshedOrder || order);
 
     // Reverse billing usage — best-effort, never blocks cancellation
     try {

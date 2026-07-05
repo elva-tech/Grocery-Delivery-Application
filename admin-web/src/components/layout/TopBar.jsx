@@ -11,7 +11,7 @@ const GlobalNotification = () => {
   const navigate = useNavigate();
 
   const lowStockItems = products.filter(p => p.stock < 10);
-  const newOrders = orders.filter(o => o.status === 'Placed');
+  const newOrders = orders.filter((o) => o.status === 'PLACED' || o.orderStatus === 'PLACED');
   const pendingRefunds = appSettings.allowRefunds
     ? returns.filter(isPendingReturnRequest)
     : [];

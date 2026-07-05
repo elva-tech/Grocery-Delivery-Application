@@ -8,6 +8,7 @@ import {
 import { apiService } from '../services/apiService';
 import { formatDeliveryAddressSummary } from '../utils/deliveryAddress';
 import { useToast } from './ToastContext';
+import { useSocket } from '../hooks/useSocket';
 
 // ── helpers to normalise backend category/subcategory strings into stable IDs ──
 const toCatId = s =>
@@ -150,6 +151,7 @@ function normalizeReturnRow(r) {
 
 export const AppStateProvider = ({ children }) => {
   const { showToast } = useToast();
+  const { subscribe, isConnected } = useSocket();
 
   /* ---------- SETTINGS ---------- */
   const [appSettings, setAppSettings] = useState(() => {
@@ -306,14 +308,50 @@ export const AppStateProvider = ({ children }) => {
     fetchOrders({ silent: true });
   }, [fetchOrders]);
 
+  // Real-time order sync via Socket.IO (replaces aggressive polling)
+  useEffect(() => {
+    const seenNewOrders = new Set();
+
+    const unsubNew = subscribe('new-order', (rawOrder) => {
+      const normalized = normalizeAdminOrderRow(rawOrder);
+      if (seenNewOrders.has(normalized.id)) return;
+      seenNewOrders.add(normalized.id);
+
+      setOrders((prev) => {
+        if (prev.some((o) => o.id === normalized.id)) return prev;
+        return [normalized, ...prev];
+      });
+    });
+
+    const unsubUpdated = subscribe('order-updated', (rawOrder) => {
+      const normalized = normalizeAdminOrderRow(rawOrder);
+      setOrders((prev) => {
+        const idx = prev.findIndex((o) => o.id === normalized.id);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...normalized };
+        return next;
+      });
+    });
+
+    return () => {
+      unsubNew();
+      unsubUpdated();
+    };
+  }, [subscribe]);
+
+  // Fallback poll while socket is disconnected
   useEffect(() => {
     const token = localStorage.getItem('jwtToken');
     if (!token) return undefined;
+    const intervalMs = isConnected ? 60000 : 15000;
     const id = setInterval(() => {
-      fetchOrders({ silent: true });
-    }, 30000);
+      if (!isConnected) {
+        fetchOrders({ silent: true });
+      }
+    }, intervalMs);
     return () => clearInterval(id);
-  }, [fetchOrders]);
+  }, [fetchOrders, isConnected]);
 
   /* ---------- FETCH RIDERS ---------- */
   const fetchRiders = useCallback(async (opts = {}) => {
