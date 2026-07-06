@@ -20,6 +20,8 @@ export type TenantBrandingValue = {
   heroTitle: string;
   heroSubtitle: string;
   heroBadge: string;
+  androidAppLink: string;
+  iosAppLink: string;
 };
 
 function titleCaseTenantId(tenantId: string) {
@@ -72,6 +74,8 @@ export function TenantBrandingProvider({ children }: { children: ReactNode }) {
         raw?.heroSubtitle?.trim() ||
         'Browse categories, add items to your cart, and check out in minutes.',
       heroBadge: raw?.heroBadge?.trim() || 'Shop local',
+      androidAppLink: raw?.androidAppLink?.trim() || '',
+      iosAppLink: raw?.iosAppLink?.trim() || '',
     };
   }, [raw, loading, error]);
 

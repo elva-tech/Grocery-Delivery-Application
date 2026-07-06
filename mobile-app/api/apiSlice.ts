@@ -78,10 +78,12 @@ export interface Product {
   unit: string;
   image: string[];
   stock: number;
+  inStock?: boolean;
   variants?: ProductVariant[];
   variantCount?: number;
   defaultVariantId?: string;
   returnAllowed?: boolean;
+  productFeatures?: { label: string }[];
 }
 
 export interface Category {
@@ -93,6 +95,23 @@ export interface Category {
 }
 
 /* ---------------- NORMALIZER ---------------- */
+
+function normalizeProductFeatures(raw: unknown): { label: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (typeof item === 'string') {
+        const label = item.trim();
+        return label ? { label } : null;
+      }
+      if (item && typeof item === 'object' && typeof (item as { label?: string }).label === 'string') {
+        const label = (item as { label: string }).label.trim();
+        return label ? { label } : null;
+      }
+      return null;
+    })
+    .filter((item): item is { label: string } => item != null);
+}
 
 const normalizeProduct = (p: any): Product => {
   const rawVariants: any[] = Array.isArray(p.variants) ? p.variants : [];
@@ -107,6 +126,10 @@ const normalizeProduct = (p: any): Product => {
     }))
     .filter((v) => v.variantId.length > 0);
   const def = variants.find((v) => v.isDefault) || variants[0];
+  const inStock = typeof p.inStock === 'boolean'
+    ? p.inStock
+    : variants.some((v) => v.inStock) || (def?.availableQty ?? 0) > 0;
+  const displayQty = inStock ? (def?.availableQty ?? p.availableQty ?? 0) : 0;
   const imageUrls: string[] = [];
   if (Array.isArray(p.images)) {
     for (const img of p.images) {
@@ -126,11 +149,13 @@ const normalizeProduct = (p: any): Product => {
     price: def?.price ?? (Number(p.price) || 0),
     unit: def?.label ?? (p.unit || ''),
     image: imageUrls,
-    stock: def?.availableQty ?? p.availableQty ?? 0,
+    stock: displayQty,
+    inStock,
     variants: variants.length ? variants : undefined,
     variantCount: variants.length || undefined,
     defaultVariantId: def?.variantId,
     returnAllowed: p.returnAllowed !== false,
+    productFeatures: normalizeProductFeatures(p.productFeatures),
   };
 };
 

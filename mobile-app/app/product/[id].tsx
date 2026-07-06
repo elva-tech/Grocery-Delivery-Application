@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCart, removeFromCart } from '@/store/slices/cartSlice';
@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { showToast } from '@/utils/toast';
 import { resolveProductImageGallery, resolveProductImageUri } from '@/utils/resolveProductImageUri';
-import { buildCartPayload, cartLineId, getDefaultVariant } from '@/utils/productVariants';
+import { buildCartPayload, cartLineId, getDisplayVariant, getPurchasableVariant, isProductPurchasable, isVariantInStock } from '@/utils/productVariants';
 import { MOBILE_COPY } from '@/src/constants/copy';
 
 const { width } = Dimensions.get('window');
@@ -30,11 +30,17 @@ export default function ProductDetailScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Data Fetching
-  const { data: allProducts } = useGetProductsQuery();
+  const { data: allProducts, refetch: refetchProducts } = useGetProductsQuery();
   const product = allProducts?.find(p => p.id === id);
 
+  useFocusEffect(
+    useCallback(() => {
+      void refetchProducts();
+    }, [refetchProducts]),
+  );
+
   const defaultVariant = useMemo(
-    () => (product ? getDefaultVariant(product) : null),
+    () => (product ? (getPurchasableVariant(product) ?? getDisplayVariant(product)) : null),
     [product]
   );
   const [selectedVariantId, setSelectedVariantId] = useState('');
@@ -90,9 +96,13 @@ export default function ProductDetailScreen() {
   };
 
   const variantOptions = product?.variants?.length ? product.variants : defaultVariant ? [defaultVariant] : [];
+  const productFeatures = product?.productFeatures ?? [];
   const displayPrice = selectedVariant?.price ?? product?.price ?? 0;
   const displayUnit = selectedVariant?.label ?? product?.unit ?? '';
-  const displayStock = selectedVariant?.availableQty ?? product?.stock ?? 0;
+  const displayStock = selectedVariant?.availableQty ?? 0;
+  const variantInStock = selectedVariant ? isVariantInStock(selectedVariant) : false;
+  const inStock = Boolean(product && isProductPurchasable(product) && variantInStock);
+  const atMaxStock = cartItem ? cartItem.quantity >= displayStock : false;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -173,20 +183,13 @@ export default function ProductDetailScreen() {
           <Text style={styles.name}>{product.name}</Text>
           <Text style={styles.unitDetail}>{displayUnit} • {MOBILE_COPY.product.packedForDelivery}</Text>
 
-          {product.returnAllowed === false && (
-            <View style={styles.nonReturnableBanner}>
-              <Ionicons name="information-circle-outline" size={18} color="#b45309" />
-              <Text style={styles.nonReturnableText}>{MOBILE_COPY.product.nonReturnable}</Text>
-            </View>
-          )}
-
           {variantOptions.length > 1 && (
             <View style={styles.variantPickerWrap}>
               <Text style={styles.variantPickerLabel}>Select option</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.variantChips}>
                 {variantOptions.map((v) => {
                   const active = v.variantId === selectedVariantId;
-                  const disabled = v.availableQty <= 0;
+                  const disabled = !isVariantInStock(v);
                   return (
                     <TouchableOpacity
                       key={v.variantId}
@@ -210,9 +213,9 @@ export default function ProductDetailScreen() {
 
           <View style={styles.metaRow}>
             <View style={styles.stockBadge}>
-              <View style={[styles.stockDot, displayStock > 10 ? styles.inStock : styles.lowStock]} />
+              <View style={[styles.stockDot, !inStock ? styles.outOfStock : displayStock > 10 ? styles.inStock : styles.lowStock]} />
               <Text style={styles.stockText}>
-                {displayStock > 10 ? 'In Stock' : displayStock > 0 ? `Hurry, only ${displayStock} left` : 'Out of Stock'}
+                {!inStock ? 'Out of Stock' : displayStock > 10 ? 'In Stock' : `Hurry, only ${displayStock} left`}
               </Text>
             </View>
           </View>
@@ -224,25 +227,29 @@ export default function ProductDetailScreen() {
             <Text style={{ fontSize: 15, color: '#475569', lineHeight: 22, fontWeight: '500' }}>
               {product.description || `${product.name} ${MOBILE_COPY.product.descriptionFallbackPrefix}`}
             </Text>
+            {product.returnAllowed === false && (
+              <Text style={styles.nonReturnableFootnote}>
+                {MOBILE_COPY.product.nonReturnableFootnote}
+              </Text>
+            )}
           </View>
 
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>Product Features</Text>
-          <View style={styles.featuresList}>
-            <View style={styles.featureItem}>
-              <View style={styles.iconCircle}><Ionicons name="leaf-outline" size={20} color={BRAND_BLUE} /></View>
-              <Text style={styles.featureText}>{MOBILE_COPY.product.featureFreshQuality}</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <View style={styles.iconCircle}><Ionicons name="shield-checkmark-outline" size={20} color={BRAND_BLUE} /></View>
-              <Text style={styles.featureText}>{MOBILE_COPY.product.featureQualityAssured}</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <View style={styles.iconCircle}><Ionicons name="snow-outline" size={20} color={BRAND_BLUE} /></View>
-              <Text style={styles.featureText}>Temperature Controlled</Text>
-            </View>
-          </View>
+          {productFeatures.length > 0 && (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.sectionTitle}>Product Features</Text>
+              <View style={styles.featuresList}>
+                {productFeatures.map((feature, idx) => (
+                  <View key={`${feature.label}-${idx}`} style={styles.featureItem}>
+                    <View style={styles.iconCircle}>
+                      <Ionicons name="sparkles-outline" size={20} color={BRAND_BLUE} />
+                    </View>
+                    <Text style={styles.featureText}>{feature.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
 
           {/* FIXED: Basket redirect logic only shows for THIS product */}
           {/* UPDATED BASKET BANNER */}
@@ -279,15 +286,20 @@ export default function ProductDetailScreen() {
             <Text style={styles.countText}>{cartItem.quantity}</Text>
             <TouchableOpacity
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleAddToCart(); }}
-              style={styles.qtyBtn}
+              style={[styles.qtyBtn, atMaxStock && styles.qtyBtnDisabled]}
+              disabled={atMaxStock}
             >
               <Ionicons name="add" size={22} color="#fff" />
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.addBtn} onPress={handleAddToCart}>
+          <TouchableOpacity
+            style={[styles.addBtn, !inStock && styles.addBtnDisabled]}
+            onPress={handleAddToCart}
+            disabled={!inStock}
+          >
             <Ionicons name="basket-outline" size={20} color="#fff" />
-            <Text style={styles.addBtnText}>{MOBILE_COPY.common.addToCart}</Text>
+            <Text style={styles.addBtnText}>{inStock ? MOBILE_COPY.common.addToCart : 'Out of Stock'}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -334,24 +346,23 @@ const styles = StyleSheet.create({
 
   name: { fontSize: 28, fontWeight: '800', color: '#2c3e50', marginTop: 12 },
   unitDetail: { fontSize: 14, color: '#94a3b8', marginTop: 4, fontWeight: '600' },
-  nonReturnableBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
+  nonReturnableFootnote: {
     marginTop: 12,
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: '#fffbeb',
-    borderWidth: 1,
-    borderColor: '#fde68a',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(226, 232, 240, 0.7)',
+    fontSize: 10,
+    color: '#94a3b8',
+    lineHeight: 16,
+    fontWeight: '500',
   },
-  nonReturnableText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e', lineHeight: 18 },
 
   metaRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   stockBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   stockDot: { width: 8, height: 8, borderRadius: 4 },
   inStock: { backgroundColor: '#2ecc71' },
   lowStock: { backgroundColor: '#e67e22' },
+  outOfStock: { backgroundColor: '#e74c3c' },
   stockText: { fontSize: 12, color: '#7b8a9a', fontWeight: '500' },
 
   variantPickerWrap: { marginTop: 16 },
@@ -417,9 +428,11 @@ basketRedirect: {
     backgroundColor: BRAND_BLUE, flexDirection: 'row', alignItems: 'center',
     gap: 10, paddingHorizontal: 25, paddingVertical: 16, borderRadius: 18
   },
+  addBtnDisabled: { backgroundColor: '#94a3b8' },
   addBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   quantityContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND_BLUE, borderRadius: 18, padding: 6 },
   qtyBtn: { width: 42, height: 42, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12 },
+  qtyBtnDisabled: { opacity: 0.45 },
   countText: { marginHorizontal: 15, fontWeight: '800', fontSize: 20, color: '#fff' },
 
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },

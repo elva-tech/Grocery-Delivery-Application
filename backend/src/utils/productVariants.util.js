@@ -172,6 +172,36 @@ function formatVariantForClient(variant, inventoryRow) {
   };
 }
 
+function normalizeProductFeaturesInput(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  let list = raw;
+  if (typeof list === "string") {
+    try {
+      list = JSON.parse(list);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((item) => {
+      if (typeof item === "string") {
+        const label = item.trim();
+        return label ? { label } : null;
+      }
+      if (item && typeof item === "object") {
+        const label = String(item.label ?? "").trim();
+        return label ? { label } : null;
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function formatProductFeaturesForClient(features) {
+  return normalizeProductFeaturesInput(features) || [];
+}
+
 function formatProductForCustomer(product, inventoryRows) {
   const variants = ensureProductVariants(product);
   const invByVariant = new Map();
@@ -193,11 +223,13 @@ function formatProductForCustomer(product, inventoryRows) {
   });
 
   const inStockVariants = clientVariants.filter((v) => v.inStock);
-  if (inStockVariants.length === 0) return null;
-
   const def =
     inStockVariants.find((v) => v.isDefault) ||
-    inStockVariants[0];
+    inStockVariants[0] ||
+    clientVariants.find((v) => v.isDefault) ||
+    clientVariants[0];
+
+  if (!def) return null;
 
   const imagesNorm =
     Array.isArray(product.images) && product.images.length > 0
@@ -217,6 +249,8 @@ function formatProductForCustomer(product, inventoryRows) {
     variants: clientVariants,
     variantCount: clientVariants.length,
     availableQty: def.availableQty,
+    inStock: inStockVariants.length > 0,
+    productFeatures: formatProductFeaturesForClient(product.productFeatures),
     images: imagesNorm,
     imageUrl: imagesNorm[0]?.url || "",
     returnAllowed: product.returnAllowed !== false,
@@ -233,4 +267,6 @@ module.exports = {
   findVariantOnProduct,
   buildVariantsForWrite,
   formatProductForCustomer,
+  normalizeProductFeaturesInput,
+  formatProductFeaturesForClient,
 };

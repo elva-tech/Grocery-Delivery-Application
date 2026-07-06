@@ -38,6 +38,10 @@ export const MOBILE_COPY = {
     emptySubtitle: 'Add items to continue.',
     quickDelivery: 'Quick Delivery',
     qualityChecked: 'Quality Checked',
+    maxStockInCart: (count: number) =>
+      count === 1
+        ? 'Only 1 left in stock'
+        : `Only ${count} left in stock`,
   },
   store: {
     closingSoonTitle: 'Closing soon',
@@ -88,6 +92,7 @@ export const MOBILE_COPY = {
     addedToCartBanner: 'Added to your cart',
     nonReturnable:
       'This item is non-returnable. Refunds or returns are not available after delivery.',
+    nonReturnableFootnote: 'This item is non-returnable after delivery.',
   },
   orders: {
     nonReturnableOrder:

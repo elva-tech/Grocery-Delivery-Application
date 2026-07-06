@@ -34,6 +34,9 @@ export interface TenantDetails {
   supportEmail?: string;
   supportPhone?: string;
   supportHours?: string;
+  /** Optional Google Play / App Store URLs for website app download promo */
+  androidAppLink?: string;
+  iosAppLink?: string;
 }
 
 export async function fetchTenantDetails(): Promise<TenantDetails> {

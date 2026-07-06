@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAppState, normalizeAdminOrderRow } from '../../context/AppStateContext';
 import { useToast } from '../../context/ToastContext';
 import { useSocket } from '../../hooks/useSocket';
 import { apiService } from '../../services/apiService';
 import { dashboardService } from '../../services/dashboardApi';
 import { playNewOrderSound } from '../../utils/playNotificationSound';
+import { formatDate, formatDateTime, formatOrderTime } from '../../utils/helpers';
 import DataTable from '../../components/shared/DataTable';
 import Pagination from '../../components/shared/Pagination';
 import { ORDER_STATUS } from '../../config/constants';
@@ -13,7 +14,7 @@ import {
   Eye, Phone, Smartphone, Hash, MapPin, MapPinned, ShoppingBag,
   XCircle, AlertTriangle, UserPlus, AlertCircle, Image as ImageIcon,
   Star, MessageSquare, Filter, Search, Calendar, Banknote, CreditCard,
-  ExternalLink, Copy, Loader2,
+  ExternalLink, Copy, Loader2, Clock, Zap, Package,
 } from 'lucide-react';
 
 /** Renders filled/empty star row */
@@ -99,6 +100,74 @@ function orderMatchesListFilters(order, filters) {
 
   return true;
 }
+
+const getItemsSubtotal = (order) => {
+  if (!Array.isArray(order?.items)) return 0;
+  return order.items.reduce((sum, item) => {
+    const qty = Number(item.quantity ?? item.qty) || 0;
+    return sum + (Number(item.price) || 0) * qty;
+  }, 0);
+};
+
+const STATUS_COLORS = {
+  PLACED: 'bg-blue-100 text-blue-700',
+  CONFIRMED: 'bg-amber-100 text-amber-700',
+  OUT_FOR_DELIVERY: 'bg-purple-100 text-purple-700',
+  DELIVERED: 'bg-emerald-100 text-emerald-700',
+  CANCELLED: 'bg-red-100 text-red-700',
+};
+
+const ACTIVE_ORDER_STATUSES = new Set([
+  ORDER_STATUS.PLACED,
+  ORDER_STATUS.CONFIRMED,
+  ORDER_STATUS.OUT_FOR_DELIVERY,
+]);
+
+const normalizeDeliveryType = (order) => {
+  const raw = String(order?.deliveryType || 'STANDARD').toUpperCase();
+  return raw === 'EXPRESS' ? 'EXPRESS' : 'STANDARD';
+};
+
+const isExpressOrder = (order) => normalizeDeliveryType(order) === 'EXPRESS';
+
+const isActiveExpressOrder = (order) => {
+  const status = String(order?.status ?? order?.orderStatus ?? '').toUpperCase();
+  return isExpressOrder(order) && ACTIVE_ORDER_STATUSES.has(status);
+};
+
+/** Scannable delivery badge — pulses when express order still needs action */
+const DeliveryTypeBadge = ({ deliveryType, urgent = false, compact = false }) => {
+  const isExpress = deliveryType === 'EXPRESS';
+  const sizeClass = compact
+    ? 'px-2 py-0.5 text-[9px] gap-1'
+    : 'px-2.5 py-1 text-[10px] gap-1.5';
+
+  if (isExpress) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-full font-black uppercase tracking-wide border ${sizeClass} ${
+          urgent
+            ? 'bg-orange-500 text-white border-orange-600 shadow-md shadow-orange-200/80'
+            : 'bg-orange-100 text-orange-800 border-orange-300'
+        }`}
+        title={urgent ? 'Express — prioritize this order' : 'Express delivery'}
+      >
+        <Zap size={compact ? 10 : 12} className={`shrink-0 ${urgent ? 'fill-white' : 'fill-orange-500'}`} />
+        Express
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full font-bold uppercase tracking-wide border bg-slate-100 text-slate-600 border-slate-200 ${sizeClass}`}
+      title="Standard delivery"
+    >
+      <Package size={compact ? 10 : 12} className="shrink-0" />
+      Standard
+    </span>
+  );
+};
 
 const OrderList = () => {
   const { showToast } = useToast();
@@ -250,6 +319,7 @@ const OrderList = () => {
       if (normalized.status === ORDER_STATUS.PLACED) {
         setPendingCount((count) => count + 1);
       }
+      loadPendingCount();
 
       setTotalOrders((total) => total + 1);
 
@@ -269,20 +339,11 @@ const OrderList = () => {
         const idx = prev.findIndex((o) => o.id === orderId);
         if (idx === -1) return prev;
 
-        const previous = prev[idx];
-        const prevStatus = String(previous.status ?? previous.orderStatus ?? '').toUpperCase();
-        const nextStatus = normalized.status;
-
-        if (prevStatus === ORDER_STATUS.PLACED && nextStatus !== ORDER_STATUS.PLACED) {
-          setPendingCount((count) => Math.max(0, count - 1));
-        } else if (prevStatus !== ORDER_STATUS.PLACED && nextStatus === ORDER_STATUS.PLACED) {
-          setPendingCount((count) => count + 1);
-        }
-
         const next = [...prev];
         next[idx] = { ...next[idx], ...normalized };
         return next;
       });
+      loadPendingCount();
 
       setViewingOrder((prev) => {
         if (!prev || prev.id !== orderId) return prev;
@@ -303,6 +364,7 @@ const OrderList = () => {
     highlightOrderRow,
     currentPage,
     pageSize,
+    loadPendingCount,
     statusFilter,
     debouncedSearch,
     dateFrom,
@@ -374,6 +436,23 @@ const OrderList = () => {
   const availableRiders = riders
     ? riders.filter((r) => String(r.status || '').toLowerCase() === 'online')
     : [];
+
+  const activeExpressOnPage = useMemo(
+    () => orderRows.filter(isActiveExpressOrder).length,
+    [orderRows],
+  );
+
+  const getOrderRowClassName = useCallback((row) => {
+    const classes = [];
+    if (highlightedIds.has(String(row.id))) {
+      classes.push('bg-emerald-50 ring-2 ring-emerald-300 ring-inset animate-pulse');
+    } else if (isActiveExpressOrder(row)) {
+      classes.push('bg-orange-50/70 border-l-4 border-l-orange-500');
+    } else if (isExpressOrder(row)) {
+      classes.push('border-l-4 border-l-orange-200');
+    }
+    return classes.join(' ');
+  }, [highlightedIds]);
 
   const orderAssignedToRider = (order, riderId, riderName) => {
     if (!order) return false;
@@ -471,6 +550,7 @@ const OrderList = () => {
     try {
       await updateOrderStatus(cancellingOrder.id, 'CANCELLED');
       await loadOrders();
+      await loadPendingCount();
       refreshOrders({ silent: true });
     } finally {
       setStatusUpdatingId(null);
@@ -484,6 +564,7 @@ const OrderList = () => {
     try {
       await updateOrderStatus(orderId, newStatus);
       await loadOrders();
+      await loadPendingCount();
       refreshOrders({ silent: true });
     } finally {
       setStatusUpdatingId(null);
@@ -491,7 +572,42 @@ const OrderList = () => {
   };
 
   const columns = [
-    { header: 'Order ID', accessor: 'id' },
+    {
+      header: 'Order ID',
+      render: (_, row) => (
+        <div className="flex items-start gap-2 min-w-[88px] max-w-[140px]">
+          {isExpressOrder(row) ? (
+            <span
+              className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 ring-1 ring-orange-200"
+              title="Express delivery"
+            >
+              <Zap size={14} className="fill-orange-500 text-orange-500" />
+            </span>
+          ) : null}
+          <span className="font-mono text-[11px] font-bold text-slate-800 break-all leading-snug">
+            {row.id}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: 'Order Date',
+      render: (_, row) => {
+        const placedAt = row.date || row.createdAt;
+        if (!placedAt) {
+          return <span className="text-[10px] text-gray-400 font-semibold">—</span>;
+        }
+        return (
+          <div className="min-w-[130px]">
+            <p className="text-xs font-bold text-slate-700">{formatDate(placedAt)}</p>
+            <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1 mt-0.5">
+              <Clock size={10} className="shrink-0" />
+              {formatOrderTime(placedAt)}
+            </p>
+          </div>
+        );
+      },
+    },
     { header: 'Customer', render: (_, row) => row.customerName || row.customer || 'Guest User' },
     {
       header: 'Phone',
@@ -551,19 +667,21 @@ const OrderList = () => {
       accessor: 'status',
       render: (v) => {
         const statusKey = v?.toUpperCase() || 'PLACED';
-        const colors = {
-          'PLACED': 'bg-blue-100 text-blue-700',
-          'CONFIRMED': 'bg-amber-100 text-amber-700',
-          'OUT_FOR_DELIVERY': 'bg-purple-100 text-purple-700',
-          'DELIVERED': 'bg-emerald-100 text-emerald-700',
-          'CANCELLED': 'bg-red-100 text-red-700'
-        };
         return (
-          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${colors[statusKey] || 'bg-gray-100'}`}>
+          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${STATUS_COLORS[statusKey] || 'bg-gray-100'}`}>
             {statusKey.replace(/_/g, ' ')}
           </span>
         );
       }
+    },
+    {
+      header: 'Delivery',
+      render: (_, row) => (
+        <DeliveryTypeBadge
+          deliveryType={normalizeDeliveryType(row)}
+          urgent={isActiveExpressOrder(row)}
+        />
+      ),
     },
     {
       header: 'Payment',
@@ -641,6 +759,17 @@ const OrderList = () => {
                 />
                 {isConnected ? 'Live' : 'Offline'}
               </div>
+              {activeExpressOnPage > 0 && (
+                <div
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-500 text-white border border-orange-600 shadow-sm shadow-orange-200"
+                  title="Active express orders on this page"
+                >
+                  <Zap size={12} className="fill-white shrink-0" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">
+                    {activeExpressOnPage} express priority
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           {hasActiveFilters && (
@@ -732,6 +861,17 @@ const OrderList = () => {
 
           <div className="w-px h-6 bg-slate-100 hidden sm:block" />
 
+          {/* Delivery type legend */}
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 hidden lg:inline">
+              Delivery
+            </span>
+            <DeliveryTypeBadge deliveryType="EXPRESS" compact />
+            <DeliveryTypeBadge deliveryType="STANDARD" compact />
+          </div>
+
+          <div className="w-px h-6 bg-slate-100 hidden sm:block" />
+
           {/* Rating filter */}
           <div className="flex items-center gap-1.5">
             <Filter size={13} className="text-slate-400" />
@@ -784,14 +924,26 @@ const OrderList = () => {
           </div>
         ) : null}
 
+        {activeExpressOnPage > 0 && (
+          <div className="mb-4 flex items-start gap-3 rounded-2xl border border-orange-200 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 px-4 py-3.5 shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white shadow-md shadow-orange-200">
+              <Zap size={20} className="fill-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-black text-orange-950">
+                {activeExpressOnPage} express order{activeExpressOnPage !== 1 ? 's' : ''} on this page need priority
+              </p>
+              <p className="text-xs font-semibold text-orange-800/85 mt-0.5 leading-relaxed">
+                Orange rows and badges are express delivery — accept and assign riders before standard orders.
+              </p>
+            </div>
+          </div>
+        )}
+
     <DataTable
         columns={columns}
         data={orderRows}
-        getRowClassName={(row) =>
-          highlightedIds.has(String(row.id))
-            ? 'bg-emerald-50 ring-2 ring-emerald-300 ring-inset animate-pulse'
-            : ''
-        }
+        getRowClassName={getOrderRowClassName}
         actions={(row) => {
           const status = row.status?.toUpperCase();
           return (
@@ -945,6 +1097,12 @@ const OrderList = () => {
                   Delivery address
                 </h2>
                 <p className="text-[11px] opacity-80 mt-1 font-mono truncate">Order {deliveryAddressModalOrder.id}</p>
+                {(deliveryAddressModalOrder.date || deliveryAddressModalOrder.createdAt) && (
+                  <p className="text-[10px] opacity-70 mt-1 flex items-center gap-1">
+                    <Clock size={10} />
+                    {formatDateTime(deliveryAddressModalOrder.date || deliveryAddressModalOrder.createdAt)}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -1003,16 +1161,80 @@ const OrderList = () => {
       {/* VIEW DETAILS MODAL */}
       {viewingOrder && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+          <div className="bg-white rounded-[32px] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200">
             <div className="p-6 bg-[#1A4D2E] text-white flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-black">Order Summary</h2>
                 <p className="text-xs opacity-70 flex items-center gap-1"><Hash size={12} /> {viewingOrder.id}</p>
+                {(viewingOrder.date || viewingOrder.createdAt) && (
+                  <p className="text-[11px] opacity-80 flex items-center gap-1.5 mt-1">
+                    <Calendar size={11} />
+                    Placed on {formatDateTime(viewingOrder.date || viewingOrder.createdAt)}
+                  </p>
+                )}
               </div>
               <button onClick={() => setViewingOrder(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={20} /></button>
             </div>
 
             <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              {/* Order management details */}
+              <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-3">
+                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Order Details</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400">Status</p>
+                    <span className={`inline-flex mt-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${STATUS_COLORS[viewingOrder.status?.toUpperCase()] || 'bg-gray-100 text-gray-700'}`}>
+                      {(viewingOrder.status || 'PLACED').replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400">Delivery Type</p>
+                    <div className="mt-1">
+                      <DeliveryTypeBadge
+                        deliveryType={normalizeDeliveryType(viewingOrder)}
+                        urgent={isActiveExpressOrder(viewingOrder)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400">Rider</p>
+                    <p className="font-bold text-slate-700 text-sm mt-1 flex items-center gap-1">
+                      <Bike size={14} className="text-slate-400" />
+                      {viewingOrder.assignment || viewingOrder.riderName || 'Unassigned'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400">Last Updated</p>
+                    <p className="font-semibold text-slate-600 text-xs mt-1">
+                      {viewingOrder.updatedAt ? formatDateTime(viewingOrder.updatedAt) : '—'}
+                    </p>
+                  </div>
+                </div>
+                {(viewingOrder.riderAssignedAt || viewingOrder.riderPickupTime || viewingOrder.riderDeliveryTime) && (
+                  <div className="pt-3 border-t border-slate-200 space-y-2">
+                    <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Delivery Timeline</p>
+                    {viewingOrder.riderAssignedAt && (
+                      <p className="text-xs text-slate-600">
+                        <span className="font-bold text-slate-700">Rider assigned:</span>{' '}
+                        {formatDateTime(viewingOrder.riderAssignedAt)}
+                      </p>
+                    )}
+                    {viewingOrder.riderPickupTime && (
+                      <p className="text-xs text-slate-600">
+                        <span className="font-bold text-slate-700">Picked up:</span>{' '}
+                        {formatDateTime(viewingOrder.riderPickupTime)}
+                      </p>
+                    )}
+                    {viewingOrder.riderDeliveryTime && (
+                      <p className="text-xs text-slate-600">
+                        <span className="font-bold text-slate-700">Delivered:</span>{' '}
+                        {formatDateTime(viewingOrder.riderDeliveryTime)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center"><User size={24} /></div>
@@ -1060,6 +1282,34 @@ const OrderList = () => {
                       <span className="text-sm font-black text-slate-800">₹{(item.price || 0) * (item.quantity || item.qty || 0)}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2 border-t border-gray-100">
+                <p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Bill Breakdown</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Items subtotal</span>
+                    <span className="font-bold">₹{getItemsSubtotal(viewingOrder)}</span>
+                  </div>
+                  {Number(viewingOrder.deliveryCharge) > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Delivery charge</span>
+                      <span className="font-bold">₹{viewingOrder.deliveryCharge}</span>
+                    </div>
+                  )}
+                  {Number(viewingOrder.discount) > 0 && (
+                    <div className="flex justify-between text-emerald-600">
+                      <span>Discount</span>
+                      <span className="font-bold">−₹{viewingOrder.discount}</span>
+                    </div>
+                  )}
+                  {Number(viewingOrder.couponDiscount) > 0 && (
+                    <div className="flex justify-between text-emerald-600">
+                      <span>Coupon{viewingOrder.couponCode ? ` (${viewingOrder.couponCode})` : ''}</span>
+                      <span className="font-bold">−₹{viewingOrder.couponDiscount}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1124,7 +1374,7 @@ const OrderList = () => {
                   )}
                   {viewingOrder.rating.createdAt && (
                     <p className="text-[10px] text-slate-400">
-                      {new Date(viewingOrder.rating.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {formatDateTime(viewingOrder.rating.createdAt)}
                     </p>
                   )}
                 </div>

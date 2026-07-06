@@ -36,9 +36,12 @@ import {
   filterAndSortCustomerOrders,
   ORDER_STATUS_FILTERS,
   ORDER_SORT_OPTIONS,
+  formatOrderDate,
+  formatOrderTime,
   type OrderSortBy,
   type OrderStatusFilter,
 } from '@/src/utils/customerOrderList';
+import { MOBILE_COPY } from '@/src/constants/copy';
 
 const REPORT_REASONS = [
   "Item damaged",
@@ -433,8 +436,11 @@ export default function OrdersScreen() {
           <View style={styles.cardHeaderMain}>
             <Text style={styles.orderId}>Order #{item.id?.slice(0, 10)}</Text>
             <Text style={styles.dateText}>
-              {new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
+              {formatOrderDate(item.createdAt)}
             </Text>
+            {formatOrderTime(item.createdAt) ? (
+              <Text style={styles.timeText}>{formatOrderTime(item.createdAt)}</Text>
+            ) : null}
           </View>
           <View style={[styles.badge, { backgroundColor: theme.color + '15' }]}>
             <Text style={[styles.badgeText, { color: theme.color }]} numberOfLines={2}>
@@ -549,6 +555,12 @@ export default function OrdersScreen() {
     >
       Order #{(selectedOrder?._id ?? selectedOrder?.id)}
     </Text>
+    {selectedOrder?.createdAt ? (
+      <Text style={styles.modalPlacedAt}>
+        Placed on {formatOrderDate(selectedOrder.createdAt)}
+        {formatOrderTime(selectedOrder.createdAt) ? ` at ${formatOrderTime(selectedOrder.createdAt)}` : ''}
+      </Text>
+    ) : null}
   </View>
 
   <TouchableOpacity onPress={() => setSelectedOrder(null)}>
@@ -962,6 +974,8 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   dateText: { fontSize: 13, color: '#94a3b8' },
+  timeText: { fontSize: 12, color: '#cbd5e1', marginTop: 2, fontWeight: '600' },
+  modalPlacedAt: { fontSize: 12, color: '#94a3b8', marginTop: 4, fontWeight: '600' },
   awaitingSubtitle: {
     fontSize: 12,
     fontWeight: '600',

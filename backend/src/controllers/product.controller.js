@@ -14,6 +14,7 @@ const {
   buildVariantsForWrite,
   formatProductForCustomer,
   ensureProductVariants,
+  normalizeProductFeaturesInput,
 } = require("../utils/productVariants.util");
 
 function imageValidationStatus(message) {
@@ -204,6 +205,7 @@ function formatAdminInventoryRow(product, inventories) {
     availableQty: totalStock,
     thresholdQty: def?.thresholdQty ?? 10,
     returnAllowed: product.returnAllowed !== false,
+    productFeatures: normalizeProductFeaturesInput(product.productFeatures) || [],
   };
 }
 
@@ -265,12 +267,14 @@ const addProduct = async (req, res) => {
     }
 
     const def = normalized.find((v) => v.isDefault) || normalized[0];
+    const productFeatures = normalizeProductFeaturesInput(body.productFeatures) ?? [];
     const product = await Product.create({
       tenantId,
       name,
       category,
       subcategory: subcategory || "",
       description: description || "",
+      productFeatures,
       price: def.price,
       unit: def.label,
       variants: normalized.map((v) => ({
@@ -370,6 +374,10 @@ const updateProductFromAdmin = async (req, res) => {
     if (req.body.returnAllowed !== undefined) {
       updateData.returnAllowed =
         req.body.returnAllowed !== false && req.body.returnAllowed !== "false";
+    }
+
+    if (req.body.productFeatures !== undefined) {
+      updateData.productFeatures = normalizeProductFeaturesInput(req.body.productFeatures) ?? [];
     }
 
     if (req.body.images !== undefined) {
@@ -751,7 +759,6 @@ const getAvailableProducts = async (req, res) => {
     const visibility = tenantPolicy.buildProductTenantRoot(tenantId);
     const filter = {
       ...visibility,
-      isAvailable: true,
       $or: [{ isActive: true }, { isActive: { $exists: false } }],
     };
     if (category) {

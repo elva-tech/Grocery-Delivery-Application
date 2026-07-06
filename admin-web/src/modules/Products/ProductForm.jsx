@@ -47,6 +47,18 @@ function previewUrlsFromImageField(arr) {
     .filter(Boolean);
 }
 
+function featuresFromInitial(initial) {
+  const raw = initial?.productFeatures;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object' && typeof item.label === 'string') return item.label.trim();
+      return '';
+    })
+    .filter(Boolean);
+}
+
 const variantRowSchema = Yup.object().shape({
   label: Yup.string().trim().required('Label required'),
   price: Yup.number().typeError('Required').min(1, 'Price must be positive').required('Required'),
@@ -223,6 +235,7 @@ const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted, sav
             initialValues?.images ?? initialValues?.image ?? []
           ),
           returnAllowed: initialValues?.returnAllowed !== false,
+          productFeatures: featuresFromInitial(initialValues),
         }}
 
         validationSchema={productSchema}
@@ -255,6 +268,10 @@ const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted, sav
     ...values,
     variants,
     images: values.image,
+    productFeatures: (values.productFeatures || [])
+      .map((label) => String(label || '').trim())
+      .filter(Boolean)
+      .map((label) => ({ label })),
   };
 
   onSubmit(submission);
@@ -565,6 +582,60 @@ const ProductForm = ({ initialValues, onSubmit, onCancel, onImagesPersisted, sav
                         className="w-full border p-3 rounded-xl mt-1 h-24 resize-none focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                       />
 
+                    </div>
+
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">Product features</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Optional highlights shown on the website and mobile app (e.g. 100% Organic).
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFieldValue('productFeatures', [...(values.productFeatures || []), ''])
+                          }
+                          className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Plus size={14} />
+                          Add
+                        </button>
+                      </div>
+
+                      {(values.productFeatures || []).length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No features added — section hidden on storefront.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {(values.productFeatures || []).map((feature, index) => (
+                            <div key={`feature-${index}`} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={feature}
+                                onChange={(e) => {
+                                  const next = [...(values.productFeatures || [])];
+                                  next[index] = e.target.value;
+                                  setFieldValue('productFeatures', next);
+                                }}
+                                placeholder="e.g. Quality Seal"
+                                className="flex-1 border p-3 rounded-xl text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = (values.productFeatures || []).filter((_, i) => i !== index);
+                                  setFieldValue('productFeatures', next);
+                                }}
+                                className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                aria-label="Remove feature"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">

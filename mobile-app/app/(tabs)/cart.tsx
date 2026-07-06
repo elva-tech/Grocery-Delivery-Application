@@ -236,6 +236,8 @@ export default function CartScreen() {
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => {
             const thumb = resolveProductImageUri(item);
+            const stockLimit = item.stock != null && item.stock > 0 ? item.stock : null;
+            const atMaxStock = stockLimit != null && item.quantity >= stockLimit;
             return (
               <View style={styles.cartItem}>
                 {thumb ? (
@@ -249,6 +251,11 @@ export default function CartScreen() {
                   <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
                   {item.unit ? <Text style={styles.itemUnit}>{item.unit}</Text> : null}
                   <Text style={styles.itemPrice}>₹{item.price}</Text>
+                  {atMaxStock && stockLimit != null ? (
+                    <Text style={styles.stockLimitHint}>
+                      {MOBILE_COPY.cart.maxStockInCart(stockLimit)}
+                    </Text>
+                  ) : null}
                 </View>
                 <View style={styles.qtyContainer}>
                   <TouchableOpacity
@@ -267,8 +274,13 @@ export default function CartScreen() {
                     onPress={() => dispatch(addToCart(item))}
                     style={styles.qtyBtn}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    disabled={atMaxStock}
                   >
-                    <Ionicons name="add" size={15} color={BRAND} />
+                    <Ionicons
+                      name="add"
+                      size={15}
+                      color={atMaxStock ? '#cbd5e1' : BRAND}
+                    />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -530,6 +542,13 @@ const styles = StyleSheet.create({
   itemName: { fontSize: 14, fontWeight: '600', color: '#334155', lineHeight: 19 },
   itemUnit: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
   itemPrice: { fontSize: 15, fontWeight: '700', color: INK, marginTop: 4 },
+  stockLimitHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b45309',
+    lineHeight: 15,
+  },
 
   qtyContainer: {
     flexDirection: 'row',

@@ -30,7 +30,7 @@ import { useFocusEffect } from '@react-navigation/native';
 // Domain Imports
 import { useGetCategoriesQuery, useGetProductsQuery, useGetStoreStatusQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
-import { buildCartPayload, getDefaultVariant } from '@/utils/productVariants';
+import { buildCartPayload, getPurchasableVariant, isProductPurchasable } from '@/utils/productVariants';
 import { showToast } from '@/utils/toast';
 import { RootState } from '@/store/store';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
@@ -283,15 +283,6 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadBanners]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void (async () => {
-        await refreshDeliverToRow();
-        await refreshDeliveryEligibility();
-      })();
-    }, [refreshDeliverToRow, refreshDeliveryEligibility]),
-  );
-
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(PREFERRED_DELIVERY_ADDRESS_CHANGED, () => {
       void (async () => {
@@ -304,9 +295,19 @@ export default function HomeScreen() {
 
   // API Hooks
   const { data: categories = [] } = useGetCategoriesQuery();
-  const { data: allProducts = [] } = useGetProductsQuery();
+  const { data: allProducts = [], refetch: refetchProducts } = useGetProductsQuery();
   const { data: storeStatus } = useGetStoreStatusQuery(undefined, { pollingInterval: 15000 });
   const isStoreClosed = storeStatus?.isClosed ?? false;
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetchProducts();
+      void (async () => {
+        await refreshDeliverToRow();
+        await refreshDeliveryEligibility();
+      })();
+    }, [refetchProducts, refreshDeliverToRow, refreshDeliveryEligibility]),
+  );
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -319,9 +320,13 @@ export default function HomeScreen() {
       showToast('error', 'Store Closed', 'We are not accepting orders right now.');
       return;
     }
+    const variant = getPurchasableVariant(product);
+    if (!variant) {
+      showToast('error', 'Out of stock', `${product.name} is currently unavailable.`);
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const def = getDefaultVariant(product);
-    const payload = buildCartPayload(product, def);
+    const payload = buildCartPayload(product, variant);
     if (resolveProductImageUri(product)) payload.image = resolveProductImageUri(product)!;
     dispatch(addToCart(payload));
     showToast('success', MOBILE_COPY.home.addToCartToastTitle, `${product.name} ${MOBILE_COPY.home.addToCartToastSuffix}`);
@@ -509,12 +514,18 @@ export default function HomeScreen() {
         removeClippedSubviews={Platform.OS === 'android'}
         renderItem={({ item }) => {
           const thumb = resolveProductImageUri(item);
+          const inStock = isProductPurchasable(item);
           return (
           <TouchableOpacity
-            style={styles.productCard}
+            style={[styles.productCard, !inStock && styles.productCardOutOfStock]}
             onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
           >
-            <View style={styles.imageWrapper}>
+            {!inStock && (
+              <View style={styles.oosBadge}>
+                <Text style={styles.oosBadgeText}>OUT OF STOCK</Text>
+              </View>
+            )}
+            <View style={[styles.imageWrapper, !inStock && styles.imageWrapperMuted]}>
               {thumb ? (
                 <Image
                   source={{ uri: thumb }}
@@ -528,11 +539,21 @@ export default function HomeScreen() {
               )}
             </View>
             <View style={styles.productInfo}>
-              <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-              <Text style={styles.productPrice}>₹{item.price}</Text>
-              <TouchableOpacity style={[styles.addButton, isStoreClosed && { backgroundColor: '#94a3b8' }]} onPress={() => handleAddToCart(item)}>
-                <Text style={styles.addText}>ADD</Text>
-              </TouchableOpacity>
+              <Text style={[styles.productName, !inStock && styles.productNameMuted]} numberOfLines={2}>{item.name}</Text>
+              <Text style={[styles.productPrice, !inStock && styles.productPriceMuted]}>₹{item.price}</Text>
+              {inStock ? (
+                <TouchableOpacity
+                  style={[styles.addButton, isStoreClosed && { backgroundColor: '#94a3b8' }]}
+                  onPress={() => handleAddToCart(item)}
+                  disabled={isStoreClosed}
+                >
+                  <Text style={styles.addText}>ADD</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.soldOutButton}>
+                  <Text style={styles.soldOutText}>SOLD OUT</Text>
+                </View>
+              )}
             </View>
           </TouchableOpacity>
           );
@@ -763,6 +784,30 @@ const styles = StyleSheet.create({
   productPrice: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginVertical: 4 },
   addButton: { width: '100%', paddingVertical: 5, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: BRAND_BLUE },
   addText: { color: BRAND_BLUE, fontWeight: '800', fontSize: 11, textAlign: 'center' },
+  productCardOutOfStock: { opacity: 0.65, backgroundColor: '#f8fafc' },
+  oosBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 2,
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  oosBadgeText: { color: '#fff', fontSize: 7, fontWeight: '900', letterSpacing: 0.4 },
+  imageWrapperMuted: { opacity: 0.55 },
+  productNameMuted: { color: '#94a3b8' },
+  productPriceMuted: { color: '#cbd5e1' },
+  soldOutButton: {
+    width: '100%',
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  soldOutText: { color: '#64748b', fontWeight: '800', fontSize: 9, textAlign: 'center' },
   closedBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#dc2626', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginTop: 8, marginBottom: 4 },
   closedBannerText: { color: '#fff', fontWeight: '700', fontSize: 13, flexShrink: 1 },
 });

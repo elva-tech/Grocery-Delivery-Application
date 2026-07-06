@@ -23,7 +23,10 @@ interface FooterProps {
 }
 
 const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
-  const { storeName, tagline } = useTenantBranding();
+  const { storeName, tagline, androidAppLink, iosAppLink } = useTenantBranding();
+  const hasAndroidLink = Boolean(androidAppLink?.trim());
+  const hasIosLink = Boolean(iosAppLink?.trim());
+  const hasAppStoreLinks = hasAndroidLink || hasIosLink;
   const brand = useMemo(() => splitBrandWords(storeName), [storeName]);
   const { data: categories = [], isLoading: categoriesLoading } = useGetCategoriesQuery();
   const navigate = useNavigate();
@@ -110,14 +113,20 @@ const Footer: React.FC<FooterProps> = ({ onCategoryClick }) => {
             </div>
 
             {/* DOWNLOAD BUTTONS */}
-            <div className="flex items-center gap-4">
-              <a href="https://play.google.com/store" target="_blank" rel="noreferrer" className="transition-transform hover:scale-105">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Play Store" className="h-10" />
-              </a>
-              <a href="https://apps.apple.com" target="_blank" rel="noreferrer" className="transition-transform hover:scale-105">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" className="h-10" />
-              </a>
-            </div>
+            {hasAppStoreLinks && (
+              <div className="flex items-center gap-4">
+                {hasAndroidLink && (
+                  <a href={androidAppLink} target="_blank" rel="noreferrer" className="transition-transform hover:scale-105">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Play Store" className="h-10" />
+                  </a>
+                )}
+                {hasIosLink && (
+                  <a href={iosAppLink} target="_blank" rel="noreferrer" className="transition-transform hover:scale-105">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" className="h-10" />
+                  </a>
+                )}
+              </div>
+            )}
 
             {/* SOCIALS */}
             <div className="flex gap-3">

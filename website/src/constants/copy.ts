@@ -30,6 +30,12 @@ export const WEB_COPY = {
     addMoreForFreeDelivery: (amount: number | string) => `Add ₹${amount} more for free delivery`,
     deliveryFeeSaved: 'Delivery fee saved',
     emptyCart: 'Your cart is empty',
+    onlyLeftInStock: (count: number) =>
+      count === 1 ? 'Only 1 left in stock' : `Only ${count} left in stock`,
+    maxStockInCart: (count: number) =>
+      count === 1
+        ? 'Maximum 1 available — you have reached the stock limit'
+        : `Only ${count} available in stock — you cannot add more`,
   },
   product: {
     nonReturnable:

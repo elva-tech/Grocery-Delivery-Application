@@ -432,6 +432,12 @@ const ProductList = () => {
                 images: imagesPayload,
                 imageUrl: imagesPayload[0]?.url || '',
                 returnAllowed: v.returnAllowed !== false,
+                productFeatures: (v.productFeatures || [])
+                  .map((row) => {
+                    const label = typeof row === 'string' ? row.trim() : String(row?.label || '').trim();
+                    return label ? { label } : null;
+                  })
+                  .filter(Boolean),
               };
 
               if (editingItem) {

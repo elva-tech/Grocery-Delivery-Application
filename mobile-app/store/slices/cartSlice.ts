@@ -40,10 +40,14 @@ const cartSlice = createSlice({
           : null;
     },
     addToCart: (state, action: PayloadAction<CartItem>) => {
+      const maxStock = action.payload.stock;
       const existingItem = state.items.find(item => item.id === action.payload.id);
       if (existingItem) {
+        if (maxStock != null && maxStock > 0 && existingItem.quantity >= maxStock) return;
         existingItem.quantity += 1;
+        if (maxStock != null) existingItem.stock = maxStock;
       } else {
+        if (maxStock != null && maxStock <= 0) return;
         state.items.push({ ...action.payload, quantity: 1 });
       }
       state.totalAmount += action.payload.price;

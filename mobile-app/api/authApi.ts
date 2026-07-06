@@ -69,7 +69,7 @@ async function parseJsonSafely<T>(response: Response): Promise<T> {
  */
 export const sendOtp = async (
   phoneNumber: string,
-  options: { resend?: boolean } = {},
+  options: { resend?: boolean; mode?: 'signup' | 'login' } = {},
 ): Promise<SendOtpResponse> => {
   const brandId = (await getNotifyBrandId()).trim();
   if (!brandId) {
@@ -90,6 +90,7 @@ export const sendOtp = async (
       body: JSON.stringify({
         phoneNumber,
         brandId,
+        mode: options.mode || 'login',
         ...(options.resend ? { resend: true } : {}),
       }),
     },
@@ -128,7 +129,7 @@ export const verifyOtp = async (
       'x-platform': 'mobile',
       'x-tenant-id': await getActiveTenantId(),
     },
-    body: JSON.stringify({ phoneNumber, otp, brandId, ...(name && { name }) }),
+    body: JSON.stringify({ phoneNumber, otp, brandId, mode, ...(name && { name }) }),
   }, VERIFY_OTP_TIMEOUT_MS);
 
   const data = await parseJsonSafely<VerifyOtpResponse>(response);
