@@ -73,6 +73,7 @@ const normaliseProduct = p => {
   parentCategoryId: toCatId(p.category || 'uncategorized'),
   subCategoryId:    p.subcategory ? toSubId(p.subcategory) : null,
   returnAllowed:    p.returnAllowed !== false,
+  productFeatures:  Array.isArray(p.productFeatures) ? p.productFeatures : [],
 };
 };
 
@@ -114,6 +115,9 @@ export function normalizeAdminOrderRow(o) {
       full: formatDeliveryAddressSummary(da),
       addressUrl: typeof da?.addressUrl === 'string' ? da.addressUrl.trim() : '',
     },
+    deliveryType: String(o.deliveryType || 'STANDARD').toUpperCase() === 'EXPRESS'
+      ? 'EXPRESS'
+      : 'STANDARD',
     paymentMode: o.paymentMode || 'ONLINE',
     paymentStatus: o.paymentStatus || 'PENDING',
     refundStatus: o.refundStatus || 'NONE',

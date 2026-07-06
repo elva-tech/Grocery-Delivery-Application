@@ -3,10 +3,38 @@ export const formatCurrency = (amount, currency = '₹') => {
 };
 
 export const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString('en-IN', {
+  if (!dateString) return '—';
+  const d = new Date(dateString);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
-    year: 'numeric'
+    year: 'numeric',
+  });
+};
+
+export const formatDateTime = (dateString) => {
+  if (!dateString) return '—';
+  const d = new Date(dateString);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+
+export const formatOrderTime = (dateString) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
   });
 };
 

@@ -14,6 +14,8 @@ import {
   filterAndSortCustomerOrders,
   ORDER_STATUS_FILTERS,
   ORDER_SORT_OPTIONS,
+  formatOrderDate,
+  formatOrderTime,
   type OrderSortBy,
   type OrderStatusFilter,
 } from '../utils/customerOrderList';
@@ -196,12 +198,14 @@ const loadOrders = async () => {
               #{String(order.id).slice(-8)}
             </span>
             <h3 className="font-black text-slate-800">
-              {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+              {formatOrderDate(order.createdAt)}
             </h3>
+            {formatOrderTime(order.createdAt) && (
+              <p className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mt-0.5">
+                <Clock size={11} />
+                {formatOrderTime(order.createdAt)}
+              </p>
+            )}
           </div>
           <div
             className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${statusTheme?.bg} ${statusTheme?.color}`}
@@ -356,7 +360,14 @@ const loadOrders = async () => {
               <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-50">
                 <div>
                   <h2 className="text-xl font-black text-slate-900">Summary</h2>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedOrder.deliverySlot}</p>
+                  {selectedOrder.createdAt && (
+                    <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1.5">
+                      <Clock size={12} className="text-slate-400" />
+                      Placed on {formatOrderDate(selectedOrder.createdAt)}
+                      {formatOrderTime(selectedOrder.createdAt) ? ` at ${formatOrderTime(selectedOrder.createdAt)}` : ''}
+                    </p>
+                  )}
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{selectedOrder.deliverySlot}</p>
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Deliver to</p>

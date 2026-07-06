@@ -18,6 +18,13 @@ const productVariantSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const productFeatureSchema = new mongoose.Schema(
+  {
+    label: { type: String, required: true, trim: true, maxlength: 80 },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     tenantId: {
@@ -69,6 +76,12 @@ const productSchema = new mongoose.Schema(
     description: {
       type: String,
       default: "",
+    },
+
+    /** Optional highlight badges shown on product detail (e.g. "100% Organic"). */
+    productFeatures: {
+      type: [productFeatureSchema],
+      default: [],
     },
 
     isAvailable: {

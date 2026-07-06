@@ -71,28 +71,51 @@ const CartDrawer = ({ isOpen, onClose, onProceed }: any) => {
                 </div>
               </div>
               <div className="space-y-3">
-                {items.map((item) => (
-                  <div key={item.id} className="bg-white p-4 rounded-[2rem] border border-slate-50 flex items-center gap-4">
-                    <div className="w-16 h-16 bg-slate-50 rounded-2xl p-2 flex-shrink-0">
-                      {resolveImageUrl(item) ? (
-                        <img src={resolveImageUrl(item)} className="w-full h-full object-contain" alt={item.name} />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase tracking-widest text-slate-300">No Image</div>
-                      )}
+                {items.map((item) => {
+                  const stockLimit = item.stock != null && item.stock > 0 ? item.stock : null;
+                  const atMaxStock = stockLimit != null && item.quantity >= stockLimit;
+                  return (
+                  <div key={item.id} className="bg-white p-4 rounded-[2rem] border border-slate-50">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-slate-50 rounded-2xl p-2 flex-shrink-0">
+                        {resolveImageUrl(item) ? (
+                          <img src={resolveImageUrl(item)} className="w-full h-full object-contain" alt={item.name} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase tracking-widest text-slate-300">No Image</div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-black text-slate-800 truncate">{item.name}</h4>
+                        <p className="text-sm font-black text-slate-900 mt-1">₹{item.price}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <div className="flex items-center bg-slate-100 rounded-2xl p-1.5 gap-3">
+                          <button onClick={() => dispatch(removeFromCart(item.id))} className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                            {item.quantity === 1 ? <Trash2 size={14} /> : <span className="font-bold">-</span>}
+                          </button>
+                          <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
+                          <button
+                            onClick={() => {
+                              if (atMaxStock) return;
+                              dispatch(addToCart(item));
+                            }}
+                            disabled={atMaxStock}
+                            title={atMaxStock && stockLimit ? WEB_COPY.cart.onlyLeftInStock(stockLimit) : undefined}
+                            className="w-8 h-8 bg-[#4b6f9e] text-white rounded-xl flex items-center justify-center shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-black text-slate-800 truncate">{item.name}</h4>
-                      <p className="text-sm font-black text-slate-900 mt-1">₹{item.price}</p>
-                    </div>
-                    <div className="flex items-center bg-slate-100 rounded-2xl p-1.5 gap-3">
-                      <button onClick={() => dispatch(removeFromCart(item.id))} className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                        {item.quantity === 1 ? <Trash2 size={14} /> : <span className="font-bold">-</span>}
-                      </button>
-                      <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
-                      <button onClick={() => dispatch(addToCart(item))} className="w-8 h-8 bg-[#4b6f9e] text-white rounded-xl flex items-center justify-center shadow-md">+</button>
-                    </div>
+                    {atMaxStock && stockLimit != null && (
+                      <p className="mt-2.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-snug">
+                        {WEB_COPY.cart.maxStockInCart(stockLimit)}
+                      </p>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           ) : (

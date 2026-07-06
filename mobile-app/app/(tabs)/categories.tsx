@@ -9,7 +9,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useGetCategoriesQuery, useGetProductsByCategoryQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
-import { buildCartPayload, getDefaultVariant } from '@/utils/productVariants';
+import { buildCartPayload, getPurchasableVariant, isProductPurchasable } from '@/utils/productVariants';
 import { showToast } from '@/utils/toast';
 import { resolveProductImageUri } from '@/utils/resolveProductImageUri';
 
@@ -87,9 +87,13 @@ const base = activeSub
   const paginatedProducts = filteredProducts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleAddToCart = (product: any) => {
+    const variant = getPurchasableVariant(product);
+    if (!variant) {
+      showToast('error', 'Out of stock', `${product.name} is currently unavailable.`);
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const def = getDefaultVariant(product);
-    const payload = buildCartPayload(product, def);
+    const payload = buildCartPayload(product, variant);
     if (resolveProductImageUri(product)) payload.image = resolveProductImageUri(product)!;
     dispatch(addToCart(payload));
     showToast('success', 'Added', `${product.name} added to basket`);
@@ -259,34 +263,46 @@ const base = activeSub
               }
               renderItem={({ item }) => {
                 const thumb = resolveProductImageUri(item);
+                const inStock = isProductPurchasable(item);
                 return (
                 <TouchableOpacity
-                  style={styles.productCard}
+                  style={[styles.productCard, !inStock && styles.productCardOutOfStock]}
                   onPress={() =>
                     router.push({ pathname: '/product/[id]', params: { id: item.id } })
                   }
                 >
+                  {!inStock && (
+                    <View style={styles.oosBadge}>
+                      <Text style={styles.oosBadgeText}>OUT OF STOCK</Text>
+                    </View>
+                  )}
                   {thumb ? (
-                    <Image source={{ uri: thumb }} style={styles.productImage} />
+                    <Image source={{ uri: thumb }} style={[styles.productImage, !inStock && styles.productImageMuted]} />
                   ) : (
                     <View style={[styles.productImage, { justifyContent: 'center', alignItems: 'center' }]}>
                       <Ionicons name="image-outline" size={36} color="#cbd5e1" />
                     </View>
                   )}
                   <View style={styles.productInfo}>
-                    <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-                    <Text style={styles.productUnit}>{item.unit}</Text>
+                    <Text style={[styles.productName, !inStock && styles.productNameMuted]} numberOfLines={2}>{item.name}</Text>
+                    <Text style={[styles.productUnit, !inStock && styles.productUnitMuted]}>{item.unit}</Text>
                     <View style={styles.productFooter}>
-                      <Text style={styles.productPrice}>₹{item.price}</Text>
-                      <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleAddToCart(item);
-                        }}
-                      >
-                        <Ionicons name="add" size={16} color="#fff" />
-                      </TouchableOpacity>
+                      <Text style={[styles.productPrice, !inStock && styles.productPriceMuted]}>₹{item.price}</Text>
+                      {inStock ? (
+                        <TouchableOpacity
+                          style={styles.addButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleAddToCart(item);
+                          }}
+                        >
+                          <Ionicons name="add" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.soldOutPill}>
+                          <Text style={styles.soldOutPillText}>SOLD OUT</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -410,6 +426,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
+  productCardOutOfStock: { opacity: 0.65, backgroundColor: '#f8fafc' },
+  productImageMuted: { opacity: 0.55 },
+  productNameMuted: { color: '#94a3b8' },
+  productUnitMuted: { color: '#cbd5e1' },
+  productPriceMuted: { color: '#cbd5e1' },
+  oosBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 2,
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  oosBadgeText: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  soldOutPill: {
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  soldOutPillText: { color: '#64748b', fontSize: 8, fontWeight: '800' },
 
   emptyContainer: { alignItems: 'center', marginTop: 80 },
   emptyText: { fontSize: 14, color: '#7b8a9a', marginTop: 16 },

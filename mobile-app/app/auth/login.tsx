@@ -10,15 +10,18 @@ import {
     ScrollView,
     ActivityIndicator
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import LottieView from "lottie-react-native";
 import { Colors, Fonts } from "@/theme/theme";
 import { StoreLogo } from '@/src/components/StoreLogo';
 import { MOBILE_COPY } from "@/src/constants/copy";
+import { sendOtp } from "@/api/authApi";
+import { showToast } from "@/utils/toast";
 
 export default function Login() {
     const router = useRouter();
-    const [phone, setPhone] = useState("");
+    const params = useLocalSearchParams<{ phone?: string }>();
+    const [phone, setPhone] = useState(String(params.phone || ""));
     const [loading, setLoading] = useState(false);
 
     const indiaRegex = /^[6-9]\d{9}$/;
@@ -29,14 +32,26 @@ export default function Login() {
 
         setLoading(true);
         try {
+            await sendOtp(phone, { mode: "login" });
             router.push({
                 pathname: "/auth/otp",
                 params: {
                     phone,
                     mode: "login",
-                    autoSend: "1",
+                    autoSend: "0",
                 },
             });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "Failed to send OTP";
+            showToast("error", "Sign in", msg);
+            if (msg.toLowerCase().includes("sign up")) {
+                setTimeout(() => {
+                    router.push({
+                        pathname: "/auth/register",
+                        params: { phone },
+                    });
+                }, 1200);
+            }
         } finally {
             setLoading(false);
         }

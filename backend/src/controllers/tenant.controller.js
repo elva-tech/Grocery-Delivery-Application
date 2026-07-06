@@ -17,6 +17,18 @@ const seedPlans = seedDefaultPlansIfEmpty;
 const BASE_DOMAIN      = "enandi.com";
 const TENANT_ID_REGEX  = /^[a-z0-9-]+$/;
 
+function normalizeOptionalAppUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
 /* ─────────────────────────────────────────────
    STORE CODE GENERATOR
 ───────────────────────────────────────────── */
@@ -143,7 +155,7 @@ exports.getTenantDetails = async (req, res) => {
 
   const tenant = await Tenant.findOne({ tenantId })
     .select(
-      "tenantId name logo storeAddress storeAddressParts storeLat storeLng contactEmail phoneNumber plan customerDomain adminDomain ownerName tagline heroBadge heroTitle heroSubtitle supportEmail supportPhone supportHours"
+      "tenantId name logo storeAddress storeAddressParts storeLat storeLng contactEmail phoneNumber plan customerDomain adminDomain ownerName tagline heroBadge heroTitle heroSubtitle supportEmail supportPhone supportHours androidAppLink iosAppLink"
     )
     .lean();
 
@@ -182,6 +194,8 @@ exports.getTenantDetails = async (req, res) => {
     supportEmail:  tenant.supportEmail || "",
     supportPhone:  tenant.supportPhone || "",
     supportHours:  tenant.supportHours || "",
+    androidAppLink: tenant.androidAppLink || "",
+    iosAppLink:    tenant.iosAppLink || "",
   });
 };
 
@@ -299,6 +313,51 @@ exports.updateTenantStoreLocation = async (req, res) => {
   } catch (err) {
     console.error("[updateTenantStoreLocation]", err);
     return res.status(500).json({ success: false, message: "Failed to save store location" });
+  }
+};
+
+/* ─────────────────────────────────────────────
+   PATCH /api/tenant/app-links
+   Admin only — optional mobile app store URLs for customer website promo
+───────────────────────────────────────────── */
+exports.updateTenantAppLinks = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: "tenantId missing from session" });
+    }
+
+    const android = normalizeOptionalAppUrl(req.body?.androidAppLink);
+    const ios = normalizeOptionalAppUrl(req.body?.iosAppLink);
+
+    if (req.body?.androidAppLink && android === null) {
+      return res.status(400).json({ success: false, message: "androidAppLink must be a valid http(s) URL" });
+    }
+    if (req.body?.iosAppLink && ios === null) {
+      return res.status(400).json({ success: false, message: "iosAppLink must be a valid http(s) URL" });
+    }
+
+    const updated = await Tenant.findOneAndUpdate(
+      { tenantId },
+      { $set: { androidAppLink: android, iosAppLink: ios } },
+      { new: true }
+    )
+      .select("tenantId androidAppLink iosAppLink")
+      .lean();
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Tenant not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "App store links saved",
+      androidAppLink: updated.androidAppLink || "",
+      iosAppLink: updated.iosAppLink || "",
+    });
+  } catch (err) {
+    console.error("[updateTenantAppLinks]", err);
+    return res.status(500).json({ success: false, message: "Failed to save app store links" });
   }
 };
 

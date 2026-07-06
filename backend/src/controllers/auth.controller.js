@@ -81,6 +81,51 @@ function formatAuthUser(user) {
   };
 }
 
+function normalizeAuthMode(raw) {
+  const mode = String(raw || "login").trim().toLowerCase();
+  return mode === "signup" ? "signup" : "login";
+}
+
+const MSG_ACCOUNT_EXISTS =
+  "This phone number is already registered. Please sign in instead.";
+const MSG_ACCOUNT_NOT_FOUND =
+  "No account found with this number. Please sign up first.";
+const MSG_ADMIN_USE_PASSWORD =
+  "Store admins must sign in with password on the admin portal.";
+
+async function assertCustomerAuthMode(tenantId, phone, mode) {
+  const user = await User.findOne({ tenantId, phoneNumber: phone });
+
+  if (mode === "signup") {
+    if (user) {
+      return {
+        ok: false,
+        status: 409,
+        message: MSG_ACCOUNT_EXISTS,
+      };
+    }
+    return { ok: true };
+  }
+
+  if (!user) {
+    return {
+      ok: false,
+      status: 404,
+      message: MSG_ACCOUNT_NOT_FOUND,
+    };
+  }
+
+  if (user.role === "ADMIN") {
+    return {
+      ok: false,
+      status: 403,
+      message: MSG_ADMIN_USE_PASSWORD,
+    };
+  }
+
+  return { ok: true };
+}
+
 /* ===============================
    ADMIN LOGIN (password)
 ================================ */
@@ -223,6 +268,17 @@ const sendOtp = async (req, res) => {
 
     const phone = String(phoneNumber).trim();
     const isResend = req.body?.resend === true;
+    const mode = normalizeAuthMode(req.body?.mode);
+
+    if (!isResend) {
+      const gate = await assertCustomerAuthMode(tenantId, phone, mode);
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          success: false,
+          message: gate.message,
+        });
+      }
+    }
 
     try {
       const notifyBrandId = String(brandId || "").trim() || undefined;
@@ -296,6 +352,7 @@ const verifyOtp = async (req, res) => {
     }
 
     const phone = String(phoneNumber).trim();
+    const mode = normalizeAuthMode(req.body?.mode);
 
     try {
       const notifyBrandId = String(brandId || "").trim() || undefined;
@@ -330,15 +387,13 @@ const verifyOtp = async (req, res) => {
 
     let user = await User.findOne({ tenantId, phoneNumber: phone });
 
-    if (user && user.role === "ADMIN") {
-      return res.status(403).json({
-        success: false,
-        message:
-          "Store admins must sign in with password on the admin portal.",
-      });
-    }
-
-    if (!user) {
+    if (mode === "signup") {
+      if (user) {
+        return res.status(409).json({
+          success: false,
+          message: MSG_ACCOUNT_EXISTS,
+        });
+      }
       if (!name || name.trim().length < 2) {
         return res.status(400).json({
           success: false,
@@ -354,6 +409,18 @@ const verifyOtp = async (req, res) => {
       });
       console.log(`[verifyOtp] New CUSTOMER created — tenantId=${tenantId} phone=${phone}`);
     } else {
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: MSG_ACCOUNT_NOT_FOUND,
+        });
+      }
+      if (user.role === "ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: MSG_ADMIN_USE_PASSWORD,
+        });
+      }
       console.log(
         `[verifyOtp] Existing user login — tenantId=${tenantId} role=${user.role} phone=${phone}`
       );

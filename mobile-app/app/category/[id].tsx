@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 import { useDispatch, useSelector } from 'react-redux';
 import { useGetProductsByCategoryQuery } from '@/api/apiSlice';
 import { addToCart } from '@/store/slices/cartSlice';
-import { buildCartPayload, getDefaultVariant } from '@/utils/productVariants';
+import { buildCartPayload, getPurchasableVariant, isProductPurchasable } from '@/utils/productVariants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -36,10 +36,14 @@ export default function CategoryScreen() {
   const paginatedProducts = filteredProducts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleAddToCart = (product: any) => {
+    const variant = getPurchasableVariant(product);
+    if (!variant) {
+      showToast('error', 'Out of stock', `${product.name} is currently unavailable.`);
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const def = getDefaultVariant(product);
-    const payload = buildCartPayload(product, def);
+    const payload = buildCartPayload(product, variant);
     if (Array.isArray(product.image) && product.image[0]) payload.image = product.image[0];
     dispatch(addToCart(payload));
 
@@ -153,40 +157,55 @@ export default function CategoryScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
+          renderItem={({ item }) => {
+            const inStock = isProductPurchasable(item);
+            const purchasableQty = getPurchasableVariant(item)?.availableQty ?? 0;
+            return (
             <TouchableOpacity
-              style={styles.productCard}
+              style={[styles.productCard, !inStock && styles.productCardOutOfStock]}
               onPress={() =>
                 router.push({ pathname: "/product/[id]", params: { id: item.id } })
               }
               activeOpacity={0.9}
             >
-              <Image source={{ uri: item.image[0] }} style={styles.productImage} contentFit="contain" />
+              {!inStock && (
+                <View style={styles.oosBadge}>
+                  <Text style={styles.oosBadgeText}>OUT OF STOCK</Text>
+                </View>
+              )}
+              <Image source={{ uri: item.image[0] }} style={[styles.productImage, !inStock && styles.productImageMuted]} contentFit="contain" />
               <View style={styles.info}>
-                <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-                <Text style={styles.productUnit}>{item.unit}</Text>
+                <Text style={[styles.productName, !inStock && styles.productNameMuted]} numberOfLines={2}>{item.name}</Text>
+                <Text style={[styles.productUnit, !inStock && styles.productUnitMuted]}>{item.unit}</Text>
 
                 <View style={styles.footer}>
                   <View>
-                    <Text style={styles.productPrice}>₹{item.price}</Text>
-                    {item.stock < 10 && (
-                      <Text style={styles.stockWarning}>Only {item.stock} left</Text>
+                    <Text style={[styles.productPrice, !inStock && styles.productPriceMuted]}>₹{item.price}</Text>
+                    {inStock && purchasableQty < 10 && purchasableQty > 0 && (
+                      <Text style={styles.stockWarning}>Only {purchasableQty} left</Text>
                     )}
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.addButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleAddToCart(item);
-                    }}
-                  >
-                    <Ionicons name="add" size={18} color="#fff" />
-                  </TouchableOpacity>
+                  {inStock ? (
+                    <TouchableOpacity
+                      style={styles.addButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleAddToCart(item);
+                      }}
+                    >
+                      <Ionicons name="add" size={18} color="#fff" />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.soldOutPill}>
+                      <Text style={styles.soldOutPillText}>SOLD OUT</Text>
+                    </View>
+                  )}
                 </View>
               </View>
             </TouchableOpacity>
-          )}
+            );
+          }}
         />
       ) : (
         <View style={styles.emptyContainer}>
@@ -293,6 +312,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  productCardOutOfStock: { opacity: 0.65, backgroundColor: '#f8fafc' },
+  productImageMuted: { opacity: 0.55 },
+  productNameMuted: { color: '#94a3b8' },
+  productUnitMuted: { color: '#cbd5e1' },
+  productPriceMuted: { color: '#cbd5e1' },
+  oosBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 2,
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  oosBadgeText: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  soldOutPill: {
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  soldOutPillText: { color: '#64748b', fontSize: 9, fontWeight: '800' },
 
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#2c3e50', marginTop: 20 },

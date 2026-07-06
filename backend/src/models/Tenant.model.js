@@ -131,6 +131,18 @@ const tenantSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    /** Optional Google Play Store URL — shown on customer website app promo when set */
+    androidAppLink: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    /** Optional Apple App Store URL — shown on customer website app promo when set */
+    iosAppLink: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     qrCode: {
       type: String,  // base64 data-URL of the QR PNG
       default: "",

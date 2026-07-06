@@ -56,7 +56,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     
     setLoading(true);
     try {
-      const response = await sendOtp(phone);
+      const response = await sendOtp(phone, { mode });
       if (response.success) {
         setStep('otp');
         setTimer(OTP_RESEND_COOLDOWN_SECONDS);
@@ -64,7 +64,14 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
         setError(response.message || 'Failed to send OTP');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send OTP';
+      setError(errorMessage);
+      if (mode === 'signup' && errorMessage.includes('already registered')) {
+        setTimeout(() => switchMode('login'), 1500);
+      }
+      if (mode === 'login' && errorMessage.includes('sign up')) {
+        setTimeout(() => switchMode('signup'), 1500);
+      }
     } finally {
       setLoading(false);
     }
@@ -74,7 +81,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     setError('');
     setLoading(true);
     try {
-      const response = await sendOtp(phone, { resend: true });
+      const response = await sendOtp(phone, { resend: true, mode });
       if (response.success) {
         setTimer(OTP_RESEND_COOLDOWN_SECONDS);
         setOtp(['', '', '', '', '', '']);
@@ -160,8 +167,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
           setTimeout(() => switchMode('login'), 1500);
         }
         
-        // Auto-switch to signup if trying to login with non-existent account
-        if (mode === 'login' && errorMessage.includes('not registered')) {
+        if (mode === 'login' && errorMessage.includes('sign up')) {
           setTimeout(() => switchMode('signup'), 1500);
         }
       }
@@ -172,8 +178,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to verify OTP. Please try again.';
       setError(errorMessage);
       
-      // Auto-switch to signup if trying to login with non-existent account
-      if (mode === 'login' && errorMessage.includes("doesn't have an account")) {
+      if (mode === 'login' && errorMessage.includes('sign up')) {
         setTimeout(() => switchMode('signup'), 1500);
       }
     } finally {
@@ -225,7 +230,7 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                 <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-red-700">{error}</p>
-                  {mode === 'login' && error.includes('not registered') && (
+                  {mode === 'login' && error.includes('sign up') && (
                     <button
                       type="button"
                       onClick={() => switchMode('signup')}

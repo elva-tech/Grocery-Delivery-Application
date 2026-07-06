@@ -453,5 +453,13 @@ deleteBanner: async (id) => {
     return res.data;
   },
 
+  updateTenantAppLinks: async ({ androidAppLink, iosAppLink }) => {
+    const res = await api.patch("/api/tenant/app-links", {
+      androidAppLink,
+      iosAppLink,
+    });
+    return res.data;
+  },
+
 };
 

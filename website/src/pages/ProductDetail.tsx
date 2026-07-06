@@ -2,8 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, ShoppingBag, ShieldCheck,
-  Leaf, ThermometerSnowflake, Plus, Minus, CheckCircle2,
+  ChevronLeft, ShoppingBag,
+  Plus, Minus, CheckCircle2, Sparkles,
 } from 'lucide-react';
 
 import { addToCart, removeFromCart } from '../store/slices/cartSlice';
@@ -83,6 +83,7 @@ const ProductDetail = () => {
   const displayPrice = selectedVariant?.price ?? product.price;
   const displayUnit = selectedVariant?.label ?? product.unit;
   const displayStock = selectedVariant?.availableQty ?? product.stock;
+  const productFeatures = product.productFeatures ?? [];
 
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-24 animate-in fade-in duration-500">
@@ -173,20 +174,16 @@ const ProductDetail = () => {
               <span className="text-slate-400 font-bold text-sm uppercase tracking-widest">Incl. Taxes</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                <div className="p-2 bg-blue-50 text-[#4b6f9e] rounded-lg"><Leaf size={18} /></div>
-                <span className="text-[10px] font-black text-slate-700 uppercase">100% Organic</span>
+            {productFeatures.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+                {productFeatures.map((feature, idx) => (
+                  <div key={`${feature.label}-${idx}`} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                    <div className="p-2 bg-blue-50 text-[#4b6f9e] rounded-lg"><Sparkles size={18} /></div>
+                    <span className="text-[10px] font-black text-slate-700 uppercase">{feature.label}</span>
+                  </div>
+                ))}
               </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                <div className="p-2 bg-blue-50 text-[#4b6f9e] rounded-lg"><ShieldCheck size={18} /></div>
-                <span className="text-[10px] font-black text-slate-700 uppercase">Quality Seal</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                <div className="p-2 bg-blue-50 text-[#4b6f9e] rounded-lg"><ThermometerSnowflake size={18} /></div>
-                <span className="text-[10px] font-black text-slate-700 uppercase">Cold Chain</span>
-              </div>
-            </div>
+            )}
 
             <div className="mb-10 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
               <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 mb-3">Product Description</h4>

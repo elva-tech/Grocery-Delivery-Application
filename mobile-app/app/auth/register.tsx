@@ -1,14 +1,17 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Colors, Fonts } from "@/theme/theme";
 import { StoreLogo } from '@/src/components/StoreLogo';
 import { MOBILE_COPY } from "@/src/constants/copy";
+import { sendOtp } from "@/api/authApi";
+import { showToast } from "@/utils/toast";
 
 export default function Register() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ phone?: string }>();
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(String(params.phone || ""));
   const [loading, setLoading] = useState(false);
 
   const indiaRegex = /^[6-9]\d{9}$/;
@@ -20,15 +23,27 @@ export default function Register() {
 
     setLoading(true);
     try {
+      await sendOtp(phone.trim(), { mode: "signup" });
       router.push({
         pathname: '/auth/otp',
         params: {
-          phone,
+          phone: phone.trim(),
           name: name.trim(),
           mode: 'signup',
-          autoSend: '1',
+          autoSend: '0',
         },
       });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to send OTP';
+      showToast('error', 'Sign up', msg);
+      if (msg.toLowerCase().includes('already registered')) {
+        setTimeout(() => {
+          router.push({
+            pathname: '/auth/login',
+            params: { phone: phone.trim() },
+          });
+        }, 1200);
+      }
     } finally {
       setLoading(false);
     }

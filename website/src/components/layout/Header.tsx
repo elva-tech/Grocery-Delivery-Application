@@ -69,8 +69,19 @@ const Header: React.FC<HeaderProps> = ({
   selectedDeliveryAddress = null,
   onSelectDeliveryAddress,
 }) => {
-  const { storeName, tagline, logo } = useTenantBranding();
+  const { storeName, logo, tagline, androidAppLink, iosAppLink, raw, loading: brandingLoading } = useTenantBranding();
   const { head: brandHead, tail: brandTail } = splitBrandWords(storeName);
+  const hasAndroidLink = Boolean(androidAppLink?.trim());
+  const hasIosLink = Boolean(iosAppLink?.trim());
+  const hasAppStoreLinks = hasAndroidLink || hasIosLink;
+
+  const supportEmail = raw?.supportEmail?.trim() || raw?.contactEmail?.trim() || '';
+  const supportPhoneDigits =
+    raw?.supportPhone?.trim()?.replace(/\D/g, '').slice(-10) ||
+    raw?.phoneNumber?.trim()?.replace(/\D/g, '').slice(-10) ||
+    '';
+  const supportHours = raw?.supportHours?.trim() || '';
+  const hasSupportContact = Boolean(supportEmail || supportPhoneDigits || supportHours);
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { totalAmount } = useSelector((state: RootState) => state.cart);
@@ -99,17 +110,18 @@ const Header: React.FC<HeaderProps> = ({
         if (!cancelled) setLocation('Enable Location');
       }
     })();
-
-    const hasSeenModal = sessionStorage.getItem('hasSeenAppModal');
-    let modalTimer: ReturnType<typeof setTimeout> | undefined;
-    if (!hasSeenModal) {
-      modalTimer = setTimeout(() => setShowAppModal(true), 2000);
-    }
     return () => {
       cancelled = true;
-      if (modalTimer) clearTimeout(modalTimer);
     };
   }, []);
+
+  useEffect(() => {
+    if (brandingLoading || !hasAppStoreLinks) return;
+    const hasSeenModal = sessionStorage.getItem('hasSeenAppModal');
+    if (hasSeenModal) return;
+    const modalTimer = setTimeout(() => setShowAppModal(true), 2000);
+    return () => clearTimeout(modalTimer);
+  }, [brandingLoading, hasAppStoreLinks]);
 
   useEffect(() => {
     if (!deliverPickerOpen || !isAuthenticated) return;
@@ -182,7 +194,7 @@ const Header: React.FC<HeaderProps> = ({
   return (
     <>
       {/* --- PRODUCTION APP DOWNLOAD MODAL --- */}
-      {showAppModal && (
+      {showAppModal && hasAppStoreLinks && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300">
             <button
@@ -205,30 +217,34 @@ const Header: React.FC<HeaderProps> = ({
               </p>
 
               <div className="flex flex-col gap-3">
-                <a
-                  href="https://play.google.com/store"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:scale-[1.03] active:scale-95 transition-transform"
-                >
-                  <img
-                    src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg"
-                    alt="Get it on Google Play"
-                    className="h-14 mx-auto"
-                  />
-                </a>
-                <a
-                  href="https://apps.apple.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:scale-[1.03] active:scale-95 transition-transform"
-                >
-                  <img
-                    src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg"
-                    alt="Download on the App Store"
-                    className="h-14 mx-auto"
-                  />
-                </a>
+                {hasAndroidLink && (
+                  <a
+                    href={androidAppLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:scale-[1.03] active:scale-95 transition-transform"
+                  >
+                    <img
+                      src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg"
+                      alt="Get it on Google Play"
+                      className="h-14 mx-auto"
+                    />
+                  </a>
+                )}
+                {hasIosLink && (
+                  <a
+                    href={iosAppLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:scale-[1.03] active:scale-95 transition-transform"
+                  >
+                    <img
+                      src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg"
+                      alt="Download on the App Store"
+                      className="h-14 mx-auto"
+                    />
+                  </a>
+                )}
               </div>
 
               <button
@@ -500,19 +516,44 @@ const Header: React.FC<HeaderProps> = ({
             </h2>
 
             <div className="flex flex-col gap-3 text-center">
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-400 font-bold">EMAIL</p>
-                <p className="text-sm font-black text-slate-800 break-all">
-                  support@yourapp.com
-                </p>
-              </div>
+              {supportEmail ? (
+                <a
+                  href={`mailto:${supportEmail}`}
+                  className="bg-slate-50 rounded-xl p-3 hover:bg-slate-100 transition-colors"
+                >
+                  <p className="text-xs text-slate-400 font-bold">EMAIL</p>
+                  <p className="text-sm font-black text-slate-800 break-all">
+                    {supportEmail}
+                  </p>
+                </a>
+              ) : null}
 
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-400 font-bold">PHONE</p>
-                <p className="text-sm font-black text-slate-800">
-                  +91 9876543210
+              {supportPhoneDigits ? (
+                <a
+                  href={`tel:+91${supportPhoneDigits}`}
+                  className="bg-slate-50 rounded-xl p-3 hover:bg-slate-100 transition-colors"
+                >
+                  <p className="text-xs text-slate-400 font-bold">PHONE</p>
+                  <p className="text-sm font-black text-slate-800">
+                    +91 {supportPhoneDigits}
+                  </p>
+                </a>
+              ) : null}
+
+              {supportHours ? (
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <p className="text-xs text-slate-400 font-bold">HOURS</p>
+                  <p className="text-sm font-black text-slate-800 whitespace-pre-line">
+                    {supportHours}
+                  </p>
+                </div>
+              ) : null}
+
+              {!hasSupportContact && !brandingLoading ? (
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest py-2">
+                  Contact details not set up yet
                 </p>
-              </div>
+              ) : null}
             </div>
           </div>
         </div>

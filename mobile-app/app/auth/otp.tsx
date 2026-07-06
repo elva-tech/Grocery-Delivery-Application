@@ -43,16 +43,22 @@ export default function OTP() {
     (async () => {
       setSendingOtp(true);
       try {
-        await sendOtp(phone);
+        await sendOtp(phone as string, { mode });
         setTimer(OTP_RESEND_COOLDOWN_SECONDS);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to send OTP";
         showToast("error", "Error", msg);
+        if (mode === "signup" && msg.toLowerCase().includes("already registered")) {
+          setTimeout(() => router.replace({ pathname: "/auth/login", params: { phone } }), 1200);
+        }
+        if (mode === "login" && msg.toLowerCase().includes("sign up")) {
+          setTimeout(() => router.replace({ pathname: "/auth/register", params: { phone } }), 1200);
+        }
       } finally {
         setSendingOtp(false);
       }
     })();
-  }, [autoSend, phone]);
+  }, [autoSend, phone, mode, router]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -140,6 +146,12 @@ export default function OTP() {
         if (verifySucceeded.current) return;
         const msg = e instanceof Error ? e.message : "Please try again";
         showToast("error", "Verification Failed", msg);
+        if (mode === "signup" && msg.toLowerCase().includes("already registered")) {
+          setTimeout(() => router.replace({ pathname: "/auth/login", params: { phone } }), 1200);
+        }
+        if (mode === "login" && msg.toLowerCase().includes("sign up")) {
+          setTimeout(() => router.replace({ pathname: "/auth/register", params: { phone } }), 1200);
+        }
       } finally {
         verifyInFlight.current = false;
         if (!verifySucceeded.current) {
@@ -186,7 +198,7 @@ export default function OTP() {
     if (loading || sendingOtp || verifyInFlight.current) return;
     setLoading(true);
     try {
-      await sendOtp(phone as string, { resend: true });
+      await sendOtp(phone as string, { resend: true, mode });
       setOtp(["", "", "", "", "", ""]);
       setTimer(OTP_RESEND_COOLDOWN_SECONDS);
       verifySucceeded.current = false;

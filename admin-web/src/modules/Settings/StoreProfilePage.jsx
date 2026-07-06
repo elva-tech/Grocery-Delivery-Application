@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, MapPin, User, Clock, Headphones, Loader2 } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, User, Clock, Headphones, Loader2, Smartphone } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 import { useToast } from '../../context/ToastContext';
 import { useTenantBranding } from '../../context/TenantBrandingContext';
@@ -20,6 +20,9 @@ export default function StoreProfilePage() {
   const [storeLat, setStoreLat] = useState('');
   const [storeLng, setStoreLng] = useState('');
   const [savingHub, setSavingHub] = useState(false);
+  const [androidAppLink, setAndroidAppLink] = useState('');
+  const [iosAppLink, setIosAppLink] = useState('');
+  const [savingAppLinks, setSavingAppLinks] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +41,8 @@ export default function StoreProfilePage() {
         setStoreLng(
           typeof data.storeLng === 'number' && Number.isFinite(data.storeLng) ? String(data.storeLng) : '',
         );
+        setAndroidAppLink((data.androidAppLink || '').trim());
+        setIosAppLink((data.iosAppLink || '').trim());
       })
       .catch((err) => {
         if (!cancelled) {
@@ -118,6 +123,31 @@ export default function StoreProfilePage() {
       showToast('error', err?.response?.data?.message || 'Failed to save');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAppLinks = async (e) => {
+    e.preventDefault();
+    const android = androidAppLink.trim();
+    const ios = iosAppLink.trim();
+    setSavingAppLinks(true);
+    try {
+      await apiService.updateTenantAppLinks({
+        androidAppLink: android,
+        iosAppLink: ios,
+      });
+      showToast('success', 'App store links saved');
+      if (typeof refreshTenantProfile === 'function') {
+        await refreshTenantProfile();
+      }
+      const data = await apiService.getStoreProfile();
+      setProfile(data);
+      setAndroidAppLink((data.androidAppLink || '').trim());
+      setIosAppLink((data.iosAppLink || '').trim());
+    } catch (err) {
+      showToast('error', err?.response?.data?.message || 'Failed to save app links');
+    } finally {
+      setSavingAppLinks(false);
     }
   };
 
@@ -217,6 +247,48 @@ export default function StoreProfilePage() {
         >
           {savingHub ? <Loader2 className="animate-spin" size={18} /> : null}
           Save delivery hub coordinates
+        </button>
+      </form>
+
+      <form onSubmit={handleSaveAppLinks} className="bg-white rounded-[28px] border border-blue-100 shadow-sm p-6 space-y-5">
+        <div className="flex items-center gap-2 text-blue-800 font-black text-sm uppercase tracking-widest">
+          <Smartphone size={18} />
+          Mobile app download links
+        </div>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Optional. When set, your customer website shows a session popup and footer badges linking to your app.
+          Leave blank to hide the promo entirely.
+        </p>
+
+        <label className="block space-y-1.5">
+          <span className="text-[10px] font-black uppercase text-slate-400">Google Play Store URL</span>
+          <input
+            type="url"
+            value={androidAppLink}
+            onChange={(e) => setAndroidAppLink(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-200"
+            placeholder="https://play.google.com/store/apps/details?id=..."
+          />
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-[10px] font-black uppercase text-slate-400">Apple App Store URL</span>
+          <input
+            type="url"
+            value={iosAppLink}
+            onChange={(e) => setIosAppLink(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-200"
+            placeholder="https://apps.apple.com/app/id..."
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={savingAppLinks}
+          className="w-full py-4 rounded-2xl bg-blue-700 text-white font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {savingAppLinks ? <Loader2 className="animate-spin" size={18} /> : null}
+          Save app links
         </button>
       </form>
 

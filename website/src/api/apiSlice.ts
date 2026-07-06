@@ -12,6 +12,23 @@ const toCatId = (name: string) =>
 const toSubId = (name: string) =>
   `sub_${name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}`;
 
+function normalizeProductFeatures(raw: unknown): { label: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (typeof item === 'string') {
+        const label = item.trim();
+        return label ? { label } : null;
+      }
+      if (item && typeof item === 'object' && typeof (item as { label?: string }).label === 'string') {
+        const label = (item as { label: string }).label.trim();
+        return label ? { label } : null;
+      }
+      return null;
+    })
+    .filter((item): item is { label: string } => item != null);
+}
+
 /* -------- in-memory cache to avoid double-fetching (must be scoped by tenant) -------- */
 type ProductsCacheEntry = { tenantId: string; data: Product[]; expiry: number };
 let _productsCache: ProductsCacheEntry | null = null;
@@ -64,6 +81,9 @@ const fetchProductsFromApi = async (tenantId: string): Promise<Product[]> => {
     })).filter((v) => v.variantId.length > 0);
 
     const def = variants.find((v) => v.isDefault) || variants[0];
+    const inStock = typeof p.inStock === 'boolean'
+      ? p.inStock
+      : variants.some((v) => v.inStock) || (def?.availableQty ?? 0) > 0;
 
     return {
       id: mongoId != null ? String(mongoId) : '',
@@ -77,10 +97,12 @@ const fetchProductsFromApi = async (tenantId: string): Promise<Product[]> => {
       unit: def?.label ?? (p.unit || ''),
       image: urls.length ? urls : ['/placeholder.png'],
       stock: def?.availableQty ?? p.availableQty ?? 0,
+      inStock,
       variants: variants.length ? variants : undefined,
       variantCount: variants.length || undefined,
       defaultVariantId: def?.variantId,
       returnAllowed: p.returnAllowed !== false,
+      productFeatures: normalizeProductFeatures(p.productFeatures),
     };
   }).filter((p) => p.id.length > 0);
 
@@ -148,11 +170,13 @@ export interface Product {
   unit: string;
   image: string[];
   stock: number;
+  inStock?: boolean;
   description?: string;
   variants?: ProductVariant[];
   variantCount?: number;
   defaultVariantId?: string;
   returnAllowed?: boolean;
+  productFeatures?: { label: string }[];
 }
 
 export interface Category {
