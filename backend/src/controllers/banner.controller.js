@@ -16,6 +16,8 @@ exports.createBanner = async (req, res) => {
     const { title } = req.body;
 
     let imageUrl = req.body.imageUrl;
+    let imageWebUrl =
+      typeof req.body.imageWebUrl === "string" ? req.body.imageWebUrl.trim() : "";
 
     // Case 1: Use provided Cloudinary URL
     if (imageUrl && typeof imageUrl === "string" && imageUrl.trim()) {
@@ -60,6 +62,13 @@ exports.createBanner = async (req, res) => {
       return res.status(400).json({ success: false, message: urlCheck.message });
     }
 
+    if (imageWebUrl) {
+      const webUrlCheck = tenantPolicy.validateBannerImageUrlStrict(imageWebUrl);
+      if (!webUrlCheck.ok) {
+        return res.status(400).json({ success: false, message: webUrlCheck.message });
+      }
+    }
+
     const tenantId = req.user?.tenantId;
     const userId = req.user?.userId;
 
@@ -74,10 +83,20 @@ exports.createBanner = async (req, res) => {
       imagePublicId = publicIdFromCloudinaryDeliveryUrl(imageUrl);
     }
 
+    let imageWebPublicId =
+      typeof req.body.imageWebPublicId === "string"
+        ? req.body.imageWebPublicId.trim()
+        : "";
+    if (!imageWebPublicId && imageWebUrl) {
+      imageWebPublicId = publicIdFromCloudinaryDeliveryUrl(imageWebUrl);
+    }
+
     const banner = new Banner({
       title,
       imageUrl,
       imagePublicId,
+      imageWebUrl: imageWebUrl || "",
+      imageWebPublicId: imageWebPublicId || "",
       tenantId,
       userId,
     });
@@ -161,11 +180,25 @@ exports.deleteBanner = async (req, res) => {
     if (!publicId) {
       publicId = publicIdFromCloudinaryDeliveryUrl(banner.imageUrl);
     }
+    const destroyIds = new Set();
     if (publicId && tenantPolicy.isPublicIdOwnedByTenantFolder(publicId, tenantId)) {
+      destroyIds.add(publicId);
+    }
+
+    let webPublicId =
+      typeof banner.imageWebPublicId === "string" ? banner.imageWebPublicId.trim() : "";
+    if (!webPublicId && banner.imageWebUrl) {
+      webPublicId = publicIdFromCloudinaryDeliveryUrl(banner.imageWebUrl);
+    }
+    if (webPublicId && webPublicId !== publicId && tenantPolicy.isPublicIdOwnedByTenantFolder(webPublicId, tenantId)) {
+      destroyIds.add(webPublicId);
+    }
+
+    for (const pid of destroyIds) {
       try {
-        await destroyFromCloudinary(publicId);
+        await destroyFromCloudinary(pid);
       } catch (err) {
-        console.warn("deleteBanner: Cloudinary destroy failed", publicId, err.message);
+        console.warn("deleteBanner: Cloudinary destroy failed", pid, err.message);
       }
     }
 

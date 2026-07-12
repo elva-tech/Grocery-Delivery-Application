@@ -1,21 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Upload, ImageIcon, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { apiService } from "../../services/apiService";
+import { Trash2, Upload, ImageIcon, CheckCircle, XCircle, Loader2, Smartphone, Monitor } from 'lucide-react';
+import { apiService } from '../../services/apiService';
 import resolveImageUrl from '../../utils/resolveImageUrl';
+import { dataUrlToFile } from '../../utils/bannerCrop';
+import BannerCropEditor from './BannerCropEditor';
+
+const resolveWebImageUrl = (banner) => {
+  if (!banner || typeof banner !== 'object') return null;
+  const web = typeof banner.imageWebUrl === 'string' ? banner.imageWebUrl.trim() : '';
+  return web || resolveImageUrl(banner);
+};
 
 const BannerManagement = () => {
   const [title, setTitle] = useState('');
-  const [preview, setPreview] = useState(null);
-  const [file, setFile] = useState(null);
+  const [cropSrc, setCropSrc] = useState(null);
   const [bannerList, setBannerList] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState('');
-  const [toast, setToast] = useState(null); // { type: 'success'|'error', message: string }
-  const [fieldError, setFieldError] = useState(''); // inline validation error
+  const [toast, setToast] = useState(null);
+  const [fieldError, setFieldError] = useState('');
 
   const fileInputRef = useRef(null);
-  const previewUrlRef = useRef(null);
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -24,16 +30,16 @@ const BannerManagement = () => {
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current);
-      }
-      const nextPreviewUrl = URL.createObjectURL(selectedFile);
-      previewUrlRef.current = nextPreviewUrl;
-      setFile(selectedFile);
-      setFieldError('');
-      setPreview(nextPreviewUrl);
+    if (!selectedFile) return;
+    if (!selectedFile.type.startsWith('image/')) {
+      showToast('error', 'Please select an image file.');
+      return;
     }
+    setFieldError('');
+    const reader = new FileReader();
+    reader.onloadend = () => setCropSrc(reader.result);
+    reader.readAsDataURL(selectedFile);
+    e.target.value = '';
   };
 
   const fetchBanners = async () => {
@@ -55,27 +61,9 @@ const BannerManagement = () => {
     fetchBanners();
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current);
-        previewUrlRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleUpload = async () => {
-    // Validate both fields
-    if (!title.trim() && !file) {
-      setFieldError('Promotion title and image are required.');
-      return;
-    }
+  const handleCropSave = async ({ image, imageWeb }) => {
     if (!title.trim()) {
       setFieldError('Promotion title is required.');
-      return;
-    }
-    if (!file) {
-      setFieldError('Please select a banner image.');
       return;
     }
 
@@ -83,30 +71,34 @@ const BannerManagement = () => {
     setUploading(true);
 
     try {
-      const uploadResponse = await apiService.uploadFile(file, "banners");
-      const imageUrl = uploadResponse?.url || uploadResponse?.data?.url;
+      const appFile = dataUrlToFile(image, `banner-app-${Date.now()}.jpg`);
+      const webFile = dataUrlToFile(imageWeb, `banner-web-${Date.now()}.jpg`);
 
-      if (!imageUrl) {
-        throw new Error("Image upload failed. Please try again.");
+      const [appUpload, webUpload] = await Promise.all([
+        apiService.uploadFile(appFile, 'banners'),
+        apiService.uploadFile(webFile, 'banners'),
+      ]);
+
+      const imageUrl = appUpload?.url || appUpload?.data?.url;
+      const imageWebUrl = webUpload?.url || webUpload?.data?.url;
+
+      if (!imageUrl || !imageWebUrl) {
+        throw new Error('Image upload failed. Please try again.');
       }
 
       await apiService.createBanner({
         title: title.trim(),
         imageUrl,
         imagePublicId:
-          typeof uploadResponse?.public_id === "string"
-            ? uploadResponse.public_id.trim()
-            : "",
+          typeof appUpload?.public_id === 'string' ? appUpload.public_id.trim() : '',
+        imageWebUrl,
+        imageWebPublicId:
+          typeof webUpload?.public_id === 'string' ? webUpload.public_id.trim() : '',
       });
 
-      setTitle("");
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current);
-        previewUrlRef.current = null;
-      }
-      setPreview(null);
-      setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setTitle('');
+      setCropSrc(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
 
       await fetchBanners();
       showToast('success', 'Banner uploaded successfully!');
@@ -133,16 +125,21 @@ const BannerManagement = () => {
 
   return (
     <div className="p-6 space-y-6">
+      {cropSrc && (
+        <BannerCropEditor
+          imageSrc={cropSrc}
+          saving={uploading}
+          onCancel={() => setCropSrc(null)}
+          onSave={handleCropSave}
+        />
+      )}
 
-      {/* Toast Notification */}
       {toast && (
         <div
           className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl text-white font-bold text-sm transition-all
             ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-500'}`}
         >
-          {toast.type === 'success'
-            ? <CheckCircle size={20} />
-            : <XCircle size={20} />}
+          {toast.type === 'success' ? <CheckCircle size={20} /> : <XCircle size={20} />}
           {toast.message}
         </div>
       )}
@@ -150,32 +147,26 @@ const BannerManagement = () => {
       <div className="bg-[#1A4D2E] p-8 rounded-[32px] text-white flex justify-between items-center shadow-lg">
         <div>
           <h1 className="text-3xl font-black italic">APP BANNERS</h1>
-          <p className="opacity-70 font-medium">Live control for Mobile Home Screen</p>
+          <p className="opacity-70 font-medium">Crop once · preview for website &amp; mobile app</p>
         </div>
         <ImageIcon size={40} className="opacity-40" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-        {/* Upload Section */}
         <div className="lg:col-span-5 bg-white p-8 rounded-[32px] border shadow-sm space-y-6">
-
           <h2 className="text-xl font-bold text-slate-800">New Promotion</h2>
 
           <div
             onClick={() => fileInputRef.current.click()}
-            className="group w-full h-56 border-4 border-dashed border-slate-100 rounded-[28px] flex flex-col items-center justify-center cursor-pointer hover:border-emerald-200 hover:bg-emerald-50/30 transition-all overflow-hidden"
+            className="group w-full h-56 border-4 border-dashed border-slate-100 rounded-[28px] flex flex-col items-center justify-center cursor-pointer hover:border-emerald-200 hover:bg-emerald-50/30 transition-all"
           >
-            {preview ? (
-              <img src={preview} className="w-full h-full object-cover" alt="Preview" />
-            ) : (
-              <div className="text-center">
-                <div className="bg-slate-100 p-4 rounded-full inline-block mb-3 group-hover:bg-emerald-100 transition-colors">
-                  <Upload size={24} className="text-slate-400 group-hover:text-emerald-600" />
-                </div>
-                <p className="text-slate-500 font-bold text-sm">Upload Image</p>
+            <div className="text-center">
+              <div className="bg-slate-100 p-4 rounded-full inline-block mb-3 group-hover:bg-emerald-100 transition-colors">
+                <Upload size={24} className="text-slate-400 group-hover:text-emerald-600" />
               </div>
-            )}
+              <p className="text-slate-500 font-bold text-sm">Upload Image</p>
+              <p className="text-slate-400 text-xs mt-1 font-medium">Any size · crop before publish</p>
+            </div>
           </div>
 
           <input
@@ -192,7 +183,10 @@ const BannerManagement = () => {
                 ${fieldError ? 'border-red-300 bg-red-50' : 'border-transparent'}`}
               placeholder="Promotion Title..."
               value={title}
-              onChange={(e) => { setTitle(e.target.value); setFieldError(''); }}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setFieldError('');
+              }}
             />
             {fieldError && (
               <p className="text-red-500 text-sm font-semibold mt-2 flex items-center gap-1">
@@ -200,29 +194,11 @@ const BannerManagement = () => {
               </p>
             )}
           </div>
-
-          <button
-            onClick={handleUpload}
-            disabled={uploading}
-            className="w-full bg-[#1A4D2E] text-white p-5 rounded-2xl font-black shadow-xl shadow-green-900/20 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2"
-          >
-            {uploading ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              'UPDATE MOBILE APP'
-            )}
-          </button>
-
         </div>
 
-        {/* Banner List */}
         <div className="lg:col-span-7 space-y-4">
-
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            Active on App
+            Active Banners
             <span className="bg-emerald-500 w-2 h-2 rounded-full animate-ping" />
           </h2>
 
@@ -251,45 +227,67 @@ const BannerManagement = () => {
           ) : (
             <div className="grid grid-cols-1 gap-4">
               {bannerList.map((banner) => {
-                const imageSrc = resolveImageUrl(banner);
+                const appSrc = resolveImageUrl(banner);
+                const webSrc = resolveWebImageUrl(banner);
                 return (
-                <div
-                  key={banner._id}
-                  className="bg-white p-4 rounded-[28px] border border-slate-100 flex gap-5 items-center group shadow-sm hover:shadow-md transition-all"
-                >
-                  {imageSrc ? (
-                    <img
-                      src={imageSrc}
-                      className="w-32 h-20 rounded-2xl object-cover shadow-inner"
-                      alt={banner.title}
-                    />
-                  ) : (
-                    <div className="w-32 h-20 rounded-2xl bg-slate-100 text-slate-400 text-xs font-bold flex items-center justify-center">
-                      No Image
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-black text-slate-800 text-lg uppercase leading-tight truncate">
-                      {banner.title}
-                    </p>
-                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest truncate">
-                      ID: {banner._id}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(banner._id)}
-                    className="mr-2 bg-red-50 text-red-500 p-4 rounded-2xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white shadow-sm flex-shrink-0"
+                  <div
+                    key={banner._id}
+                    className="bg-white p-4 rounded-[28px] border border-slate-100 flex gap-4 items-center group shadow-sm hover:shadow-md transition-all"
                   >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
+                    <div className="flex gap-2 shrink-0">
+                      <div className="relative">
+                        {webSrc ? (
+                          <img
+                            src={webSrc}
+                            className="w-24 h-8 rounded-lg object-cover shadow-inner"
+                            alt={`${banner.title} web`}
+                          />
+                        ) : (
+                          <div className="w-24 h-8 rounded-lg bg-slate-100 text-[10px] text-slate-400 flex items-center justify-center">
+                            No Web
+                          </div>
+                        )}
+                        <span className="absolute -bottom-1 -right-1 bg-slate-800 text-white p-0.5 rounded">
+                          <Monitor size={8} />
+                        </span>
+                      </div>
+                      <div className="relative">
+                        {appSrc ? (
+                          <img
+                            src={appSrc}
+                            className="w-20 h-10 rounded-lg object-cover shadow-inner"
+                            alt={`${banner.title} app`}
+                          />
+                        ) : (
+                          <div className="w-20 h-10 rounded-lg bg-slate-100 text-[10px] text-slate-400 flex items-center justify-center">
+                            No App
+                          </div>
+                        )}
+                        <span className="absolute -bottom-1 -right-1 bg-slate-800 text-white p-0.5 rounded">
+                          <Smartphone size={8} />
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-slate-800 text-lg uppercase leading-tight truncate">
+                        {banner.title}
+                      </p>
+                      <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest truncate">
+                        ID: {banner._id}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(banner._id)}
+                      className="mr-2 bg-red-50 text-red-500 p-4 rounded-2xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white shadow-sm flex-shrink-0"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
                 );
               })}
             </div>
           )}
-
         </div>
-
       </div>
     </div>
   );
