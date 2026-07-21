@@ -168,6 +168,18 @@ updateProduct: async (productId, payload) => {
       (res) => res.totalPages,
     ),
 
+  getCustomers: async (params = {}) => {
+    const res = await api.get(`/api/admin/customers${buildQuery(params)}`);
+    return res.data;
+  },
+
+  getAllCustomers: async (params = {}) =>
+    fetchAllPages(
+      (page) => apiService.getCustomers({ ...params, page, limit: 100 }),
+      (res) => res.customers || [],
+      (res) => res.totalPages,
+    ),
+
   updateOrderStatus: async (orderId, status) => {
     const res = await api.put(`/api/admin/orders/${orderId}/status`, { status });
     return res.data;
