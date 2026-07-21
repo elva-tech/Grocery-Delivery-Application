@@ -5,6 +5,7 @@ const {
   getAllOrdersForAdmin,
   updateOrderStatus,
   getUsers,
+  getCustomerDetails,
   blockOrUnblockUser,
   getActiveOrders,
   getRevenue,
@@ -113,6 +114,13 @@ router.get(
   authMiddleware,
   adminOnly,
   getUsers
+);
+
+router.get(
+  "/customers",
+  authMiddleware,
+  adminOnly,
+  getCustomerDetails
 );
 
 //////////////////////////////////////////////////////

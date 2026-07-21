@@ -21,6 +21,8 @@ const ReportsPage = () => {
   const [orderTotal, setOrderTotal] = useState(0);
   const [inventory, setInventory] = useState([]);
   const [inventoryTotal, setInventoryTotal] = useState(0);
+  const [customers, setCustomers] = useState([]);
+  const [customerTotal, setCustomerTotal] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -90,6 +92,20 @@ const ReportsPage = () => {
           setInventoryTotal(0);
           setError('Failed to load inventory report');
         }
+      } else if (activeTab === 'CUSTOMERS') {
+        const res = await apiService.getCustomers({
+          page: currentPage,
+          limit: pageSize,
+          search: searchParam,
+        });
+        if (res.success) {
+          setCustomers(res.customers || []);
+          setCustomerTotal(res.totalCustomers ?? 0);
+        } else {
+          setCustomers([]);
+          setCustomerTotal(0);
+          setError('Failed to load customer details');
+        }
       }
     } catch (err) {
       console.error('Report load error:', err);
@@ -99,9 +115,12 @@ const ReportsPage = () => {
       } else if (activeTab === 'ORDERS') {
         setOrderRows([]);
         setOrderTotal(0);
-      } else {
+      } else if (activeTab === 'INVENTORY') {
         setInventory([]);
         setInventoryTotal(0);
+      } else {
+        setCustomers([]);
+        setCustomerTotal(0);
       }
     } finally {
       setLoading(false);
@@ -150,14 +169,18 @@ const ReportsPage = () => {
       ? revenueData
       : activeTab === 'ORDERS'
         ? orderRows
-        : inventoryReport;
+        : activeTab === 'INVENTORY'
+          ? inventoryReport
+          : customers;
 
   const totalItems =
     activeTab === 'REVENUE'
       ? revenueReport.totalItems
       : activeTab === 'ORDERS'
         ? orderTotal
-        : inventoryTotal;
+        : activeTab === 'INVENTORY'
+          ? inventoryTotal
+          : customerTotal;
 
   const formatExportDate = (date) => {
     if (!date) return 'N/A';
@@ -180,6 +203,13 @@ const ReportsPage = () => {
     const formatted = formatExportDate(date);
     if (formatted === 'N/A') return escapeCsv('N/A');
     return `"=""${formatted}"""`;
+  };
+
+  /** Keep phone/pincode as text so Excel does not show 8.9E+09. */
+  const csvText = (value) => {
+    const s = String(value ?? '').trim();
+    if (!s || s === 'N/A') return escapeCsv('N/A');
+    return `"=""${s.replace(/"/g, '""')}"""`;
   };
 
   const exportToCSV = async () => {
@@ -220,7 +250,7 @@ const ReportsPage = () => {
             ].join(',');
           })
           .join('\n');
-      } else {
+      } else if (activeTab === 'INVENTORY') {
         const allInventory = await apiService.getAllInventory({ search: searchParam });
         const mapped = (allInventory || []).map((p) => ({
           item: p.name,
@@ -231,6 +261,30 @@ const ReportsPage = () => {
         headers = 'Item Name,Current Stock,Price,Status\n';
         rows = mapped
           .map((i) => `${i.item},${i.stock},${i.price},${i.status}`)
+          .join('\n');
+      } else {
+        const allCustomers = await apiService.getAllCustomers({ search: searchParam });
+        headers =
+          'Name,Phone Number,Alternate Phone,Email,Address,City,State,Pincode,Saved Addresses,Total Orders,Total Spent,Last Order,Status,Joined Date\n';
+        rows = allCustomers
+          .map((customer) =>
+            [
+              escapeCsv(customer.name || 'N/A'),
+              csvText(customer.phoneNumber || 'N/A'),
+              csvText(customer.alternatePhone || 'N/A'),
+              escapeCsv(customer.email || 'N/A'),
+              escapeCsv(customer.address || 'N/A'),
+              escapeCsv(customer.city || 'N/A'),
+              escapeCsv(customer.state || 'N/A'),
+              csvText(customer.pincode || 'N/A'),
+              escapeCsv(customer.addressCount || 0),
+              escapeCsv(customer.totalOrders || 0),
+              escapeCsv(customer.totalSpent || 0),
+              csvDate(customer.lastOrderAt),
+              escapeCsv(customer.isActive ? 'ACTIVE' : 'BLOCKED'),
+              csvDate(customer.joinedAt),
+            ].join(','),
+          )
           .join('\n');
       }
 
@@ -353,6 +407,74 @@ const ReportsPage = () => {
         },
       ],
     },
+    CUSTOMERS: {
+      title: 'Customer Details',
+      columns: [
+        {
+          header: 'Customer',
+          accessor: 'name',
+          render: (_, row) => (
+            <div>
+              <p className="font-bold text-slate-800">{row.name || 'Unnamed customer'}</p>
+              <p className="text-[11px] text-slate-400">{row.email || 'No email'}</p>
+            </div>
+          ),
+        },
+        { header: 'Phone', accessor: 'phoneNumber' },
+        {
+          header: 'Address',
+          accessor: 'address',
+          render: (value) => (
+            <span className="text-xs text-slate-600 whitespace-normal break-words max-w-xs block">
+              {value || 'No saved address'}
+            </span>
+          ),
+        },
+        {
+          header: 'Orders',
+          accessor: 'totalOrders',
+          render: (value, row) => (
+            <div>
+              <p className="font-bold text-slate-700">{Number(value) || 0}</p>
+              <p className="text-[11px] text-slate-400">
+                ₹{(Number(row.totalSpent) || 0).toLocaleString('en-IN')} spent
+              </p>
+            </div>
+          ),
+        },
+        {
+          header: 'Last Order',
+          accessor: 'lastOrderAt',
+          render: (value) => (
+            <span className="text-xs text-slate-600 whitespace-nowrap">
+              {formatExportDate(value)}
+            </span>
+          ),
+        },
+        {
+          header: 'Status',
+          accessor: 'isActive',
+          render: (value) => (
+            <span
+              className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+                value ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+              }`}
+            >
+              {value ? 'Active' : 'Blocked'}
+            </span>
+          ),
+        },
+        {
+          header: 'Joined',
+          accessor: 'joinedAt',
+          render: (value) => (
+            <span className="text-xs text-slate-600 whitespace-nowrap">
+              {formatExportDate(value)}
+            </span>
+          ),
+        },
+      ],
+    },
   };
 
   return (
@@ -378,7 +500,12 @@ const ReportsPage = () => {
 
       <div className="flex justify-between items-center">
         <div className="flex gap-4">
-          {['REVENUE', 'ORDERS', 'INVENTORY'].map((tab) => (
+          {[
+            ['REVENUE', 'REVENUE'],
+            ['ORDERS', 'ORDERS'],
+            ['INVENTORY', 'INVENTORY'],
+            ['CUSTOMERS', 'CUSTOMER DETAILS'],
+          ].map(([tab, label]) => (
             <button
               key={tab}
               onClick={() => {
@@ -390,7 +517,7 @@ const ReportsPage = () => {
                 activeTab === tab ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-500'
               }`}
             >
-              {tab}
+              {label}
             </button>
           ))}
         </div>

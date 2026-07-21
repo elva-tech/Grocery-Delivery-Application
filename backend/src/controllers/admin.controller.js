@@ -12,6 +12,7 @@ const Order = require("../models/Order.model");
 const Inventory = require("../models/Inventory.model");
 const Product = require("../models/Product.model");
 const User = require("../models/User.model");
+const Address = require("../models/Address.model");
 const Rider = require("../models/Rider.model");
 const mongoose = require("mongoose");
 const {
@@ -338,6 +339,132 @@ exports.getUsers = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch users",
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// CUSTOMER DETAILS REPORT
+//////////////////////////////////////////////////////////////
+
+exports.getCustomerDetails = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const skip = (page - 1) * limit;
+    const search = String(req.query.search || "").trim();
+
+    const filter = { tenantId, role: "CUSTOMER" };
+    if (search) {
+      const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(safe, "i");
+      filter.$or = [
+        { name: regex },
+        { phoneNumber: regex },
+        { alternatePhone: regex },
+        { email: regex },
+      ];
+    }
+
+    const [users, totalCustomers] = await Promise.all([
+      User.find(filter)
+        .select("_id name phoneNumber alternatePhone email isActive createdAt updatedAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+
+    const userIds = users.map((user) => user._id);
+    const [addresses, orderStats] = await Promise.all([
+      Address.find({
+        tenantId,
+        userId: { $in: userIds },
+        isActive: { $ne: false },
+      })
+        .sort({ isMyAddress: -1, updatedAt: -1 })
+        .lean(),
+      Order.aggregate([
+        {
+          $match: {
+            tenantId,
+            userId: { $in: userIds },
+          },
+        },
+        {
+          $group: {
+            _id: "$userId",
+            totalOrders: { $sum: 1 },
+            totalSpent: { $sum: { $ifNull: ["$totalAmount", 0] } },
+            lastOrderAt: { $max: "$createdAt" },
+          },
+        },
+      ]),
+    ]);
+
+    const addressesByUser = new Map();
+    for (const address of addresses) {
+      const key = String(address.userId);
+      if (!addressesByUser.has(key)) addressesByUser.set(key, []);
+      addressesByUser.get(key).push(address);
+    }
+    const statsByUser = new Map(orderStats.map((stats) => [String(stats._id), stats]));
+
+    const formatAddress = (address) => {
+      if (!address) return "";
+      if (address.full?.trim()) return address.full.trim();
+      return [
+        address.line1,
+        address.line2,
+        address.landmark,
+        address.city,
+        address.state,
+        address.pincode,
+      ]
+        .map((part) => String(part || "").trim())
+        .filter(Boolean)
+        .join(", ");
+    };
+
+    const customers = users.map((user) => {
+      const savedAddresses = addressesByUser.get(String(user._id)) || [];
+      const primaryAddress =
+        savedAddresses.find((address) => address.isMyAddress !== false) || savedAddresses[0];
+      const stats = statsByUser.get(String(user._id));
+      return {
+        id: String(user._id),
+        name: user.name || "",
+        phoneNumber: user.phoneNumber || "",
+        alternatePhone: user.alternatePhone || "",
+        email: user.email || "",
+        address: formatAddress(primaryAddress),
+        city: primaryAddress?.city || "",
+        state: primaryAddress?.state || "",
+        pincode: primaryAddress?.pincode || "",
+        addressCount: savedAddresses.length,
+        totalOrders: stats?.totalOrders || 0,
+        totalSpent: stats?.totalSpent || 0,
+        lastOrderAt: stats?.lastOrderAt || null,
+        isActive: user.isActive !== false,
+        joinedAt: user.createdAt,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      page,
+      limit,
+      totalCustomers,
+      totalPages: Math.ceil(totalCustomers / limit),
+      customers,
+    });
+  } catch (error) {
+    console.error("Admin getCustomerDetails error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch customer details",
     });
   }
 };
