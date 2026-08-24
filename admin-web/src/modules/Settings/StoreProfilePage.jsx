@@ -198,7 +198,7 @@ export default function StoreProfilePage() {
         </div>
 
         <div className="p-6 space-y-5 text-sm">
-          <ReadRow icon={User} label="Owner" value={profile?.ownerName} />
+          <ReadRow icon={User} label="Legal Name" value={profile?.legalName || profile?.ownerName} />
           <ReadRow icon={Phone} label="Store phone" value={profile?.phoneNumber ? `+91 ${profile.phoneNumber}` : ''} />
           <ReadRow icon={Mail} label="Store email" value={profile?.contactEmail} />
           <ReadRow icon={MapPin} label="Store address" value={profile?.storeAddress} />

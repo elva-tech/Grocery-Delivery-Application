@@ -176,6 +176,8 @@ exports.getTenantDetails = async (req, res) => {
     tenantId:      tenant.tenantId,
     storeName:     tenant.name,
     ownerName:     tenant.ownerName || "",
+    /** Customer-facing alias of ownerName — legal / registered business name */
+    legalName:     tenant.ownerName || "",
     logo:          tenant.logo || "",
     storeAddress:  tenant.storeAddress || "",
     storeAddressParts: tenant.storeAddressParts || {},

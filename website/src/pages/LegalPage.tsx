@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { APP_CONFIG } from '../api/mockdata';
 import { useTenantBranding } from '../context/TenantBrandingContext';
+import StoreBusinessDetails from '../components/store/StoreBusinessDetails';
 
 const CONTENT = (brand: string, supportEmail: string, supportPhone: string, address: string) => ({
   '/about': {
@@ -91,6 +92,14 @@ const LegalPage = () => {
           {page.text}
         </p>
       </div>
+      {pathname === '/about' && (
+        <div className="mt-10">
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
+            Store details
+          </h2>
+          <StoreBusinessDetails tenant={raw} fallbackStoreName={storeName} />
+        </div>
+      )}
       <div className="mt-12 flex gap-4">
         <div className="h-1 w-20 bg-[#4b6f9e] rounded-full" />
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
