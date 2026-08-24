@@ -20,6 +20,8 @@ export interface TenantDetails {
   contactEmail?: string;
   phoneNumber?: string;
   ownerName?: string;
+  /** Same value as ownerName; preferred for customer-facing UI. */
+  legalName?: string;
   customerDomain?: string;
   adminDomain?: string;
   tagline?: string;

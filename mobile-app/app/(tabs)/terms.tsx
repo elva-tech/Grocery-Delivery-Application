@@ -11,7 +11,9 @@ import {
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { SUPPORT_PHONE } from '@/src/config/constants';
+import StoreBusinessDetails, {
+  getStoreBusinessFields,
+} from '@/components/StoreBusinessDetails';
 import { useTenantBranding } from '@/contexts/TenantBrandingContext';
 
 type LegalPage = { title: string; sections: { heading: string; body: string }[] };
@@ -128,12 +130,18 @@ function buildLegalPages(brand: string): Record<string, LegalPage> {
 }
 
 function CustomerSupportScreen() {
-  const { storeName, supportEmail, supportPhone, supportHours, loading, error } =
+  const { storeName, supportEmail, supportPhone, supportHours, loading, error, raw } =
     useTenantBranding();
 
-  const phoneLine = (supportPhone || SUPPORT_PHONE).trim();
+  const storeFields = getStoreBusinessFields(raw, storeName);
+  const storePhoneDigits = storeFields.contactNumber.replace(/\D/g, '').slice(-10);
+  const phoneLine = supportPhone.trim() || storeFields.contactNumber;
   const phoneDigits = phoneLine.replace(/\D/g, '');
   const mail = supportEmail.trim();
+  const showSupportPhone =
+    Boolean(phoneDigits) && phoneDigits.slice(-10) !== storePhoneDigits;
+  const showSupportEmail =
+    Boolean(mail) && mail.toLowerCase() !== storeFields.email.toLowerCase();
 
   const openMail = () => {
     if (mail) Linking.openURL(`mailto:${mail}`);
@@ -164,37 +172,29 @@ function CustomerSupportScreen() {
         </Text>
       </View>
 
-      {mail ? (
+      <StoreBusinessDetails tenant={raw} fallbackStoreName={storeName} />
+
+      {showSupportEmail ? (
         <TouchableOpacity style={styles.supportCard} onPress={openMail} activeOpacity={0.7}>
           <View style={styles.supportIconCircle}>
             <Ionicons name="mail-outline" size={22} color="#4b6f9e" />
           </View>
           <View style={styles.supportCardBody}>
-            <Text style={styles.supportCardLabel}>Email</Text>
+            <Text style={styles.supportCardLabel}>Support email</Text>
             <Text style={styles.supportCardValue}>{mail}</Text>
             <Text style={styles.supportCardHint}>Tap to send an email</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
         </TouchableOpacity>
-      ) : (
-        <View style={[styles.supportCard, styles.supportCardMuted]}>
-          <Ionicons name="mail-outline" size={22} color="#94a3b8" />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.supportCardLabel}>Email</Text>
-            <Text style={styles.supportCardMutedText}>
-              This store has not published a support email yet. Ask the store admin to add it in the admin panel.
-            </Text>
-          </View>
-        </View>
-      )}
+      ) : null}
 
-      {phoneDigits ? (
+      {showSupportPhone ? (
         <TouchableOpacity style={styles.supportCard} onPress={openTel} activeOpacity={0.7}>
           <View style={styles.supportIconCircle}>
             <Ionicons name="call-outline" size={22} color="#4b6f9e" />
           </View>
           <View style={styles.supportCardBody}>
-            <Text style={styles.supportCardLabel}>Phone</Text>
+            <Text style={styles.supportCardLabel}>Support phone</Text>
             <Text style={styles.supportCardValue}>{phoneLine}</Text>
             <Text style={styles.supportCardHint}>Tap to call</Text>
           </View>
@@ -220,7 +220,7 @@ function CustomerSupportScreen() {
 }
 
 export default function LegalScreen() {
-  const { storeName } = useTenantBranding();
+  const { storeName, raw } = useTenantBranding();
   const { page } = useLocalSearchParams<{ page?: string }>();
   const key = (page as string) || 'terms';
   const pages = buildLegalPages(storeName);
@@ -271,6 +271,13 @@ export default function LegalScreen() {
 </Text>
         </View>
       ))}
+
+      {key === 'about' ? (
+        <View style={{ marginTop: 8 }}>
+          <Text style={styles.title}>Store details</Text>
+          <StoreBusinessDetails tenant={raw} fallbackStoreName={storeName} />
+        </View>
+      ) : null}
 
       <Text style={styles.footer}>© 2026 {storeName}</Text>
     </ScrollView>

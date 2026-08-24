@@ -1,6 +1,8 @@
-import { ArrowLeft, MapPin, Phone, Mail, Store, Loader2, Clock } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Store, Loader2, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTenantBranding } from '../context/TenantBrandingContext';
+import StoreBusinessDetails from '../components/store/StoreBusinessDetails';
+import { getStoreBusinessFields } from '../utils/storeBusinessFields';
 
 const ContactUs = () => {
   const navigate = useNavigate();
@@ -12,18 +14,23 @@ const ContactUs = () => {
     (tenant?.tenantId ? `${tenant.tenantId}.localhost` : '');
 
   const supportHours = tenant?.supportHours?.trim();
-  const supportEmail = tenant?.supportEmail?.trim();
-  const supportPhone = tenant?.supportPhone?.trim()?.replace(/\D/g, '').slice(-10);
-  const generalPhone = tenant?.phoneNumber?.trim()?.replace(/\D/g, '').slice(-10);
-  const displayPhone = supportPhone || generalPhone;
-  const phoneIsSupport = Boolean(supportPhone);
-  const supportMail = supportEmail || tenant?.contactEmail?.trim();
-  const emailIsSupport = Boolean(supportEmail);
+  const supportEmail = tenant?.supportEmail?.trim() || '';
+  const supportPhone = tenant?.supportPhone?.trim()?.replace(/\D/g, '').slice(-10) || '';
+  const storeFields = getStoreBusinessFields(tenant, storeName);
+  const storePhoneDigits = storeFields.contactNumber.replace(/\D/g, '').slice(-10);
+  const showSupportPhone = Boolean(supportPhone) && supportPhone !== storePhoneDigits;
+  const showSupportEmail =
+    Boolean(supportEmail) &&
+    supportEmail.toLowerCase() !== storeFields.email.toLowerCase();
 
   const hasAnyContact =
-    Boolean(displayPhone) ||
-    Boolean(supportMail) ||
-    Boolean(tenant?.storeAddress?.trim()) ||
+    Boolean(storeFields.legalName) ||
+    Boolean(storeFields.storeName) ||
+    Boolean(storeFields.storeAddress) ||
+    Boolean(storeFields.contactNumber) ||
+    Boolean(storeFields.email) ||
+    Boolean(showSupportPhone) ||
+    Boolean(showSupportEmail) ||
     Boolean(supportHours);
 
   return (
@@ -80,6 +87,8 @@ const ContactUs = () => {
             </div>
           </div>
 
+          <StoreBusinessDetails tenant={tenant} fallbackStoreName={storeName} />
+
           <div className="space-y-3">
             {supportHours && (
               <div className="flex items-start gap-4 bg-white border-2 border-slate-100 rounded-[2rem] p-5">
@@ -95,9 +104,9 @@ const ContactUs = () => {
               </div>
             )}
 
-            {displayPhone && (
+            {showSupportPhone && (
               <a
-                href={`tel:+91${displayPhone}`}
+                href={`tel:+91${supportPhone}`}
                 className="flex items-center gap-4 bg-white border-2 border-slate-100 rounded-[2rem] p-5 hover:border-[#4b6f9e] transition-colors group"
               >
                 <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#4b6f9e] flex items-center justify-center flex-shrink-0">
@@ -105,18 +114,18 @@ const ContactUs = () => {
                 </div>
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {phoneIsSupport ? 'Support phone' : 'Phone'}
+                    Support phone
                   </p>
                   <p className="font-bold text-slate-800 text-sm group-hover:text-[#4b6f9e] transition-colors">
-                    +91 {displayPhone}
+                    +91 {supportPhone}
                   </p>
                 </div>
               </a>
             )}
 
-            {supportMail && (
+            {showSupportEmail && (
               <a
-                href={`mailto:${supportMail}`}
+                href={`mailto:${supportEmail}`}
                 className="flex items-center gap-4 bg-white border-2 border-slate-100 rounded-[2rem] p-5 hover:border-[#4b6f9e] transition-colors group"
               >
                 <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#4b6f9e] flex items-center justify-center flex-shrink-0">
@@ -124,27 +133,13 @@ const ContactUs = () => {
                 </div>
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {emailIsSupport ? 'Support email' : 'Email'}
+                    Support email
                   </p>
                   <p className="font-bold text-slate-800 text-sm group-hover:text-[#4b6f9e] transition-colors">
-                    {supportMail}
+                    {supportEmail}
                   </p>
                 </div>
               </a>
-            )}
-
-            {tenant.storeAddress && (
-              <div className="flex items-start gap-4 bg-white border-2 border-slate-100 rounded-[2rem] p-5">
-                <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#4b6f9e] flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <MapPin size={18} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Address</p>
-                  <p className="font-bold text-slate-800 text-sm leading-relaxed mt-0.5">
-                    {tenant.storeAddress}
-                  </p>
-                </div>
-              </div>
             )}
 
             {!hasAnyContact && (
