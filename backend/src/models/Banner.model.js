@@ -17,6 +17,17 @@ const BannerSchema = new mongoose.Schema(
     type: String,
     default: "",
   },
+
+  /** Website-specific crop (wider aspect). Falls back to imageUrl when absent. */
+  imageWebUrl: {
+    type: String,
+    default: "",
+  },
+
+  imageWebPublicId: {
+    type: String,
+    default: "",
+  },
   
   // Deprecated — keep optional for backward compatibility
   image: {

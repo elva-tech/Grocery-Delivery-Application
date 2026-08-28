@@ -63,14 +63,16 @@ const PromoBanners = () => {
         className="h-[240px] md:h-[400px]"
       >
         {banners.map((banner) => {
-          const imageSrc = resolveImageUrl(banner);
+          const imageSrc =
+            (typeof banner.imageWebUrl === 'string' && banner.imageWebUrl.trim()) ||
+            resolveImageUrl(banner);
           return (
           <SwiperSlide key={banner._id}>
-            <div className="relative h-full w-full group">
+            <div className="relative h-full w-full overflow-hidden">
               {imageSrc ? (
                 <img
                   src={imageSrc}
-                  className="w-full h-full object-cover transition-transform duration-[5000ms] group-hover:scale-110"
+                  className="w-full h-full object-cover banner-slide-image"
                   alt={banner.title}
                 />
               ) : (
@@ -80,8 +82,8 @@ const PromoBanners = () => {
               )}
 
               {banner.title ? (
-                <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col justify-end bg-gradient-to-t from-black/85 via-black/45 to-transparent px-6 pb-10 pt-16 md:px-10 md:pb-12 md:pt-20">
-                  <h2 className="text-white text-lg md:text-2xl font-black max-w-2xl leading-snug drop-shadow-md">
+                <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col justify-end bg-gradient-to-t from-black/85 via-black/45 to-transparent px-6 pb-10 pt-16 md:px-10 md:pb-12 md:pt-20 banner-slide-overlay">
+                  <h2 className="text-white text-lg md:text-2xl font-black max-w-2xl leading-snug drop-shadow-md banner-slide-title">
                     {banner.title}
                   </h2>
                 </div>
@@ -92,8 +94,23 @@ const PromoBanners = () => {
         })}
       </Swiper>
       <style>{`
-      .swiper-pagination-bullet { background: white !important; opacity: 0.5; }
+      .swiper-pagination-bullet { background: white !important; opacity: 0.5; transition: opacity 0.3s ease, width 0.3s ease; }
       .swiper-pagination-bullet-active { background: white !important; opacity: 1; width: 25px !important; border-radius: 4px !important; }
+      .swiper-slide-active .banner-slide-image { animation: bannerFadeIn 0.8s ease-out; }
+      .swiper-slide-active .banner-slide-overlay { animation: bannerOverlayIn 0.9s ease-out; }
+      .swiper-slide-active .banner-slide-title { animation: bannerTitleIn 0.7s ease-out 0.15s both; }
+      @keyframes bannerFadeIn {
+        from { opacity: 0.85; transform: scale(1.02); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes bannerOverlayIn {
+        from { opacity: 0.6; }
+        to { opacity: 1; }
+      }
+      @keyframes bannerTitleIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
     `}</style>
     </div>
   );
