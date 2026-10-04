@@ -5,8 +5,8 @@
   "urlScheme": "enandi",
   "slug": "Enandi",
   "notifyBrandId": "enandi",
-  "version": "1.0.2",
-  "versionCode": 5,
+  "version": "1.0.4",
+  "versionCode": 7,
   "splashBackgroundColor": "#FFFFFF",
   "adaptiveIconBackgroundColor": "#FFFFFF"
 }

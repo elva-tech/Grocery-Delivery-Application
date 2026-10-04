@@ -95,6 +95,26 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    paymentProvider: {
+      type: String,
+      enum: ["RAZORPAY", "CASHFREE"],
+    },
+
+    cashfreeOrderId: {
+      type: String,
+      default: null,
+    },
+
+    cashfreePaymentId: {
+      type: String,
+      default: null,
+    },
+
+    cashfreeRefundId: {
+      type: String,
+      default: null,
+    },
+
     refundStatus: {
       type: String,
       enum: ["NONE", "PENDING", "PARTIAL", "FULL", "FAILED"],
@@ -124,6 +144,7 @@ const orderSchema = new mongoose.Schema(
     orderStatus: {
       type: String,
       enum: [
+        "AWAITING_PAYMENT",
         "PLACED",
         "CONFIRMED",
         "OUT_FOR_DELIVERY",

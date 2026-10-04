@@ -7,18 +7,10 @@
     "icon": "./assets/icon.png",
     "scheme": "elvagrocery",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B1D37"
-    },
     "ios": {
       "supportsTablet": true,
-      "splash": {
-        "image": "./assets/splash-icon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#0B1D37"
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["phonepe", "tez", "paytm", "bhim"]
       }
     },
     "android": {
@@ -26,15 +18,9 @@
         "backgroundColor": "#0B1D37",
         "foregroundImage": "./assets/adaptive-icon.png"
       },
-      "splash": {
-        "image": "./assets/splash-icon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#0B1D37"
-      },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.elvatech.grocery",
-      "versionCode": 6
+      "versionCode": 8
     },
     "web": {
       "output": "static",

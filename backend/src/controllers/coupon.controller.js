@@ -173,7 +173,7 @@ exports.listStorefrontCoupons = async (req, res) => {
     if (userId) {
       const prev = await Order.findOne({
         userId,
-        orderStatus: { $nin: ["CANCELLED"] },
+        orderStatus: { $nin: ["CANCELLED", "AWAITING_PAYMENT"] },
       })
         .select("_id")
         .lean();
@@ -281,7 +281,7 @@ exports.validateCoupon = async (req, res) => {
     if (coupon.firstTimeUserOnly) {
       const previousOrder = await Order.findOne({
         userId,
-        orderStatus: { $nin: ["CANCELLED"] },
+        orderStatus: { $nin: ["CANCELLED", "AWAITING_PAYMENT"] },
       });
       if (previousOrder) {
         return res.status(400).json({

@@ -214,6 +214,7 @@ export function customerFacingCheckoutError(
   if (
     m.includes('vendor payment') ||
     m.includes('vendor razorpay') ||
+    m.includes('payment gateway is not configured') ||
     m.includes('payment configuration not found') ||
     m.includes('payment setup') ||
     m.includes('onboarding is not active')

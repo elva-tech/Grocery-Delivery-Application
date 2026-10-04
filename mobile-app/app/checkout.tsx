@@ -27,7 +27,10 @@ import {
   validateCouponApi,
   createMobilePaymentOrder,
   verifyMobilePayment,
+  verifyMobileCashfreePayment,
+  abandonMobilePaymentOrder,
 } from '@/api/ordersApi';
+import { CashfreeCheckoutHost, startCashfreeCheckout } from '@/src/payments/cashfreeCheckout';
 import { calculateBillBackend, getCartCalculation } from '@/api/cartApi';
 import { fetchStorefrontCoupons, type StorefrontCoupon } from '@/api/storefrontCouponsApi';
 import { formatDeliveryPrice, standardDeliveryPriceLabel } from '@/utils/deliveryBilling';
@@ -47,7 +50,7 @@ const PAGE_BG = '#f4f7fb';
 
 export default function CheckoutScreen() {
   const { storeName } = useTenantBranding();
-  const isExpoGo = Constants.appOwnership === 'expo';
+  const isExpoGo = Constants.appOwnership === 'expo' || Constants.expoGoConfig != null;
   const { items, totalAmount, appliedCoupon } = useSelector((state: RootState) => state.cart);
   const draft = useSelector((state: RootState) => state.checkout.draft);
   const { user, token } = useSelector((state: RootState) => state.auth);
@@ -66,6 +69,7 @@ export default function CheckoutScreen() {
   });
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('STANDARD');
   const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
+  const [onlinePaymentBroken, setOnlinePaymentBroken] = useState(false);
   const [couponInput, setCouponInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
@@ -85,7 +89,7 @@ export default function CheckoutScreen() {
   } = useGetAppSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
   const isStoreClosed = storeStatus?.isClosed ?? false;
   const showCod = Boolean(appSettings) && isCodPaymentEnabled(appSettings);
-  const showOnline = Boolean(appSettings) && isOnlinePaymentEnabled(appSettings);
+  const showOnline = Boolean(appSettings) && isOnlinePaymentEnabled(appSettings) && !onlinePaymentBroken;
   const showDeliveryTypeChoice = isExpressDeliveryChoiceEnabled(appSettings);
   const effectiveDeliveryType = showDeliveryTypeChoice ? deliveryType : 'STANDARD';
 
@@ -95,11 +99,18 @@ export default function CheckoutScreen() {
     }, [refetchAppSettings]),
   );
 
+  const restrictCheckoutToCod = () => {
+    if (!showCod) return;
+    setOnlinePaymentBroken(true);
+    setPaymentMethod('COD');
+  };
+
   useEffect(() => {
     if (!appSettings) return;
-    if (showOnline && !showCod) setPaymentMethod('ONLINE');
+    if (onlinePaymentBroken && showCod) setPaymentMethod('COD');
+    else if (showOnline && !showCod) setPaymentMethod('ONLINE');
     else if (showCod && !showOnline) setPaymentMethod('COD');
-  }, [appSettings, showCod, showOnline]);
+  }, [appSettings, showCod, showOnline, onlinePaymentBroken]);
 
   const completeOrderSuccess = async (orderId: string) => {
     orderPlacedRef.current = true;
@@ -228,6 +239,9 @@ export default function CheckoutScreen() {
       return;
     }
 
+    let onlineOrderId = '';
+    let gatewayOpened = false;
+
     try {
       setIsPlacing(true);
       const addrPayload = buildDeliveryAddressPayload(draft.deliverySource);
@@ -253,7 +267,50 @@ export default function CheckoutScreen() {
       }
 
       const order = await placeOrderBackend(orderPayload, token);
+      onlineOrderId = String(order.orderId || '');
       const paymentData = await createMobilePaymentOrder(order.orderId, token);
+      if (paymentData?.provider === 'CASHFREE') {
+        const cashfreeMode =
+          paymentData.environment === 'production' || paymentData.environment === 'sandbox'
+            ? paymentData.environment
+            : null;
+        if (!cashfreeMode || !paymentData.payment_session_id) {
+          void abandonMobilePaymentOrder(onlineOrderId, token);
+          restrictCheckoutToCod();
+          throw new Error('Online payment is unavailable right now. You can place this order with Cash on Delivery.');
+        }
+        if (paymentData.payment_status !== 'SUCCESS') {
+          const outcome = await startCashfreeCheckout({
+            paymentSessionId: paymentData.payment_session_id,
+            orderId: String(paymentData.cashfree_order_id || order.orderId),
+            environment: cashfreeMode,
+          });
+          gatewayOpened = true;
+          if (outcome === 'CANCELLED') {
+            void abandonMobilePaymentOrder(onlineOrderId, token);
+            const cancelledError = new Error('Payment was cancelled.') as Error & { code?: number };
+            cancelledError.code = 0;
+            throw cancelledError;
+          }
+          if (outcome === 'FAILED') {
+            void abandonMobilePaymentOrder(onlineOrderId, token);
+            throw new Error('Payment was not completed. Please try again.');
+          }
+        }
+        const verified = await verifyMobileCashfreePayment(order.orderId, token);
+        if (verified.success) {
+          await completeOrderSuccess(String(order.orderId || ''));
+          return;
+        }
+        if (verified.status === 'FAILED') {
+          restrictCheckoutToCod();
+          throw new Error('Online payment is unavailable right now. You can place this order with Cash on Delivery.');
+        }
+        throw new Error('Payment was not completed. Please try again.');
+      }
+      if (paymentData?.provider && paymentData.provider !== 'RAZORPAY') {
+        throw new Error(MOBILE_COPY.checkout.onlinePaymentUnavailable);
+      }
       const rawPhone = ((user as any)?.phone || '').replace(/^\+91\s?/, '').slice(-10);
 
       if (isExpoGo) {
@@ -279,6 +336,7 @@ export default function CheckoutScreen() {
         );
       }
 
+      gatewayOpened = true;
       const rzpResponse: any = await razorpayModule.open({
         description: 'Grocery Order',
         currency: paymentData.currency || 'INR',
@@ -307,10 +365,19 @@ export default function CheckoutScreen() {
       if (verified.success) {
         await completeOrderSuccess(String(order.orderId || ''));
       } else {
-        showToast('error', 'Payment Error', 'Verification failed. Contact support.');
+        restrictCheckoutToCod();
+        showToast('error', 'Payment', 'Online payment is unavailable right now. You can place this order with Cash on Delivery.');
       }
     } catch (error: any) {
-      if (error?.code === 0 || String(error?.description).toLowerCase().includes('cancel')) {
+      const cancelled =
+        error?.code === 0 || String(error?.description || error?.message || '').toLowerCase().includes('cancel');
+      if (onlineOrderId && (!gatewayOpened || cancelled)) {
+        void abandonMobilePaymentOrder(onlineOrderId, token);
+      }
+      if (onlineOrderId && !cancelled) {
+        restrictCheckoutToCod();
+      }
+      if (cancelled) {
         showToast('error', 'Cancelled', 'Payment was cancelled.');
       } else {
         showToast(
@@ -334,6 +401,7 @@ export default function CheckoutScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <CashfreeCheckoutHost />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="arrow-back" size={24} color="#2c3e50" />
@@ -530,6 +598,11 @@ export default function CheckoutScreen() {
             <>
               <View style={styles.hairline} />
               <Text style={styles.inlineSectionLabel}>Payment</Text>
+              {onlinePaymentBroken && showCod ? (
+                <Text style={styles.paymentFallback}>
+                  Online payment is unavailable. You can place this order with Cash on Delivery.
+                </Text>
+              ) : null}
               {settingsLoading ? (
                 <ActivityIndicator color={BRAND} style={styles.paymentLoader} />
               ) : (
@@ -844,6 +917,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 12,
+  },
+  paymentFallback: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#15803d',
+    marginTop: -6,
+    marginBottom: 12,
+    lineHeight: 18,
   },
 
   couponField: {

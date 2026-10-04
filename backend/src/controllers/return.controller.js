@@ -237,8 +237,10 @@ exports.approveReturn = async (req, res) => {
           amount: refundAmount,
         });
       } catch (refundErr) {
-        console.error("approveReturn Razorpay refund failed", {
+        console.error("approveReturn refund failed", {
+          tenantId,
           orderId: order._id,
+          paymentProvider: order.paymentProvider || null,
           message: refundErr.message,
         });
         return res.status(refundErr.status || 502).json({

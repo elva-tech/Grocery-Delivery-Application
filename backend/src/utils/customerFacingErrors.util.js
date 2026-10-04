@@ -32,11 +32,13 @@ function customerPaymentErrorMessage(err) {
   ) {
     return ONLINE_PAYMENT_UNAVAILABLE;
   }
-  if (
-    msg.includes("Vendor Razorpay is not configured") ||
-    msg.includes("Vendor Razorpay key ID is not configured") ||
-    msg.includes("Vendor Razorpay key secret is not configured")
-  ) {
+    if (
+      msg.includes("Vendor Razorpay is not configured") ||
+      msg.includes("Vendor Razorpay key ID is not configured") ||
+      msg.includes("Vendor Razorpay key secret is not configured") ||
+      msg.includes("Payment gateway is not configured") ||
+      msg.includes("Cashfree payment request failed")
+    ) {
     return ONLINE_PAYMENT_UNAVAILABLE;
   }
   if (

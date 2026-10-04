@@ -382,7 +382,10 @@ exports.placeCustomerOrder = async (req, res) => {
 
         let firstTimeOk = true;
         if (coupon.firstTimeUserOnly) {
-          const prev = await Order.findOne({ userId, orderStatus: { $nin: ["CANCELLED"] } });
+          const prev = await Order.findOne({
+            userId,
+            orderStatus: { $nin: ["CANCELLED", "AWAITING_PAYMENT"] },
+          });
           firstTimeOk = !prev;
         }
 
@@ -436,6 +439,8 @@ exports.placeCustomerOrder = async (req, res) => {
       }
     }
 
+    const isOnline = paymentMode === "ONLINE";
+
     const order = await Order.create({
       tenantId,
       userId,
@@ -451,32 +456,27 @@ exports.placeCustomerOrder = async (req, res) => {
       paymentMode,
       deliveryAddress: normalizedDeliveryAddress,
       billingAddress,
-      orderStatus: "PLACED",
+      orderStatus: isOnline ? "AWAITING_PAYMENT" : "PLACED",
       paymentStatus,
     });
 
-    // Atomically increment coupon usage after order is confirmed
-    if (appliedCoupon) {
+    // Online coupon use, billing, and the admin alert wait until payment is confirmed.
+    if (appliedCoupon && !isOnline) {
       await Coupon.findByIdAndUpdate(appliedCoupon._id, { $inc: { usedCount: 1 } });
     }
 
-    // Track billing usage — best-effort, never blocks order creation
-    try {
-      await recordOrderBilling(tenantId);
-    } catch (billingErr) {
-      console.error("Billing tracking error (non-critical):", billingErr.message);
-    }
-
-    // COD: notify only after order is saved. ONLINE: notify after payment succeeds.
-    if (paymentMode === "COD") {
+    if (!isOnline) {
+      try {
+        await recordOrderBilling(tenantId);
+      } catch (billingErr) {
+        console.error("Billing tracking error (non-critical):", billingErr.message);
+      }
       void notifyOrderPlacedSafe(order);
+      void emitNewOrder(tenantId, order);
     }
-
-    // Real-time: notify tenant admins without page refresh
-    void emitNewOrder(tenantId, order);
 
     res.status(201).json({
-      message: "Order placed successfully",
+      message: isOnline ? "Complete payment to place this order" : "Order placed successfully",
       orderId: order._id,
       totalAmount: order.totalAmount,
       orderStatus: order.orderStatus,
@@ -511,6 +511,8 @@ exports.getCustomerOrderHistory = async (req, res) => {
     };
     if (status) {
       filter.orderStatus = status;
+    } else {
+      filter.orderStatus = { $ne: "AWAITING_PAYMENT" };
     }
 
     const orders = await Order.find(filter)
@@ -943,7 +945,10 @@ exports.getAllOrders = async (req, res) => {
 
     const tenantId = req.user.tenantId;
 
-    const orders = await Order.find({ tenantId })
+    const orders = await Order.find({
+      tenantId,
+      orderStatus: { $ne: "AWAITING_PAYMENT" },
+    })
       .sort({ createdAt: -1 })
       .select("totalAmount orderStatus paymentStatus createdAt userId");
 

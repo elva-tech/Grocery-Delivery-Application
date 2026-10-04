@@ -160,6 +160,33 @@ export const createMobilePaymentOrder = async (orderId: string, token: string) =
   return data; // { amount (paise), currency, razorpay_order_id, key_id? }
 };
 
+/** Drop an online order that was never paid and release its reserved stock. */
+export const abandonMobilePaymentOrder = async (orderId: string, token: string) => {
+  try {
+    await fetch(`${BASE}/api/payments/abandon`, {
+      method: 'POST',
+      headers: await authHeaders(token),
+      body: JSON.stringify({ order_id: orderId }),
+    });
+  } catch {
+    // The unpaid order stays hidden until a later failure or successful payment.
+  }
+};
+
+/** Ask the server to confirm a Cashfree payment. The secret never leaves the server. */
+export const verifyMobileCashfreePayment = async (orderId: string, token: string) => {
+  const res = await fetch(`${BASE}/api/payments/verify`, {
+    method: 'POST',
+    headers: await authHeaders(token),
+    body: JSON.stringify({ order_id: orderId }),
+  });
+  const data = await res.json();
+  if (!res.ok && res.status !== 400) {
+    throw new Error(data?.message || 'Payment verification failed');
+  }
+  return data as { success?: boolean; status?: string; message?: string };
+};
+
 /** Verify Razorpay payment signature with the backend. */
 export const verifyMobilePayment = async (
   payload: {

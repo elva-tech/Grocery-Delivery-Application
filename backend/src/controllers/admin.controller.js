@@ -54,6 +54,10 @@ exports.getAllOrdersForAdmin = async (req, res) => {
 
     const query = { tenantId: req.user.tenantId };
 
+    if (!status) {
+      query.orderStatus = { $ne: "AWAITING_PAYMENT" };
+    }
+
     if (status) {
       if (!allowedStatuses.includes(status)) {
         return res.status(400).json({
