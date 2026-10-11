@@ -3,10 +3,19 @@ const Order = require("../models/Order.model");
 const Vendor = require("../models/Vendor.model");
 const { notifyOrderPlacedSafe } = require("./notify.service");
 const {
+  placePaidOnlineOrder,
+  cancelUnpaidOnlineOrder,
+} = require("./onlineOrderPlacement.service");
+const {
   getVendorRazorpayClient,
   getVendorKeySecret,
   assertVendorPaymentReady,
 } = require("../utils/getVendorRazorpayClient");
+const { resolvePaymentProvider } = require("../utils/paymentGateway.util");
+const {
+  createCashfreePayment,
+  verifyCashfreePayment,
+} = require("./cashfreePayment.service");
 
 async function loadVendorForOrder(order) {
   const vendor = await Vendor.findOne({ tenantId: order.tenantId });
@@ -19,7 +28,7 @@ async function fetchExistingRazorpayOrder(vendor, razorpayOrderId) {
   return razorpay.orders.fetch(razorpayOrderId);
 }
 
-async function createPayment(orderId, userId) {
+async function createRazorpayPayment(orderId, userId) {
   const order = await Order.findById(orderId);
 
   if (!order) {
@@ -53,7 +62,12 @@ async function createPayment(orderId, userId) {
       razorpayOrderId: rzpOrder.id,
       paymentStatus: order.paymentStatus,
     });
+    await Order.updateOne(
+      { _id: orderId, paymentProvider: null },
+      { $set: { paymentProvider: "RAZORPAY" } }
+    );
     return {
+      provider: "RAZORPAY",
       razorpay_order_id: rzpOrder.id,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
@@ -63,7 +77,7 @@ async function createPayment(orderId, userId) {
 
   const locked = await Order.findOneAndUpdate(
     { _id: orderId, razorpayOrderId: null },
-    { $set: { razorpayOrderId: "LOCKED" } },
+    { $set: { razorpayOrderId: "LOCKED", paymentProvider: "RAZORPAY" } },
     { new: false }
   );
 
@@ -76,6 +90,7 @@ async function createPayment(orderId, userId) {
         refreshed.razorpayOrderId
       );
       return {
+        provider: "RAZORPAY",
         razorpay_order_id: rzpOrder.id,
         amount: rzpOrder.amount,
         currency: rzpOrder.currency,
@@ -111,6 +126,7 @@ async function createPayment(orderId, userId) {
     });
 
     return {
+      provider: "RAZORPAY",
       razorpay_order_id: rzpOrder.id,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
@@ -120,6 +136,108 @@ async function createPayment(orderId, userId) {
     await Order.findByIdAndUpdate(orderId, { razorpayOrderId: null });
     throw err;
   }
+}
+
+async function createPayment(orderId, userId) {
+  const order = await Order.findById(orderId);
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.status = 404;
+    throw err;
+  }
+
+  if (order.userId.toString() !== userId.toString()) {
+    const err = new Error("Unauthorized");
+    err.status = 403;
+    throw err;
+  }
+
+  if (order.paymentStatus === "PAID") {
+    const err = new Error("Order is already paid");
+    err.status = 400;
+    throw err;
+  }
+
+  if (order.orderStatus === "CANCELLED") {
+    const err = new Error("This order is no longer payable");
+    err.status = 400;
+    throw err;
+  }
+
+  const provider = await resolvePaymentProvider(order);
+  if (provider === "CASHFREE") {
+    return createCashfreePayment(order);
+  }
+  if (provider === "RAZORPAY") {
+    return createRazorpayPayment(orderId, userId);
+  }
+
+  const err = new Error("Payment gateway is not configured");
+  err.status = 400;
+  err.code = "PAYMENT_GATEWAY_NOT_CONFIGURED";
+  throw err;
+}
+
+async function verifyRazorpayPayment({
+  orderId,
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+  order,
+}) {
+  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    const err = new Error("All payment fields are required");
+    err.status = 400;
+    throw err;
+  }
+
+  const vendor = await loadVendorForOrder(order);
+  const keySecret = getVendorKeySecret(vendor);
+
+  const expectedSignature = crypto
+    .createHmac("sha256", keySecret)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest("hex");
+
+  if (expectedSignature !== razorpaySignature) {
+    await cancelUnpaidOnlineOrder(orderId);
+    console.log({
+      tenantId: order.tenantId,
+      orderId: order._id.toString(),
+      razorpayOrderId,
+      paymentStatus: "FAILED",
+    });
+    return { success: false, message: "Signature verification failed" };
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: orderId, paymentStatus: { $nin: ["PAID", "REFUNDED"] } },
+    { paymentStatus: "PAID", razorpayPaymentId, paymentProvider: "RAZORPAY" },
+    { new: true }
+  );
+
+  if (!updated) {
+    const current = await Order.findById(orderId);
+    if (current?.paymentStatus === "PAID") {
+      return { success: true, message: "Payment verified successfully" };
+    }
+    return { success: false, message: "Unable to confirm payment for this order" };
+  }
+
+  const placed = await placePaidOnlineOrder(updated);
+
+  console.log({
+    tenantId: updated.tenantId,
+    orderId: updated._id.toString(),
+    razorpayOrderId,
+    paymentStatus: "PAID",
+    orderStatus: placed?.orderStatus || updated.orderStatus,
+  });
+
+  void notifyOrderPlacedSafe(placed || updated);
+
+  return { success: true, message: "Payment verified successfully" };
 }
 
 async function verifyPayment({
@@ -143,49 +261,24 @@ async function verifyPayment({
     throw err;
   }
 
-  const vendor = await loadVendorForOrder(order);
-  const keySecret = getVendorKeySecret(vendor);
-
-  const expectedSignature = crypto
-    .createHmac("sha256", keySecret)
-    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-    .digest("hex");
-
-  if (expectedSignature !== razorpaySignature) {
-    await Order.findByIdAndUpdate(orderId, { paymentStatus: "FAILED" });
-    console.log({
-      tenantId: order.tenantId,
-      orderId: order._id.toString(),
+  const provider = await resolvePaymentProvider(order);
+  if (provider === "CASHFREE") {
+    return verifyCashfreePayment(order);
+  }
+  if (provider === "RAZORPAY") {
+    return verifyRazorpayPayment({
+      orderId,
       razorpayOrderId,
-      paymentStatus: "FAILED",
+      razorpayPaymentId,
+      razorpaySignature,
+      order,
     });
-    return { success: false, message: "Signature verification failed" };
   }
 
-  const updated = await Order.findOneAndUpdate(
-    { _id: orderId, paymentStatus: { $nin: ["PAID", "REFUNDED"] } },
-    { paymentStatus: "PAID", razorpayPaymentId },
-    { new: true }
-  );
-
-  if (!updated) {
-    const current = await Order.findById(orderId);
-    if (current?.paymentStatus === "PAID") {
-      return { success: true, message: "Payment verified successfully" };
-    }
-    return { success: false, message: "Unable to confirm payment for this order" };
-  }
-
-  console.log({
-    tenantId: updated.tenantId,
-    orderId: updated._id.toString(),
-    razorpayOrderId,
-    paymentStatus: "PAID",
-  });
-
-  void notifyOrderPlacedSafe(updated);
-
-  return { success: true, message: "Payment verified successfully" };
+  const err = new Error("Payment gateway is not configured");
+  err.status = 400;
+  err.code = "PAYMENT_GATEWAY_NOT_CONFIGURED";
+  throw err;
 }
 
 module.exports = { createPayment, verifyPayment };

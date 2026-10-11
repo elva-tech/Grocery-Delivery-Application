@@ -4,6 +4,7 @@ const {
   getVendorRazorpayClient,
   assertVendorPaymentReady,
 } = require("../utils/getVendorRazorpayClient");
+const { refundCashfreeOrder } = require("./cashfreePayment.service");
 
 function isRefundableOrder(order) {
   if (!order || order.paymentMode !== "ONLINE") return false;
@@ -73,6 +74,15 @@ async function initiateOrderRefund(order, { reason = "order_cancelled", amount }
     const err = new Error("Refund amount cannot exceed order total");
     err.status = 400;
     throw err;
+  }
+
+  if (
+    order.paymentProvider === "CASHFREE" ||
+    (order.paymentProvider !== "RAZORPAY" &&
+      order.cashfreeOrderId &&
+      order.cashfreeOrderId !== "LOCKED")
+  ) {
+    return refundCashfreeOrder(order, { amount: refundRupees, reason });
   }
 
   const paymentId = await resolveRazorpayPaymentId(order);

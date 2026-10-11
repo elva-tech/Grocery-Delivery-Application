@@ -9,7 +9,8 @@ import { formatDeliveryPrice, standardDeliveryPriceLabel } from '../utils/delive
 import { placeOrderApi, validateCouponApi } from '../api/ordersApi';
 import { buildDeliveryAddressPayload, formatAddressSummary } from '../utils/indiaPincode';
 import { loadRazorpay } from '../utils/loadRazorpay';
-import { createPaymentOrder, verifyPayment } from '../api/paymentApi';
+import { load } from '@cashfreepayments/cashfree-js';
+import { abandonUnpaidOrder, createPaymentOrder, verifyPayment } from '../api/paymentApi';
 import { useToast } from '../context/ToastContext';
 import {
   WEB_COPY,
@@ -41,6 +42,7 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
 
   // Payment method
   const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
+  const [onlinePaymentBroken, setOnlinePaymentBroken] = useState(false);
 
   // Coupon state
   const [couponInput, setCouponInput] = useState('');
@@ -56,7 +58,7 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
   const [getCalculation] = useCalculateCartMutation();
   const { data: appSettings } = useGetAppSettingsQuery();
   const showCod = isCodPaymentEnabled(appSettings);
-  const showOnline = isOnlinePaymentEnabled(appSettings);
+  const showOnline = isOnlinePaymentEnabled(appSettings) && !onlinePaymentBroken;
   const showDeliveryTypeChoice = isExpressDeliveryChoiceEnabled(appSettings);
   const effectiveDeliveryType = showDeliveryTypeChoice ? deliveryType : 'STANDARD';
 
@@ -68,9 +70,16 @@ const Checkout = ({ address, deliveryEligibility }: any) => {
 
   useEffect(() => {
     if (!appSettings) return;
-    if (showOnline && !showCod) setPaymentMethod('ONLINE');
+    if (onlinePaymentBroken && showCod) setPaymentMethod('COD');
+    else if (showOnline && !showCod) setPaymentMethod('ONLINE');
     else if (showCod && !showOnline) setPaymentMethod('COD');
-  }, [appSettings, showCod, showOnline]);
+  }, [appSettings, showCod, showOnline, onlinePaymentBroken]);
+
+  const restrictCheckoutToCod = () => {
+    if (!isCodPaymentEnabled(appSettings)) return;
+    setOnlinePaymentBroken(true);
+    setPaymentMethod('COD');
+  };
 
   useEffect(() => {
     const fetchBill = async () => {
@@ -186,6 +195,9 @@ const handlePlaceOrder = async () => {
     couponCode: appliedCoupon?.code ?? null,
   };
 
+  let checkoutOpened = false;
+  let onlineOrderId = '';
+
   try {
     if (paymentMethod === 'COD') {
       // COD: place order directly, skip Razorpay
@@ -194,17 +206,103 @@ const handlePlaceOrder = async () => {
       return;
     }
 
-    // ONLINE: existing Razorpay flow
+    // ONLINE: the order stays unpaid until the gateway confirms payment.
     const order = await placeOrderApi(orderPayload);
+    onlineOrderId = order.orderId;
+    const releaseUnpaidOrder = () => abandonUnpaidOrder(order.orderId);
+    const paymentData = await createPaymentOrder(order.orderId);
 
-    const scriptLoaded = await loadRazorpay();
-    if (!scriptLoaded) {
-      showToast('error', 'Failed to load payment gateway. Please check your connection.');
+    if (paymentData.provider === 'CASHFREE') {
+      const cashfreeMode =
+        paymentData.environment === 'production' || paymentData.environment === 'sandbox'
+          ? paymentData.environment
+          : null;
+      if (!cashfreeMode) {
+        await releaseUnpaidOrder();
+        restrictCheckoutToCod();
+        showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+        setIsProcessing(false);
+        return;
+      }
+
+      try {
+        if (paymentData.payment_status !== 'SUCCESS') {
+          if (!paymentData.payment_session_id) {
+            await releaseUnpaidOrder();
+            restrictCheckoutToCod();
+            showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+            setIsProcessing(false);
+            return;
+          }
+          const cashfree = await load({ mode: cashfreeMode });
+          if (!cashfree || typeof cashfree.checkout !== 'function') {
+            await releaseUnpaidOrder();
+            restrictCheckoutToCod();
+            showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+            setIsProcessing(false);
+            return;
+          }
+          let checkoutResult: { error?: { message?: string } } | null = null;
+          try {
+            checkoutOpened = true;
+            checkoutResult = (await cashfree.checkout({
+              paymentSessionId: paymentData.payment_session_id,
+              redirectTarget: '_modal',
+            })) as { error?: { message?: string } } | null;
+          } catch (checkoutErr) {
+            console.error('Cashfree checkout error:', checkoutErr);
+            await releaseUnpaidOrder();
+            restrictCheckoutToCod();
+            showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+            setIsProcessing(false);
+            return;
+          }
+          if (checkoutResult?.error) {
+            await releaseUnpaidOrder();
+            restrictCheckoutToCod();
+            showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+            setIsProcessing(false);
+            return;
+          }
+        }
+
+        const verification = await verifyPayment({ order_id: order.orderId });
+        if (verification.success) {
+          navigate('/success', { state: { fromCheckout: true, orderId: order.orderId, orderItems: items } });
+        } else if (verification.status === 'PENDING') {
+          showToast('error', 'Payment was not completed. Please try again.');
+          setIsProcessing(false);
+        } else {
+          restrictCheckoutToCod();
+          showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+          setIsProcessing(false);
+        }
+      } catch (err: any) {
+        if (err?.response?.status === 401) throw err;
+        console.error('Cashfree checkout error:', err);
+        restrictCheckoutToCod();
+        showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    if (paymentData.provider !== 'RAZORPAY') {
+      await releaseUnpaidOrder();
+      restrictCheckoutToCod();
+      showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
       setIsProcessing(false);
       return;
     }
 
-    const paymentData = await createPaymentOrder(order.orderId);
+    const scriptLoaded = await loadRazorpay();
+    if (!scriptLoaded) {
+      await releaseUnpaidOrder();
+      restrictCheckoutToCod();
+      showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
+      setIsProcessing(false);
+      return;
+    }
 
     const rawPhone: string = user?.phone || user?.phoneNumber || '';
     const contact = rawPhone.replace(/^\+91/, '').replace(/\s+/g, '').slice(-10);
@@ -212,7 +310,9 @@ const handlePlaceOrder = async () => {
     const razorpayKey =
       paymentData.key_id || (import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined);
     if (!razorpayKey) {
-      showToast('error', WEB_COPY.checkout.onlinePaymentUnavailable);
+      await releaseUnpaidOrder();
+      restrictCheckoutToCod();
+      showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
       setIsProcessing(false);
       return;
     }
@@ -245,12 +345,14 @@ const handlePlaceOrder = async () => {
           if (verification.success) {
             navigate('/success', { state: { fromCheckout: true, orderId: order.orderId, orderItems: items } });
           } else {
-            showToast('error', 'Payment verification failed. Please contact support.');
+            restrictCheckoutToCod();
+            showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
             setIsProcessing(false);
           }
         } catch (err) {
           console.error('Payment verification error:', err);
-          showToast('error', 'Payment verification failed. Please contact support.');
+          restrictCheckoutToCod();
+          showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
           setIsProcessing(false);
         }
       },
@@ -260,12 +362,19 @@ const handlePlaceOrder = async () => {
 
     rzp.on('payment.failed', (response: any) => {
       console.error('Payment failed:', response);
-      showToast('error', response?.error?.description || 'Payment failed. Please try again.');
+      void releaseUnpaidOrder();
+      restrictCheckoutToCod();
+      showToast('error', 'Online payment is unavailable right now. You can pay with Cash on Delivery.');
       setIsProcessing(false);
     });
 
+    checkoutOpened = true;
     rzp.open();
   } catch (error: any) {
+    if (onlineOrderId && !checkoutOpened) {
+      void abandonUnpaidOrder(onlineOrderId);
+      restrictCheckoutToCod();
+    }
     console.error('Order placement failed:', error);
     if (error?.response?.status === 401) {
       dispatch(logout());
@@ -479,6 +588,11 @@ const handlePlaceOrder = async () => {
               {(showCod || showOnline) && (
               <div className="mb-4 space-y-2">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Payment Method</p>
+                {onlinePaymentBroken && showCod && (
+                  <p className="text-[11px] font-bold text-emerald-700 px-1">
+                    Online payment is unavailable. You can place this order with Cash on Delivery.
+                  </p>
+                )}
                 {showOnline && (
                 <button
                   onClick={() => setPaymentMethod('ONLINE')}

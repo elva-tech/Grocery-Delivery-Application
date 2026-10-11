@@ -92,19 +92,9 @@ module.exports = () => {
       version,
       icon,
       scheme: urlScheme,
-      splash: {
-        ...base.splash,
-        image: splashIcon,
-        backgroundColor: splashBackgroundColor,
-      },
       ios: {
         ...base.ios,
         bundleIdentifier: iosBundleIdentifier,
-        splash: {
-          ...base.ios?.splash,
-          image: splashIcon,
-          backgroundColor: splashBackgroundColor,
-        },
       },
       android: {
         ...base.android,
@@ -114,11 +104,6 @@ module.exports = () => {
           ...base.android?.adaptiveIcon,
           foregroundImage: adaptiveIcon,
           backgroundColor: adaptiveIconBackgroundColor,
-        },
-        splash: {
-          ...base.android?.splash,
-          image: splashIcon,
-          backgroundColor: splashBackgroundColor,
         },
       },
       web: {

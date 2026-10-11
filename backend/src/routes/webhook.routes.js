@@ -5,7 +5,12 @@ const Order = require("../models/Order.model");
 const Vendor = require("../models/Vendor.model");
 const { applyRefundWebhook } = require("../services/orderRefund.service");
 const { notifyOrderPlacedSafe } = require("../services/notify.service");
+const {
+  placePaidOnlineOrder,
+  cancelUnpaidOnlineOrder,
+} = require("../services/onlineOrderPlacement.service");
 const { getVendorWebhookSecret } = require("../utils/getVendorRazorpayClient");
+const { handleCashfreeWebhook } = require("../services/cashfreePayment.service");
 
 async function resolveTenantIdFromEvent(event) {
   const paymentEntity = event?.payload?.payment?.entity;
@@ -149,21 +154,24 @@ router.post(
           return res.status(200).json({ received: true });
         }
 
-        void notifyOrderPlacedSafe(updated);
+        const placed = await placePaidOnlineOrder(updated);
+        void notifyOrderPlacedSafe(placed || updated);
 
         console.log({
           tenantId: updated.tenantId,
           orderId: updated._id.toString(),
           razorpayOrderId,
           paymentStatus: "PAID",
+          orderStatus: placed?.orderStatus || updated.orderStatus,
         });
       } else if (eventName === "payment.failed") {
-        if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
+        const cancelled = await cancelUnpaidOnlineOrder(order._id);
+        if (cancelled || order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
           console.log({
             tenantId: order.tenantId,
             orderId: order._id.toString(),
             razorpayOrderId,
-            paymentStatus: order.paymentStatus,
+            paymentStatus: cancelled ? "FAILED" : order.paymentStatus,
           });
           return res.status(200).json({ received: true });
         }
@@ -187,6 +195,25 @@ router.post(
     }
 
     return res.status(200).json({ received: true });
+  }
+);
+
+router.post(
+  "/cashfree",
+  express.raw({ type: "*/*" }),
+  async (req, res) => {
+    try {
+      const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : "";
+      const result = await handleCashfreeWebhook({
+        rawBody,
+        signature: req.headers["x-webhook-signature"],
+        timestamp: req.headers["x-webhook-timestamp"],
+      });
+      return res.status(result.statusCode).json(result.body);
+    } catch (err) {
+      console.error("Cashfree webhook failed", { message: err.message });
+      return res.status(500).json({ message: "Internal error" });
+    }
   }
 );
 

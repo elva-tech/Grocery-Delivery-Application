@@ -44,6 +44,7 @@ async function main() {
         "razorpay.encryptedWebhookSecret": encrypt(webhookSecret),
         "razorpay.onboardingStatus": "ACTIVE",
         "razorpay.accountStatus": "ACTIVE",
+        paymentGateway: "RAZORPAY",
       },
     },
     { upsert: true, new: true, runValidators: true }
@@ -51,7 +52,7 @@ async function main() {
 
   console.log("Vendor Razorpay config saved:", {
     tenantId: vendor.tenantId,
-    keyId: vendor.razorpay.keyId,
+    paymentGateway: vendor.paymentGateway,
     onboardingStatus: vendor.razorpay.onboardingStatus,
     accountStatus: vendor.razorpay.accountStatus,
   });
