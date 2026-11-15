@@ -1,0 +1,210 @@
+# Runs when someone opens or updates a pull request targeting feature/develop.
+# GitHub Actions looks for YAML files in .github/workflows/.
+name: PR CI
+
+on:
+  pull_request:
+    branches:
+      - feature/develop
+  # Lets you click "Run workflow" on the Actions tab to test without a PR.
+  workflow_dispatch:
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: Detect changed apps
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      website: ${{ steps.filter.outputs.website }}
+      admin-web: ${{ steps.filter.outputs.admin-web }}
+      super-admin-web: ${{ steps.filter.outputs.super-admin-web }}
+      mobile-app: ${{ steps.filter.outputs.mobile-app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mark apps that changed in this PR
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > changed.txt
+          else
+            git diff --name-only HEAD^ HEAD > changed.txt || git ls-files > changed.txt
+          fi
+
+          echo "Changed files:"
+          cat changed.txt
+
+          mark() {
+            local name="$1"
+            local pattern="$2"
+            if grep -Eq "$pattern" changed.txt; then
+              echo "${name}=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "${name}=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          mark backend '^backend/'
+          mark website '^website/'
+          mark admin-web '^admin-web/'
+          mark super-admin-web '^super-admin-web/'
+          mark mobile-app '^mobile-app/'
+
+          # Re-run every job when this workflow itself changes.
+          if grep -Eq '^\.github/workflows/pr-ci\.yml$' changed.txt; then
+            {
+              echo "backend=true"
+              echo "website=true"
+              echo "admin-web=true"
+              echo "super-admin-web=true"
+              echo "mobile-app=true"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+  backend:
+    name: Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # package.json "test" currently exits 1 ("no test specified"), so CI only syntax-checks.
+      - name: Syntax-check JavaScript
+        run: |
+          find src -name '*.js' -print0 | xargs -0 -n1 node --check
+
+  website:
+    name: Website
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - name: Use example env for build
+        run: cp .env.example .env.production
+      - run: npm run lint
+      - run: npm run build
+
+  admin-web:
+    name: Admin web
+    needs: changes
+    if: needs.changes.outputs.admin-web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: admin-web/package-lock.json
+      - run: npm ci
+      - name: Use example env for build
+        run: cp .env.example .env.production
+      - run: npm run lint
+      - run: npm run build
+
+  super-admin-web:
+    name: Super admin web
+    needs: changes
+    if: needs.changes.outputs.super-admin-web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: super-admin-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: super-admin-web/package-lock.json
+      - run: npm ci
+      - name: Use example env for build
+        run: cp .env.example .env.production
+      - run: npm run build
+
+  mobile-app:
+    name: Mobile app
+    needs: changes
+    if: needs.changes.outputs.mobile-app == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+
+  ci-ok:
+    name: CI
+    needs:
+      - changes
+      - backend
+      - website
+      - admin-web
+      - super-admin-web
+      - mobile-app
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm every required job passed or was skipped
+        run: |
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "Detect changed apps failed"
+            exit 1
+          fi
+          results=(
+            "${{ needs.backend.result }}"
+            "${{ needs.website.result }}"
+            "${{ needs.admin-web.result }}"
+            "${{ needs.super-admin-web.result }}"
+            "${{ needs.mobile-app.result }}"
+          )
+          for result in "${results[@]}"; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "A CI job failed (result=$result)"
+              exit 1
+            fi
+          done
+          echo "PR CI passed"
